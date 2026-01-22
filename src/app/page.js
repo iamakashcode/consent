@@ -113,16 +113,22 @@ export default function Home() {
                   Your Consent Script
                 </h3>
                 <p className="text-sm text-gray-700 mb-4">
-                  Add this script tag to your website&apos;s &lt;head&gt; section (preferably before other tracking scripts):
+                  Add this script tag to your website&apos;s &lt;head&gt; section:
                 </p>
                 <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
-                  <code className="text-green-400 text-sm">
+                  <code className="text-green-400 text-sm break-all">
                     {`<script src="${results.scriptUrl}"></script>`}
                   </code>
                 </div>
-                <p className="text-xs text-yellow-600 mt-2 mb-4">
-                  ⚠️ Note: Remove the &quot;async&quot; attribute for immediate execution, or place this script before your tracking scripts
-                </p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                  <h4 className="font-semibold text-blue-900 mb-2">⚠️ Important Instructions:</h4>
+                  <ul className="list-disc list-inside space-y-1 text-sm text-blue-800">
+                    <li>Place this script <strong>BEFORE</strong> all your tracking scripts (GTM, Facebook Pixel, etc.)</li>
+                    <li>Do <strong>NOT</strong> add the &quot;async&quot; or &quot;defer&quot; attributes</li>
+                    <li>The script must load and execute immediately to block trackers</li>
+                    <li>After adding, clear your browser cache and test in incognito mode</li>
+                  </ul>
+                </div>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(
