@@ -6,10 +6,19 @@
 export const sites = new Map();
 
 /**
+ * Generate unique site ID
+ */
+function generateSiteId() {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 15);
+  return Buffer.from(`${timestamp}-${random}`).toString("base64").replace(/[+/=]/g, "");
+}
+
+/**
  * Register a new site
  */
 export function registerSite(domain, trackers) {
-  const siteId = Buffer.from(domain).toString("base64");
+  const siteId = generateSiteId();
   sites.set(siteId, {
     domain,
     trackers,

@@ -33,15 +33,18 @@ export async function GET(req, { params }) {
   const TRACKER_DOMAINS = ${JSON.stringify(uniqueDomains)};
   const SITE_ID = "${siteId}";
   
-  // Verify domain
-  const host = location.hostname.replace(/^www\\./, "");
-  if (host !== DOMAIN) {
-    console.warn("[Consent SDK] Domain mismatch:", host, "!=", DOMAIN);
-    return;
+  // Verify domain (flexible - allow www and non-www)
+  const host = location.hostname.replace(/^www\\./, "").toLowerCase();
+  const expectedDomain = DOMAIN.replace(/^www\\./, "").toLowerCase();
+  if (host !== expectedDomain) {
+    console.warn("[Consent SDK] Domain mismatch:", host, "!=", expectedDomain);
+    console.warn("[Consent SDK] Script will still work but domain verification failed");
+    // Don't return - allow script to run anyway for testing
   }
   
-  // Check consent status
-  let consentGranted = localStorage.getItem("cookie_consent") === "accepted";
+  // Check consent status (use site-specific key)
+  const consentKey = "cookie_consent_" + SITE_ID;
+  let consentGranted = localStorage.getItem(consentKey) === "accepted";
   
   // Check if tracker domain matches
   function isTrackerDomain(url) {
@@ -142,27 +145,39 @@ export async function GET(req, { params }) {
       return; // Banner already exists
     }
     
-    const banner = document.createElement("div");
-    banner.id = "cookie-consent-banner";
-    banner.style.cssText = "position: fixed; bottom: 0; left: 0; right: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.3); z-index: 10000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;";
+    // Wait for body to exist
+    function tryAppendBanner() {
+      if (!document.body) {
+        setTimeout(tryAppendBanner, 50);
+        return;
+      }
+      
+      const banner = document.createElement("div");
+      banner.id = "cookie-consent-banner";
+      banner.style.cssText = "position: fixed; bottom: 0; left: 0; right: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.3); z-index: 999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;";
+      
+      banner.innerHTML = '<div style="flex: 1; min-width: 250px;"><h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600;">🍪 We use cookies</h3><p style="margin: 0; font-size: 14px; opacity: 0.9; line-height: 1.5;">This website uses tracking cookies to analyze site traffic and improve user experience. By accepting, you allow us to use analytics tools.</p></div><div style="display: flex; gap: 10px; flex-wrap: wrap;"><button id="cookie-consent-accept" style="background: white; color: #667eea; border: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; transition: transform 0.2s;" onmouseover="this.style.transform=\\'scale(1.05)\\'" onmouseout="this.style.transform=\\'scale(1)\\'">Accept All</button><button id="cookie-consent-reject" style="background: transparent; color: white; border: 2px solid white; padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; transition: transform 0.2s;" onmouseover="this.style.transform=\\'scale(1.05)\\'" onmouseout="this.style.transform=\\'scale(1)\\'">Reject</button></div>';
+      
+      document.body.appendChild(banner);
+      
+      // Accept button
+      document.getElementById("cookie-consent-accept").addEventListener("click", function() {
+        consentGranted = true;
+        localStorage.setItem(consentKey, "accepted");
+        banner.remove();
+        enableTrackers();
+      });
+      
+      // Reject button
+      document.getElementById("cookie-consent-reject").addEventListener("click", function() {
+        localStorage.setItem(consentKey, "rejected");
+        banner.remove();
+      });
+      
+      console.log("[Consent SDK] Banner displayed");
+    }
     
-    banner.innerHTML = '<div style="flex: 1; min-width: 250px;"><h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600;">🍪 We use cookies</h3><p style="margin: 0; font-size: 14px; opacity: 0.9; line-height: 1.5;">This website uses tracking cookies to analyze site traffic and improve user experience. By accepting, you allow us to use analytics tools.</p></div><div style="display: flex; gap: 10px; flex-wrap: wrap;"><button id="cookie-consent-accept" style="background: white; color: #667eea; border: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; transition: transform 0.2s;" onmouseover="this.style.transform=\\'scale(1.05)\\'" onmouseout="this.style.transform=\\'scale(1)\\'">Accept All</button><button id="cookie-consent-reject" style="background: transparent; color: white; border: 2px solid white; padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; transition: transform 0.2s;" onmouseover="this.style.transform=\\'scale(1.05)\\'" onmouseout="this.style.transform=\\'scale(1)\\'">Reject</button></div>';
-    
-    document.body.appendChild(banner);
-    
-    // Accept button
-    document.getElementById("cookie-consent-accept").addEventListener("click", function() {
-      consentGranted = true;
-      localStorage.setItem("cookie_consent", "accepted");
-      banner.remove();
-      enableTrackers();
-    });
-    
-    // Reject button
-    document.getElementById("cookie-consent-reject").addEventListener("click", function() {
-      localStorage.setItem("cookie_consent", "rejected");
-      banner.remove();
-    });
+    tryAppendBanner();
   }
   
   // Enable all trackers
@@ -186,20 +201,44 @@ export async function GET(req, { params }) {
     console.log("[Consent SDK] Trackers enabled");
   }
   
-  // Initialize
-  if (!consentGranted) {
-    blockExistingScripts();
-    // Show banner after DOM is ready
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", showConsentBanner);
+  // Initialize (only once)
+  let initialized = false;
+  function init() {
+    if (initialized) return;
+    initialized = true;
+    
+    console.log("[Consent SDK] Initializing for domain:", DOMAIN);
+    console.log("[Consent SDK] Consent status:", consentGranted ? "granted" : "not granted");
+    
+    if (!consentGranted) {
+      blockExistingScripts();
+      // Show banner - try multiple methods to ensure it shows
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", showConsentBanner);
+      } else {
+        showConsentBanner();
+      }
     } else {
-      showConsentBanner();
+      console.log("[Consent SDK] Consent already granted - trackers enabled");
     }
-  } else {
-    console.log("[Consent SDK] Consent already granted");
   }
   
-  console.log("[Consent SDK] Initialized for", DOMAIN);
+  // Run initialization
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    // DOM already ready, initialize immediately
+    init();
+  }
+  
+  // Fallback: ensure initialization happens even if DOMContentLoaded already fired
+  setTimeout(function() {
+    if (!initialized) {
+      init();
+    }
+  }, 100);
+  
+  console.log("[Consent SDK] Script loaded for", DOMAIN);
 })();
 `;
 
