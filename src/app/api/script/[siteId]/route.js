@@ -3,6 +3,9 @@ import { getSite } from "@/lib/store";
 export async function GET(req, { params }) {
   try {
     const { siteId } = params;
+    const { searchParams } = new URL(req.url);
+    const domainParam = searchParams.get("domain");
+    const trackersParam = searchParams.get("trackers");
 
     if (!siteId) {
       return new Response("// Invalid site ID", {
@@ -10,19 +13,62 @@ export async function GET(req, { params }) {
       });
     }
 
+    let domain, trackers;
     const site = getSite(siteId);
 
-    if (!site) {
-      return new Response("// Site not found", {
-        headers: { "Content-Type": "application/javascript" },
-      });
+    if (site) {
+      // Site found in store
+      domain = site.domain;
+      trackers = site.trackers;
+    } else if (domainParam && trackersParam) {
+      // Fallback: use query params if site not in store
+      try {
+        domain = domainParam;
+        trackers = JSON.parse(decodeURIComponent(trackersParam));
+      } catch (e) {
+        console.error("Failed to parse trackers from query params:", e);
+        // Use default trackers
+        domain = domainParam;
+        trackers = [];
+      }
+    } else {
+      // Try to decode domain from siteId (fallback for old format)
+      try {
+        const decoded = Buffer.from(siteId, "base64").toString("utf-8");
+        if (decoded && !decoded.includes("-")) {
+          // Old format - siteId was just domain
+          domain = decoded;
+          trackers = [];
+        } else {
+          throw new Error("Cannot decode siteId");
+        }
+      } catch (e) {
+        // Generate a generic script that works for any domain
+        domain = "*";
+        trackers = [];
+      }
     }
-
-    const { domain, trackers } = site;
 
     // Build tracker domains list
     const trackerDomains = trackers.map((t) => t.domain).filter(Boolean);
     const uniqueDomains = [...new Set(trackerDomains)];
+    
+    // Add common tracker domains as fallback if none detected
+    const commonTrackers = [
+      "google-analytics.com",
+      "googletagmanager.com",
+      "facebook.net",
+      "doubleclick.net",
+      "googleadservices.com",
+      "googlesyndication.com",
+      "licdn.com",
+      "twitter.com",
+      "hotjar.com",
+      "clarity.ms"
+    ];
+    
+    // If no trackers detected, use common ones
+    const finalTrackerDomains = uniqueDomains.length > 0 ? uniqueDomains : commonTrackers;
 
     // Generate the consent SDK script
     const script = `
@@ -30,16 +76,18 @@ export async function GET(req, { params }) {
   'use strict';
   
   const DOMAIN = "${domain}";
-  const TRACKER_DOMAINS = ${JSON.stringify(uniqueDomains)};
+  const TRACKER_DOMAINS = ${JSON.stringify(finalTrackerDomains)};
   const SITE_ID = "${siteId}";
   
-  // Verify domain (flexible - allow www and non-www)
-  const host = location.hostname.replace(/^www\\./, "").toLowerCase();
-  const expectedDomain = DOMAIN.replace(/^www\\./, "").toLowerCase();
-  if (host !== expectedDomain) {
-    console.warn("[Consent SDK] Domain mismatch:", host, "!=", expectedDomain);
-    console.warn("[Consent SDK] Script will still work but domain verification failed");
-    // Don't return - allow script to run anyway for testing
+  // Verify domain (flexible - allow www and non-www, or allow all if DOMAIN is "*")
+  if (DOMAIN !== "*") {
+    const host = location.hostname.replace(/^www\\./, "").toLowerCase();
+    const expectedDomain = DOMAIN.replace(/^www\\./, "").toLowerCase();
+    if (host !== expectedDomain) {
+      console.warn("[Consent SDK] Domain mismatch:", host, "!=", expectedDomain);
+      console.warn("[Consent SDK] Script will still work but domain verification failed");
+      // Don't return - allow script to run anyway
+    }
   }
   
   // Check consent status (use site-specific key)
