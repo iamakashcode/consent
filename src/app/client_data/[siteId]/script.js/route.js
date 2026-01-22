@@ -1,9 +1,9 @@
-import { SITE_MAP } from "@/lib/site-map";
-
 export async function GET(req, { params }) {
-  const domain = SITE_MAP[params.siteId];
+  let domain;
 
-  if (!domain) {
+  try {
+    domain = Buffer.from(params.siteId, "base64").toString("utf-8");
+  } catch {
     return new Response("// Invalid site", {
       headers: { "Content-Type": "application/javascript" }
     });
@@ -15,7 +15,7 @@ export async function GET(req, { params }) {
   const host = location.hostname.replace(/^www\\./, "");
 
   if (host !== DOMAIN) {
-    console.warn("Consent script blocked: invalid domain");
+    console.warn("Consent script blocked: invalid domain", host, DOMAIN);
     return;
   }
 
@@ -31,28 +31,24 @@ export async function GET(req, { params }) {
     return TRACKERS.some(d => src.includes(d));
   }
 
-  function blockScript(script) {
-    script.type = "javascript/blocked";
+  function blockScript(s) {
+    s.type = "javascript/blocked";
   }
 
   // Block existing scripts
   document.querySelectorAll("script[src]").forEach(s => {
-    if (isTracker(s.src) && consent !== "yes") {
-      blockScript(s);
-    }
+    if (isTracker(s.src) && consent !== "yes") blockScript(s);
   });
 
   // Intercept future scripts
-  const originalCreate = document.createElement;
+  const origCreate = document.createElement;
   document.createElement = function(tag) {
-    const el = originalCreate.call(document, tag);
+    const el = origCreate.call(document, tag);
     if (tag === "script") {
       Object.defineProperty(el, "src", {
-        set(value) {
-          if (isTracker(value) && consent !== "yes") {
-            el.type = "javascript/blocked";
-          }
-          el.setAttribute("src", value);
+        set(v) {
+          if (isTracker(v) && consent !== "yes") el.type = "javascript/blocked";
+          el.setAttribute("src", v);
         }
       });
     }
@@ -64,19 +60,17 @@ export async function GET(req, { params }) {
   function showBanner() {
     const b = document.createElement("div");
     b.style = "position:fixed;bottom:0;left:0;right:0;background:#000;color:#fff;padding:12px;z-index:9999";
-
     b.innerHTML = \`
       This site uses cookies.
       <button id="accept">Accept</button>
       <button id="reject">Reject</button>
     \`;
-
     document.body.appendChild(b);
 
     document.getElementById("accept").onclick = () => {
       localStorage.setItem("analytics_consent", "yes");
       consent = "yes";
-      restoreScripts();
+      restore();
       b.remove();
     };
 
@@ -87,7 +81,7 @@ export async function GET(req, { params }) {
     };
   }
 
-  function restoreScripts() {
+  function restore() {
     document.querySelectorAll('script[type="javascript/blocked"]').forEach(s => {
       const n = document.createElement("script");
       n.src = s.src;
