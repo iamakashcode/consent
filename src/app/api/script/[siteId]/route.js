@@ -13,72 +13,63 @@ export async function GET(req, { params }) {
       });
     }
 
-    let domain, trackers;
+    let domain;
     const site = getSite(siteId);
 
     if (site) {
       // Site found in store
       domain = site.domain;
-      trackers = site.trackers;
-    } else if (domainParam && trackersParam) {
-      // Fallback: use query params if site not in store
-      try {
-        domain = domainParam;
-        trackers = JSON.parse(decodeURIComponent(trackersParam));
-      } catch (e) {
-        console.error("Failed to parse trackers from query params:", e);
-        // Use default trackers
-        domain = domainParam;
-        trackers = [];
-      }
+    } else if (domainParam) {
+      // Use domain from query param
+      domain = domainParam;
     } else {
       // Try to decode domain from siteId (fallback for old format)
       try {
         const decoded = Buffer.from(siteId, "base64").toString("utf-8");
         if (decoded && !decoded.includes("-")) {
-          // Old format - siteId was just domain
           domain = decoded;
-          trackers = [];
         } else {
-          throw new Error("Cannot decode siteId");
+          domain = "*"; // Allow any domain
         }
       } catch (e) {
-        // Generate a generic script that works for any domain
-        domain = "*";
-        trackers = [];
+        domain = "*"; // Allow any domain
       }
     }
 
-    // Build tracker domains list
-    const trackerDomains = trackers.map((t) => t.domain).filter(Boolean);
-    const uniqueDomains = [...new Set(trackerDomains)];
-    
-    // Add common tracker domains as fallback if none detected
-    const commonTrackers = [
+    // Always use common tracker domains - simpler and more reliable
+    // This blocks all major trackers regardless of detection
+    const finalTrackerDomains = [
       "google-analytics.com",
       "googletagmanager.com",
       "facebook.net",
+      "connect.facebook.net",
       "doubleclick.net",
       "googleadservices.com",
       "googlesyndication.com",
       "licdn.com",
+      "snap.licdn.com",
       "twitter.com",
+      "analytics.twitter.com",
       "hotjar.com",
-      "clarity.ms"
+      "clarity.ms",
+      "omniture.com",
+      "adobe.com"
     ];
-    
-    // If no trackers detected, use common ones
-    const finalTrackerDomains = uniqueDomains.length > 0 ? uniqueDomains : commonTrackers;
 
     // Generate the consent SDK script
     const script = `
 (function() {
   'use strict';
   
+  // Immediate execution test
+  console.log("[Consent SDK] Script executing...");
+  
   try {
   const DOMAIN = "${domain}";
   const TRACKER_DOMAINS = ${JSON.stringify(finalTrackerDomains)};
   const SITE_ID = "${siteId}";
+  
+  console.log("[Consent SDK] Initialized - Domain:", DOMAIN, "Trackers:", TRACKER_DOMAINS.length);
   
   // Verify domain (flexible - allow www and non-www, or allow all if DOMAIN is "*")
   if (DOMAIN !== "*") {
@@ -252,75 +243,81 @@ export async function GET(req, { params }) {
     console.log("[Consent SDK] Trackers enabled");
   }
   
-  // Initialize immediately - don't wait for DOM
-  console.log("[Consent SDK] Script loaded for", DOMAIN);
-  console.log("[Consent SDK] Document readyState:", document.readyState);
-  console.log("[Consent SDK] Consent status:", consentGranted ? "granted" : "not granted");
-  console.log("[Consent SDK] Tracker domains:", TRACKER_DOMAINS);
+  // Simple, reliable banner display
+  function displayBanner() {
+    // Check if already shown or consent granted
+    if (consentGranted || document.getElementById("cookie-consent-banner")) {
+      return;
+    }
+    
+    // Wait for body, then show
+    function show() {
+      if (!document.body) {
+        setTimeout(show, 100);
+        return;
+      }
+      
+      try {
+        const banner = document.createElement("div");
+        banner.id = "cookie-consent-banner";
+        banner.style.cssText = "position:fixed;bottom:0;left:0;right:0;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:20px;box-shadow:0 -4px 20px rgba(0,0,0,0.3);z-index:999999;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px;";
+        
+        banner.innerHTML = '<div style="flex:1;min-width:250px;"><h3 style="margin:0 0 8px 0;font-size:18px;font-weight:600;">🍪 We use cookies</h3><p style="margin:0;font-size:14px;opacity:0.9;line-height:1.5;">This website uses tracking cookies. By accepting, you allow us to use analytics tools.</p></div><div style="display:flex;gap:10px;"><button id="cookie-consent-accept" style="background:white;color:#667eea;border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;">Accept</button><button id="cookie-consent-reject" style="background:transparent;color:white;border:2px solid white;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;">Reject</button></div>';
+        
+        document.body.appendChild(banner);
+        
+        document.getElementById("cookie-consent-accept").onclick = function() {
+          consentGranted = true;
+          localStorage.setItem(consentKey, "accepted");
+          banner.remove();
+          enableTrackers();
+        };
+        
+        document.getElementById("cookie-consent-reject").onclick = function() {
+          localStorage.setItem(consentKey, "rejected");
+          banner.remove();
+        };
+        
+        console.log("[Consent SDK] Banner displayed");
+      } catch (e) {
+        console.error("[Consent SDK] Error showing banner:", e);
+      }
+    }
+    
+    show();
+  }
   
-  // Block existing scripts immediately
+  // Block scripts immediately
   if (!consentGranted) {
     blockExistingScripts();
   }
   
-  // Show banner function that tries multiple times
-  function ensureBannerShows() {
-    if (consentGranted) {
-      console.log("[Consent SDK] Consent already granted - skipping banner");
-      return;
-    }
-    
-    if (document.getElementById("cookie-consent-banner")) {
-      console.log("[Consent SDK] Banner already exists");
-      return;
-    }
-    
-    // Try to show banner
-    if (document.body) {
-      showConsentBanner();
-    } else {
-      // Wait for body
-      console.log("[Consent SDK] Waiting for body element...");
-      const checkBody = setInterval(function() {
-        if (document.body) {
-          clearInterval(checkBody);
-          showConsentBanner();
-        }
-      }, 50);
-      
-      // Timeout after 5 seconds
-      setTimeout(function() {
-        clearInterval(checkBody);
-        if (!document.getElementById("cookie-consent-banner") && document.body) {
-          console.log("[Consent SDK] Force showing banner after timeout");
-          showConsentBanner();
-        }
-      }, 5000);
-    }
-  }
+  // Show banner - try multiple times to ensure it shows
+  console.log("[Consent SDK] Attempting to show banner...");
+  displayBanner();
   
-  // Try to show banner immediately
-  ensureBannerShows();
-  
-  // Also try on DOMContentLoaded
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function() {
-      console.log("[Consent SDK] DOMContentLoaded fired");
-      ensureBannerShows();
+      console.log("[Consent SDK] DOMContentLoaded - showing banner");
+      displayBanner();
     });
   }
   
-  // Fallback: try after a short delay
   setTimeout(function() {
-    console.log("[Consent SDK] Fallback: checking banner after delay");
-    ensureBannerShows();
+    console.log("[Consent SDK] Timeout 1 - showing banner");
+    displayBanner();
   }, 500);
   
-  // Another fallback after longer delay
   setTimeout(function() {
-    console.log("[Consent SDK] Final fallback: checking banner");
-    ensureBannerShows();
+    console.log("[Consent SDK] Timeout 2 - showing banner");
+    displayBanner();
   }, 2000);
+  
+  // Final fallback after 5 seconds
+  setTimeout(function() {
+    console.log("[Consent SDK] Final fallback - showing banner");
+    displayBanner();
+  }, 5000);
   
   } catch (error) {
     console.error("[Consent SDK] Error initializing:", error);

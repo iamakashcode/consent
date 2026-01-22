@@ -55,9 +55,9 @@ export async function POST(req) {
       process.env.NEXT_PUBLIC_BASE_URL ||
       (req.headers.get("origin") || `http://${req.headers.get("host")}`);
     
-    // Include domain and trackers as query params so script works even if store is cleared
-    const trackersParam = encodeURIComponent(JSON.stringify(trackers));
-    const scriptUrl = `${baseUrl}/api/script/${siteId}?domain=${encodeURIComponent(cleanDomain)}&trackers=${trackersParam}`;
+    // Only include domain in URL - trackers will be extracted from detected domains
+    // This keeps the URL shorter and simpler
+    const scriptUrl = `${baseUrl}/api/script/${siteId}?domain=${encodeURIComponent(cleanDomain)}`;
 
     return Response.json({
       domain: cleanDomain,
