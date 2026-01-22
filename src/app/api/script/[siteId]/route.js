@@ -75,6 +75,7 @@ export async function GET(req, { params }) {
 (function() {
   'use strict';
   
+  try {
   const DOMAIN = "${domain}";
   const TRACKER_DOMAINS = ${JSON.stringify(finalTrackerDomains)};
   const SITE_ID = "${siteId}";
@@ -222,7 +223,9 @@ export async function GET(req, { params }) {
         banner.remove();
       });
       
-      console.log("[Consent SDK] Banner displayed");
+      console.log("[Consent SDK] Banner displayed successfully");
+      console.log("[Consent SDK] Banner element:", banner);
+      console.log("[Consent SDK] Banner in DOM:", document.getElementById("cookie-consent-banner") !== null);
     }
     
     tryAppendBanner();
@@ -249,44 +252,89 @@ export async function GET(req, { params }) {
     console.log("[Consent SDK] Trackers enabled");
   }
   
-  // Initialize (only once)
-  let initialized = false;
-  function init() {
-    if (initialized) return;
-    initialized = true;
-    
-    console.log("[Consent SDK] Initializing for domain:", DOMAIN);
-    console.log("[Consent SDK] Consent status:", consentGranted ? "granted" : "not granted");
-    
-    if (!consentGranted) {
-      blockExistingScripts();
-      // Show banner - try multiple methods to ensure it shows
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", showConsentBanner);
-      } else {
-        showConsentBanner();
-      }
-    } else {
-      console.log("[Consent SDK] Consent already granted - trackers enabled");
-    }
-  }
-  
-  // Run initialization
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    // DOM already ready, initialize immediately
-    init();
-  }
-  
-  // Fallback: ensure initialization happens even if DOMContentLoaded already fired
-  setTimeout(function() {
-    if (!initialized) {
-      init();
-    }
-  }, 100);
-  
+  // Initialize immediately - don't wait for DOM
   console.log("[Consent SDK] Script loaded for", DOMAIN);
+  console.log("[Consent SDK] Document readyState:", document.readyState);
+  console.log("[Consent SDK] Consent status:", consentGranted ? "granted" : "not granted");
+  console.log("[Consent SDK] Tracker domains:", TRACKER_DOMAINS);
+  
+  // Block existing scripts immediately
+  if (!consentGranted) {
+    blockExistingScripts();
+  }
+  
+  // Show banner function that tries multiple times
+  function ensureBannerShows() {
+    if (consentGranted) {
+      console.log("[Consent SDK] Consent already granted - skipping banner");
+      return;
+    }
+    
+    if (document.getElementById("cookie-consent-banner")) {
+      console.log("[Consent SDK] Banner already exists");
+      return;
+    }
+    
+    // Try to show banner
+    if (document.body) {
+      showConsentBanner();
+    } else {
+      // Wait for body
+      console.log("[Consent SDK] Waiting for body element...");
+      const checkBody = setInterval(function() {
+        if (document.body) {
+          clearInterval(checkBody);
+          showConsentBanner();
+        }
+      }, 50);
+      
+      // Timeout after 5 seconds
+      setTimeout(function() {
+        clearInterval(checkBody);
+        if (!document.getElementById("cookie-consent-banner") && document.body) {
+          console.log("[Consent SDK] Force showing banner after timeout");
+          showConsentBanner();
+        }
+      }, 5000);
+    }
+  }
+  
+  // Try to show banner immediately
+  ensureBannerShows();
+  
+  // Also try on DOMContentLoaded
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function() {
+      console.log("[Consent SDK] DOMContentLoaded fired");
+      ensureBannerShows();
+    });
+  }
+  
+  // Fallback: try after a short delay
+  setTimeout(function() {
+    console.log("[Consent SDK] Fallback: checking banner after delay");
+    ensureBannerShows();
+  }, 500);
+  
+  // Another fallback after longer delay
+  setTimeout(function() {
+    console.log("[Consent SDK] Final fallback: checking banner");
+    ensureBannerShows();
+  }, 2000);
+  
+  } catch (error) {
+    console.error("[Consent SDK] Error initializing:", error);
+    // Try to show a simple banner even on error
+    setTimeout(function() {
+      if (document.body && !document.getElementById("cookie-consent-banner")) {
+        const errorBanner = document.createElement("div");
+        errorBanner.id = "cookie-consent-banner";
+        errorBanner.style.cssText = "position: fixed; bottom: 0; left: 0; right: 0; background: #667eea; color: white; padding: 20px; z-index: 999999; text-align: center;";
+        errorBanner.innerHTML = "<p>🍪 We use cookies. <button onclick='localStorage.setItem(\\\"cookie_consent_${siteId}\\\", \\\"accepted\\\"); this.parentElement.remove();'>Accept</button></p>";
+        document.body.appendChild(errorBanner);
+      }
+    }, 1000);
+  }
 })();
 `;
 

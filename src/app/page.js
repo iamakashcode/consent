@@ -113,17 +113,20 @@ export default function Home() {
                   Your Consent Script
                 </h3>
                 <p className="text-sm text-gray-700 mb-4">
-                  Add this script tag to your website&apos;s &lt;head&gt; section:
+                  Add this script tag to your website&apos;s &lt;head&gt; section (preferably before other tracking scripts):
                 </p>
                 <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
                   <code className="text-green-400 text-sm">
-                    {`<script src="${results.scriptUrl}" async></script>`}
+                    {`<script src="${results.scriptUrl}"></script>`}
                   </code>
                 </div>
+                <p className="text-xs text-yellow-600 mt-2 mb-4">
+                  ⚠️ Note: Remove the &quot;async&quot; attribute for immediate execution, or place this script before your tracking scripts
+                </p>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(
-                      `<script src="${results.scriptUrl}" async></script>`
+                      `<script src="${results.scriptUrl}"></script>`
                     );
                     alert("Script copied to clipboard!");
                   }}
