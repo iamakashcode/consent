@@ -54,8 +54,10 @@ export const PLAN_DETAILS = {
 };
 
 export async function createRazorpayOrder(amount, currency = "INR") {
+  // Amount is already in paise (from PLAN_PRICING)
+  // No need to multiply by 100
   const options = {
-    amount: amount * 100, // Convert to paise
+    amount: amount, // Amount is already in paise
     currency,
     receipt: `receipt_${Date.now()}`,
   };
