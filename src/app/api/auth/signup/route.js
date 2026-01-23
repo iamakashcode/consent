@@ -1,4 +1,4 @@
-import { createUser, getUserByEmail } from '@/lib/auth';
+import { createUser, userExists } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 
 export async function POST(req) {
@@ -22,9 +22,9 @@ export async function POST(req) {
       );
     }
 
-    // Check if user already exists
-    const existingUser = await getUserByEmail(email);
-    if (existingUser) {
+    // Check if user already exists (using simple check that doesn't require isAdmin)
+    const exists = await userExists(email);
+    if (exists) {
       return NextResponse.json(
         { error: 'User already exists' },
         { status: 400 }
@@ -42,9 +42,19 @@ export async function POST(req) {
     console.error('Signup error:', error);
     console.error('Error stack:', error.stack);
     console.error('Error message:', error.message);
+    console.error('Error code:', error.code);
+    
+    // Provide more helpful error messages
+    let errorMessage = 'Internal server error';
+    if (error.message?.includes('Unique constraint') || error.code === 'P2002') {
+      errorMessage = 'User with this email already exists';
+    } else if (error.message?.includes('column') || error.code === 'P2021') {
+      errorMessage = 'Database schema mismatch. Please run migrations: npx prisma migrate deploy';
+    }
+    
     return NextResponse.json(
       { 
-        error: 'Internal server error',
+        error: errorMessage,
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
       },
       { status: 500 }

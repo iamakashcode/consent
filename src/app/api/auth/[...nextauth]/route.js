@@ -11,29 +11,46 @@ export const authOptions = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        try {
+          if (!credentials?.email || !credentials?.password) {
+            console.log('[NextAuth] Missing credentials');
+            return null;
+          }
+
+          console.log('[NextAuth] Attempting login for:', credentials.email);
+          const user = await getUserByEmail(credentials.email);
+          
+          if (!user) {
+            console.log('[NextAuth] User not found:', credentials.email);
+            return null;
+          }
+
+          if (!user.password) {
+            console.error('[NextAuth] User has no password field:', credentials.email);
+            return null;
+          }
+
+          console.log('[NextAuth] Verifying password for:', credentials.email);
+          const isValid = await verifyPassword(credentials.password, user.password);
+
+          if (!isValid) {
+            console.log('[NextAuth] Invalid password for:', credentials.email);
+            return null;
+          }
+
+          console.log('[NextAuth] Login successful for:', credentials.email);
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            plan: user.subscription?.plan || 'free',
+            isAdmin: user.isAdmin || false,
+          };
+        } catch (error) {
+          console.error('[NextAuth] Authorize error:', error);
+          console.error('[NextAuth] Error stack:', error.stack);
           return null;
         }
-
-        const user = await getUserByEmail(credentials.email);
-        
-        if (!user) {
-          return null;
-        }
-
-        const isValid = await verifyPassword(credentials.password, user.password);
-
-        if (!isValid) {
-          return null;
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          plan: user.subscription?.plan || 'free',
-          isAdmin: user.isAdmin || false,
-        };
       },
     }),
   ],
@@ -77,6 +94,18 @@ export const authOptions = {
             },
           },
   secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === 'development',
+  cookies: {
+    sessionToken: {
+      name: `${process.env.NODE_ENV === 'production' ? '__Secure-' : ''}next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+      },
+    },
+  },
 };
 
 // Validate that secret is set
