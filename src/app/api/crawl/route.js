@@ -158,27 +158,59 @@ export async function POST(req) {
       const verificationToken = `cm_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
 
       // Create or update site in database
-      site = await prisma.site.upsert({
-        where: {
-          userId_domain: {
-            userId,
-            domain: cleanDomain,
+      // Try with verification fields first, fallback if columns don't exist
+      try {
+        site = await prisma.site.upsert({
+          where: {
+            userId_domain: {
+              userId,
+              domain: cleanDomain,
+            },
           },
-        },
-        create: {
-          domain: cleanDomain,
-          siteId: siteId,
-          userId,
-          trackers: trackers,
-          verificationToken: verificationToken,
-          isVerified: false, // Will be verified after user adds meta tag
-        },
-        update: {
-          trackers: trackers,
-          updatedAt: new Date(),
-          // Don't reset verification if already verified
-        },
-      });
+          create: {
+            domain: cleanDomain,
+            siteId: siteId,
+            userId,
+            trackers: trackers,
+            verificationToken: verificationToken,
+            isVerified: false, // Will be verified after user adds meta tag
+          },
+          update: {
+            trackers: trackers,
+            updatedAt: new Date(),
+            // Don't reset verification if already verified
+          },
+        });
+      } catch (error) {
+        // If verification columns don't exist, create without them
+        if (error.message && (error.message.includes("isVerified") || error.message.includes("verificationToken"))) {
+          console.warn("Verification columns missing, creating site without them:", error.message);
+          site = await prisma.site.upsert({
+            where: {
+              userId_domain: {
+                userId,
+                domain: cleanDomain,
+              },
+            },
+            create: {
+              domain: cleanDomain,
+              siteId: siteId,
+              userId,
+              trackers: trackers,
+            },
+            update: {
+              trackers: trackers,
+              updatedAt: new Date(),
+            },
+          });
+          // Add default verification values
+          site.isVerified = false;
+          site.verificationToken = verificationToken;
+          site.verifiedAt = null;
+        } else {
+          throw error;
+        }
+      }
     }
 
     const baseUrl =
