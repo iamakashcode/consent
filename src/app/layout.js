@@ -1,4 +1,6 @@
 import "./globals.css";
+import { Providers } from "./providers";
+import Navigation from "@/components/Navigation";
 
 export const metadata = {
   title: "Cookie Consent Manager",
@@ -8,7 +10,12 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Providers>
+          <Navigation />
+          {children}
+        </Providers>
+      </body>
     </html>
   );
 }

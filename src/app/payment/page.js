@@ -1,0 +1,250 @@
+"use client";
+
+import { useSession } from "next-auth/react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import Script from "next/script";
+import Link from "next/link";
+
+function PaymentContent() {
+  const { data: session, status, update } = useSession();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const plan = searchParams.get("plan");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [orderData, setOrderData] = useState(null);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+    }
+  }, [status, router]);
+
+  useEffect(() => {
+    if (session && plan && ["starter", "pro"].includes(plan) && !orderData) {
+      createOrder();
+    }
+  }, [session, plan]);
+
+  const createOrder = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await fetch("/api/payment/create-order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ plan }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // If session is out of sync, refresh the page
+        if (data.needsRefresh) {
+          alert(data.error + "\n\nRefreshing page to sync your session...");
+          window.location.reload();
+          return;
+        }
+        throw new Error(data.error || "Failed to create order");
+      }
+
+      setOrderData(data);
+    } catch (err) {
+      setError(err.message || "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePayment = () => {
+    if (!orderData) return;
+
+    const options = {
+      key: orderData.key,
+      amount: orderData.amount,
+      currency: orderData.currency,
+      name: "Cookie Consent Manager",
+      description: `Upgrade to ${plan?.charAt(0).toUpperCase() + plan?.slice(1)} Plan - ₹${orderData.amount / 100}`,
+      order_id: orderData.orderId,
+      handler: async function (response) {
+        console.log("Razorpay payment response:", response);
+        
+        // Verify payment
+        try {
+          const payload = {
+            orderId: response.razorpay_order_id,
+            paymentId: response.razorpay_payment_id,
+            signature: response.razorpay_signature,
+            plan: plan,
+          };
+          
+          console.log("Sending verification request:", { ...payload, signature: payload.signature?.substring(0, 20) + "..." });
+          
+          const verifyResponse = await fetch("/api/payment/verify", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+
+          const verifyData = await verifyResponse.json();
+
+          console.log("Verification response:", { 
+            status: verifyResponse.status, 
+            statusText: verifyResponse.statusText,
+            data: verifyData 
+          });
+
+          if (verifyResponse.ok) {
+            alert("Payment successful! Your plan has been upgraded. Refreshing page...");
+            // Force a full page reload to get fresh session data
+            window.location.href = "/profile";
+          } else {
+            console.error("Verification failed:", verifyData);
+            const errorMsg = verifyData.error || "Unknown error";
+            console.error("Full error details:", { verifyData, response });
+            alert("Payment verification failed: " + errorMsg + "\n\nCheck browser console for details.");
+          }
+        } catch (err) {
+          console.error("Verification error:", err);
+          console.error("Error stack:", err.stack);
+          alert("Payment verification failed: " + (err.message || "Please contact support.") + "\n\nCheck browser console for details.");
+        }
+      },
+      prefill: {
+        email: session?.user?.email || "",
+        name: session?.user?.name || "",
+      },
+      theme: {
+        color: "#667eea",
+      },
+    };
+
+    const razorpay = new window.Razorpay(options);
+    razorpay.open();
+    razorpay.on("payment.failed", function (response) {
+      alert("Payment failed: " + response.error.description);
+    });
+  };
+
+  if (status === "loading" || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!session || !plan || !["starter", "pro"].includes(plan)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Invalid Plan</h1>
+          <Link href="/" className="text-indigo-600 hover:text-indigo-700">
+            Go to Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const planNames = {
+    starter: "Starter",
+    pro: "Pro",
+  };
+
+  const planPrices = {
+    starter: "₹9",
+    pro: "₹29",
+  };
+
+  return (
+    <>
+      <Script
+        src="https://checkout.razorpay.com/v1/checkout.js"
+        onLoad={() => console.log("Razorpay loaded")}
+      />
+      <div className="min-h-screen bg-gray-50">
+
+        <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-12">
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                Upgrade to {planNames[plan]} Plan
+              </h1>
+              <p className="text-gray-600">
+                Complete your payment to upgrade your subscription
+              </p>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+                {error}
+              </div>
+            )}
+
+            {orderData && (
+              <div className="space-y-6">
+                <div className="bg-gray-50 rounded-lg p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-gray-600">Plan</span>
+                    <span className="font-semibold text-gray-900">
+                      {planNames[plan]}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-gray-600">Amount</span>
+                    <span className="text-2xl font-bold text-indigo-600">
+                      {planPrices[plan]}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Billing Period</span>
+                    <span className="font-semibold text-gray-900">Monthly</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handlePayment}
+                  className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+                >
+                  Pay {planPrices[plan]} & Upgrade
+                </button>
+
+                <p className="text-xs text-center text-gray-500">
+                  By proceeding, you agree to our terms and conditions. This is a
+                  test payment using Razorpay test keys.
+                </p>
+              </div>
+            )}
+
+            {!orderData && !error && (
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+                <p className="mt-4 text-gray-600">Preparing payment...</p>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    </>
+  );
+}
+
+export default function PaymentPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-lg">Loading...</div>
+      </div>
+    }>
+      <PaymentContent />
+    </Suspense>
+  );
+}

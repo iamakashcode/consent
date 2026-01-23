@@ -1,162 +1,158 @@
 "use client";
 
-import { useState } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import Pricing from "@/components/pricing";
 
 export default function Home() {
-  const [domain, setDomain] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState(null);
-  const [error, setError] = useState("");
-
-  const handleCrawl = async () => {
-    if (!domain.trim()) {
-      setError("Please enter a domain name");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    setResults(null);
-
-    try {
-      const response = await fetch("/api/crawl", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ domain: domain.trim() }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to crawl domain");
-      }
-
-      setResults(data);
-    } catch (err) {
-      setError(err.message || "An error occurred");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: session } = useSession();
+  const router = useRouter();
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold text-gray-900 mb-4">
-            Cookie Consent Manager
+    <div className="min-h-screen">
+
+      {/* Hero Section */}
+      <section className="bg-gradient-to-br from-blue-50 to-indigo-100 py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h1 className="text-5xl font-bold text-gray-900 mb-6">
+            Cookie Consent Made Simple
           </h1>
-          <p className="text-xl text-gray-600">
-            Detect tracking codes and generate a consent script for your website
+          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+            Automatically detect tracking codes and manage cookie consent for
+            your website. GDPR, CCPA compliant.
           </p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
-          <div className="flex gap-4 mb-6">
-            <input
-              type="text"
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              placeholder="Enter your domain (e.g., example.com)"
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-lg"
-              onKeyPress={(e) => e.key === "Enter" && handleCrawl()}
-            />
-            <button
-              onClick={handleCrawl}
-              disabled={loading}
-              className="px-8 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold text-lg transition-colors"
+          {session ? (
+            <Link
+              href="/dashboard"
+              className="inline-block bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
             >
-              {loading ? "Crawling..." : "Crawl Domain"}
-            </button>
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-              {error}
-            </div>
-          )}
-
-          {results && (
-            <div className="mt-8 space-y-6">
-              <div className="border-b pb-4">
-                <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                  Detected Tracking Codes
-                </h2>
-                {results.trackers.length > 0 ? (
-                  <div className="space-y-3">
-                    {results.trackers.map((tracker, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg"
-                      >
-                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                        <div>
-                          <p className="font-semibold text-gray-900">
-                            {tracker.name}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            {tracker.type} - {tracker.details}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-600">No tracking codes detected</p>
-                )}
-              </div>
-
-              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-6">
-                <h3 className="text-xl font-semibold text-indigo-900 mb-4">
-                  Your Consent Script
-                </h3>
-                <p className="text-sm text-gray-700 mb-4">
-                  Add this script tag to your website&apos;s &lt;head&gt; section:
-                </p>
-                <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
-                  <code className="text-green-400 text-sm break-all">
-                    {`<script src="${results.scriptUrl}"></script>`}
-                  </code>
-                </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-                  <h4 className="font-semibold text-blue-900 mb-2">⚠️ Important Instructions:</h4>
-                  <ul className="list-disc list-inside space-y-1 text-sm text-blue-800">
-                    <li>Place this script <strong>BEFORE</strong> all your tracking scripts (GTM, Facebook Pixel, etc.)</li>
-                    <li>Do <strong>NOT</strong> add the &quot;async&quot; or &quot;defer&quot; attributes</li>
-                    <li>The script must load and execute immediately to block trackers</li>
-                    <li>After adding, clear your browser cache and test in incognito mode</li>
-                  </ul>
-                </div>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(
-                      `<script src="${results.scriptUrl}"></script>`
-                    );
-                    alert("Script copied to clipboard!");
-                  }}
-                  className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  Copy Script
-                </button>
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-yellow-900 mb-2">
-                  How it works
-                </h3>
-                <ul className="list-disc list-inside space-y-2 text-gray-700">
-                  <li>The script will block all detected tracking codes until consent is given</li>
-                  <li>Visitors will see a cookie consent banner</li>
-                  <li>Once accepted, all trackers will be enabled</li>
-                  <li>Consent preference is saved in localStorage</li>
-                </ul>
-              </div>
-            </div>
+              Go to Dashboard
+            </Link>
+          ) : (
+            <Link
+              href="/signup"
+              className="inline-block bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+            >
+              Get Started Free
+            </Link>
           )}
         </div>
-      </div>
-    </main>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-16 px-4">
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
+            Everything You Need
+          </h2>
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="text-center">
+              <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg
+                  className="w-8 h-8 text-indigo-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                Auto Detection
+              </h3>
+              <p className="text-gray-600">
+                Automatically crawl and detect all tracking codes on your
+                website
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg
+                  className="w-8 h-8 text-indigo-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                Smart Blocking
+              </h3>
+              <p className="text-gray-600">
+                Block all trackers until visitors give consent. Enable with one
+                click.
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg
+                  className="w-8 h-8 text-indigo-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                Compliance Ready
+              </h3>
+              <p className="text-gray-600">
+                GDPR and CCPA compliant cookie consent management out of the
+                box
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <Pricing />
+
+      {/* CTA Section */}
+      <section className="bg-indigo-600 py-16 px-4">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl font-bold text-white mb-4">
+            Ready to Get Started?
+          </h2>
+          <p className="text-xl text-indigo-100 mb-8">
+            Start managing cookie consent for your website today. No credit card
+            required.
+          </p>
+          {session ? (
+            <Link
+              href="/dashboard"
+              className="inline-block bg-white text-indigo-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+            >
+              Go to Dashboard
+            </Link>
+          ) : (
+            <Link
+              href="/signup"
+              className="inline-block bg-white text-indigo-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+            >
+              Sign Up Free
+            </Link>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }

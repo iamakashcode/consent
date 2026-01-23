@@ -1,8 +1,19 @@
 import { detectTrackers } from "@/lib/tracker-detector";
-import { registerSite } from "@/lib/store";
+import { prisma } from "@/lib/prisma";
+import { generateSiteId } from "@/lib/store";
+import { getServerSession } from "next-auth";
+import { authOptions } from "../auth/[...nextauth]/route";
 
 export async function POST(req) {
   try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session || !session.user || !session.user.id) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    
+    const userId = session.user.id;
+
     const { domain } = await req.json();
 
     if (!domain) {
@@ -20,50 +31,119 @@ export async function POST(req) {
       return Response.json({ error: "Invalid domain" }, { status: 400 });
     }
 
-    // Fetch the website
-    let html;
-    try {
-      const url = `https://${cleanDomain}`;
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        },
-        redirect: "follow",
-      });
+    // Check user's plan limits
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { subscription: true },
+    });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+    if (!user) {
+      return Response.json({ error: "User not found" }, { status: 404 });
+    }
 
-      html = await response.text();
-    } catch (error) {
+    const plan = user.subscription?.plan || "free";
+    const siteCount = await prisma.site.count({
+      where: { userId },
+    });
+
+    // Check limits based on plan
+    const limits = {
+      free: 1,
+      starter: 5,
+      pro: Infinity,
+    };
+
+    const limit = limits[plan] || 1;
+    if (siteCount >= limit) {
       return Response.json(
         {
-          error: `Failed to fetch website: ${error.message}. Make sure the domain is accessible.`,
+          error: `You've reached your plan limit (${limit} site${limit > 1 ? "s" : ""}). Please upgrade your plan.`,
         },
-        { status: 500 }
+        { status: 403 }
       );
     }
 
-    // Detect trackers
-    const trackers = detectTrackers(html, cleanDomain);
+      // Check if site already exists
+      const existingSite = await prisma.site.findUnique({
+        where: {
+          userId_domain: {
+            userId,
+            domain: cleanDomain,
+          },
+        },
+      });
 
-    // Register site and generate script URL
-    const siteId = registerSite(cleanDomain, trackers);
+    let site;
+    let siteId;
+
+    if (existingSite) {
+      // Update existing site
+      site = existingSite;
+      siteId = existingSite.siteId;
+    } else {
+      // Fetch the website
+      let html;
+      try {
+        const url = `https://${cleanDomain}`;
+        const response = await fetch(url, {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+          },
+          redirect: "follow",
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        html = await response.text();
+      } catch (error) {
+        return Response.json(
+          {
+            error: `Failed to fetch website: ${error.message}. Make sure the domain is accessible.`,
+          },
+          { status: 500 }
+        );
+      }
+
+      // Detect trackers
+      const trackers = detectTrackers(html, cleanDomain);
+
+      // Generate unique siteId
+      siteId = generateSiteId();
+
+      // Create or update site in database
+      site = await prisma.site.upsert({
+        where: {
+          userId_domain: {
+            userId,
+            domain: cleanDomain,
+          },
+        },
+        create: {
+          domain: cleanDomain,
+          siteId: siteId,
+          userId,
+          trackers: trackers,
+        },
+        update: {
+          trackers: trackers,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
     const baseUrl =
       process.env.NEXT_PUBLIC_BASE_URL ||
       (req.headers.get("origin") || `http://${req.headers.get("host")}`);
-    
-    // Only include domain in URL - trackers will be extracted from detected domains
-    // This keeps the URL shorter and simpler
-    const scriptUrl = `${baseUrl}/api/script/${siteId}?domain=${encodeURIComponent(cleanDomain)}`;
+    const scriptUrl = `${baseUrl}/api/script/${site.siteId}?domain=${encodeURIComponent(cleanDomain)}`;
 
     return Response.json({
       domain: cleanDomain,
-      trackers,
+      trackers: Array.isArray(site.trackers) ? site.trackers : [],
       scriptUrl,
-      siteId,
+      siteId: site.siteId,
     });
   } catch (error) {
     console.error("Crawl error:", error);
@@ -73,4 +153,3 @@ export async function POST(req) {
     );
   }
 }
-
