@@ -42,15 +42,25 @@ export async function GET(req, { params }) {
     }
 
     try {
-      // Get unique page count and total view count
+      // Only count pages that have been viewed recently (last 7 days)
+      // This ensures we only count pages where the script is currently active
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      
+      // Get unique page count (only recently active pages) and total view count
       const [uniquePages, totalViews, recentViews] = await Promise.all([
-        // Count unique pages
+        // Count unique pages that have been viewed in the last 7 days
+        // This gives us the count of pages where the script is currently active
         prisma.pageView.groupBy({
           by: ["pagePath"],
-          where: { siteId: site.id },
+          where: {
+            siteId: site.id,
+            viewedAt: {
+              gte: sevenDaysAgo, // Only pages viewed in last 7 days
+            },
+          },
           _count: true,
         }),
-        // Count total views
+        // Count total views (all time)
         prisma.pageView.count({
           where: { siteId: site.id },
         }),
@@ -68,7 +78,7 @@ export async function GET(req, { params }) {
       return Response.json({
         siteId: site.siteId,
         domain: site.domain,
-        uniquePages: uniquePages.length,
+        uniquePages: uniquePages.length, // Only pages active in last 7 days
         totalViews: totalViews,
         recentViews: recentViews, // Views in last 30 days
         pages: uniquePages.map((p) => ({
