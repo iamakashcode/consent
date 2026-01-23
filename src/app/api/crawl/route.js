@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { generateSiteId } from "@/lib/store";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
+import { hasVerificationColumns } from "@/lib/db-utils";
 
 export async function POST(req) {
   try {
@@ -112,14 +113,23 @@ export async function POST(req) {
       site = existingSite;
       siteId = existingSite.siteId;
       
-      // Generate verification token if missing
-      if (!existingSite.verificationToken) {
-        const verificationToken = `cm_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-        await prisma.site.update({
-          where: { id: existingSite.id },
-          data: { verificationToken },
-        });
-        site.verificationToken = verificationToken;
+      // Generate verification token if missing (only if column exists)
+      if (!existingSite.verificationToken && existingSite.verificationToken !== undefined) {
+        try {
+          const verificationToken = `cm_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+          await prisma.site.update({
+            where: { id: existingSite.id },
+            data: { verificationToken },
+          });
+          site.verificationToken = verificationToken;
+        } catch (error) {
+          // Column doesn't exist, skip update
+          if (error.message && error.message.includes("verificationToken")) {
+            console.warn("verificationToken column doesn't exist, skipping update");
+          } else {
+            throw error;
+          }
+        }
       }
     } else {
       // Fetch the website
@@ -158,8 +168,11 @@ export async function POST(req) {
       const verificationToken = `cm_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
 
       // Create or update site in database
-      // Try with verification fields first, fallback if columns don't exist
-      try {
+      // Check if verification columns exist first
+      const verificationColumns = await hasVerificationColumns();
+      
+      if (verificationColumns.allExist) {
+        // All columns exist, use them
         site = await prisma.site.upsert({
           where: {
             userId_domain: {
@@ -181,34 +194,55 @@ export async function POST(req) {
             // Don't reset verification if already verified
           },
         });
-      } catch (error) {
-        // If verification columns don't exist, create without them
-        if (error.message && (error.message.includes("isVerified") || error.message.includes("verificationToken"))) {
-          console.warn("Verification columns missing, creating site without them:", error.message);
-          site = await prisma.site.upsert({
-            where: {
-              userId_domain: {
-                userId,
-                domain: cleanDomain,
-              },
-            },
-            create: {
-              domain: cleanDomain,
-              siteId: siteId,
-              userId,
-              trackers: trackers,
-            },
-            update: {
-              trackers: trackers,
-              updatedAt: new Date(),
-            },
-          });
-          // Add default verification values
+      } else {
+        // Columns don't exist, use raw SQL to avoid Prisma schema validation
+        console.warn("Verification columns missing, using raw SQL to create site");
+        
+        // First check if site exists
+        const existingSiteRaw = await prisma.$queryRaw`
+          SELECT * FROM "sites" 
+          WHERE "userId" = ${userId} AND "domain" = ${cleanDomain}
+          LIMIT 1
+        `;
+        
+        const trackersJson = JSON.stringify(trackers);
+        
+        if (existingSiteRaw && existingSiteRaw.length > 0) {
+          // Update existing site
+          const result = await prisma.$queryRaw`
+            UPDATE "sites"
+            SET 
+              "trackers" = ${trackersJson}::jsonb,
+              "updatedAt" = NOW()
+            WHERE "userId" = ${userId} AND "domain" = ${cleanDomain}
+            RETURNING *
+          `;
+          site = result[0];
+        } else {
+          // Create new site
+          const result = await prisma.$queryRaw`
+            INSERT INTO "sites" ("id", "domain", "siteId", "userId", "trackers", "createdAt", "updatedAt")
+            VALUES (
+              gen_random_uuid()::text,
+              ${cleanDomain},
+              ${siteId},
+              ${userId},
+              ${trackersJson}::jsonb,
+              NOW(),
+              NOW()
+            )
+            RETURNING *
+          `;
+          site = result[0];
+        }
+        
+        // Add default verification values to the object (not in DB)
+        if (site) {
           site.isVerified = false;
           site.verificationToken = verificationToken;
           site.verifiedAt = null;
         } else {
-          throw error;
+          throw new Error("Failed to create or update site");
         }
       }
     }
@@ -218,11 +252,20 @@ export async function POST(req) {
       (req.headers.get("origin") || `http://${req.headers.get("host")}`);
     const scriptUrl = `${baseUrl}/api/script/${site.siteId}?domain=${encodeURIComponent(cleanDomain)}`;
 
+    // Get verification token (from DB or fallback)
+    const siteVerificationToken = site.verificationToken || verificationToken;
+    const siteIsVerified = site.isVerified || false;
+
     return Response.json({
       domain: cleanDomain,
       trackers: Array.isArray(site.trackers) ? site.trackers : [],
       scriptUrl,
       siteId: site.siteId,
+      isVerified: siteIsVerified,
+      verificationToken: siteVerificationToken,
+      message: siteIsVerified 
+        ? "Domain is verified. The script is working correctly."
+        : "Add the script to your website. Verification will happen automatically when the script loads.",
     });
   } catch (error) {
     console.error("Crawl error:", error);

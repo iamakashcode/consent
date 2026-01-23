@@ -1,9 +1,10 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
+import { hasVerificationColumns, hasBannerConfigColumn } from "@/lib/db-utils";
 
 /**
- * Verify domain ownership by checking for verification meta tag
+ * Check verification status - verification happens automatically when script is added
  */
 export async function POST(req, { params }) {
   try {
@@ -21,15 +22,18 @@ export async function POST(req, { params }) {
       return Response.json({ error: "Site ID is required" }, { status: 400 });
     }
 
-    // Get site from database
+    const verificationColumns = await hasVerificationColumns();
+    const bannerConfigExists = await hasBannerConfigColumn();
+
+    // Get site from database (avoid selecting columns that may not exist)
     const site = await prisma.site.findUnique({
       where: { siteId },
       select: {
         id: true,
         domain: true,
         userId: true,
-        isVerified: true,
-        verificationToken: true,
+        ...(bannerConfigExists ? { bannerConfig: true } : {}),
+        ...(verificationColumns.allExist ? { isVerified: true, verificationToken: true } : {}),
       },
     });
 
@@ -45,8 +49,21 @@ export async function POST(req, { params }) {
       );
     }
 
+    const verificationFromBanner =
+      site?.bannerConfig?._verification && typeof site.bannerConfig._verification === "object"
+        ? site.bannerConfig._verification
+        : null;
+
+    const effectiveIsVerified = verificationColumns.allExist
+      ? (site.isVerified || false)
+      : (verificationFromBanner?.isVerified || false);
+
+    let effectiveToken = verificationColumns.allExist
+      ? site.verificationToken
+      : verificationFromBanner?.token;
+
     // If already verified, return success
-    if (site.isVerified) {
+    if (effectiveIsVerified) {
       return Response.json({
         verified: true,
         message: "Domain is already verified",
@@ -54,56 +71,102 @@ export async function POST(req, { params }) {
       });
     }
 
-    // Fetch the website and check for verification meta tag
-    let html;
-    try {
-      const url = `https://${site.domain}`;
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        },
-        redirect: "follow",
-      });
+    // Ensure token exists (store in DB column if available; else store in bannerConfig fallback)
+    if (!effectiveToken) {
+      effectiveToken = `cm_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (verificationColumns.allExist) {
+        try {
+          await prisma.site.update({
+            where: { id: site.id },
+            data: { verificationToken: effectiveToken },
+          });
+        } catch (updateError) {
+          // If update fails (schema validation), fallback to raw SQL
+          console.warn("Prisma update failed, using raw SQL:", updateError.message);
+          await prisma.$executeRaw`
+            UPDATE "sites"
+            SET "verificationToken" = ${effectiveToken}
+            WHERE "id" = ${site.id}
+          `;
+        }
+      } else if (bannerConfigExists) {
+        const nextBannerConfig = {
+          ...(site.bannerConfig || {}),
+          _verification: {
+            ...(verificationFromBanner || {}),
+            token: effectiveToken,
+            isVerified: false,
+            verifiedAt: null,
+          },
+        };
+        // Use raw SQL to avoid Prisma schema validation
+        await prisma.$executeRaw`
+          UPDATE "sites"
+          SET "bannerConfig" = ${JSON.stringify(nextBannerConfig)}::jsonb,
+              "updatedAt" = NOW()
+          WHERE "id" = ${site.id}
+        `;
+      } else {
+        return Response.json(
+          {
+            verified: false,
+            error:
+              "Verification storage is not available because required DB columns are missing. Please redeploy so migrations run.",
+          },
+          { status: 503 }
+        );
       }
-
-      html = await response.text();
-    } catch (error) {
-      return Response.json(
-        {
-          verified: false,
-          error: `Failed to fetch website: ${error.message}. Make sure the domain is accessible.`,
-        },
-        { status: 500 }
-      );
     }
 
-    // Check for verification meta tag
-    if (!site.verificationToken) {
-      return Response.json(
-        {
-          verified: false,
-          error: "Verification token not found. Please re-add the domain.",
-        },
-        { status: 400 }
-      );
-    }
+    // Verification happens automatically when script is added
+    // Just check current status
+    const isVerified = effectiveIsVerified;
     
-    const verificationMetaTag = `<meta name="consent-manager-verification" content="${site.verificationToken}">`;
-    const isVerified = html.includes(verificationMetaTag);
+    console.log(`[Verify API] Verification status check:`, {
+      verified: isVerified,
+      domain: site.domain,
+    });
 
     if (isVerified) {
-      // Update site as verified
-      await prisma.site.update({
-        where: { id: site.id },
-        data: {
-          isVerified: true,
-          verifiedAt: new Date(),
-        },
-      });
+      // Update site as verified (DB columns if present, else bannerConfig fallback)
+      if (verificationColumns.allExist) {
+        try {
+          await prisma.site.update({
+            where: { id: site.id },
+            data: {
+              isVerified: true,
+              verifiedAt: new Date(),
+            },
+          });
+        } catch (updateError) {
+          // If update fails (schema validation), fallback to raw SQL
+          console.warn("Prisma update failed, using raw SQL:", updateError.message);
+          await prisma.$executeRaw`
+            UPDATE "sites"
+            SET "isVerified" = true,
+                "verifiedAt" = NOW()
+            WHERE "id" = ${site.id}
+          `;
+        }
+      } else if (bannerConfigExists) {
+        const nextBannerConfig = {
+          ...(site.bannerConfig || {}),
+          _verification: {
+            ...(verificationFromBanner || {}),
+            token: effectiveToken,
+            isVerified: true,
+            verifiedAt: new Date().toISOString(),
+          },
+        };
+        // Use raw SQL to avoid Prisma schema validation
+        await prisma.$executeRaw`
+          UPDATE "sites"
+          SET "bannerConfig" = ${JSON.stringify(nextBannerConfig)}::jsonb,
+              "updatedAt" = NOW()
+          WHERE "id" = ${site.id}
+        `;
+      }
 
       return Response.json({
         verified: true,
@@ -111,11 +174,22 @@ export async function POST(req, { params }) {
         domain: site.domain,
       });
     } else {
+      // Get base URL for script
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+        (req.headers.get("origin") || `http://${req.headers.get("host")}`);
+      const scriptUrl = `${baseUrl}/api/script/${site.siteId}?domain=${encodeURIComponent(site.domain)}`;
+      
       return Response.json({
         verified: false,
-        message: "Verification meta tag not found",
-        instruction: `Please add this meta tag to your website's <head> section: ${verificationMetaTag}`,
-        verificationToken: site.verificationToken,
+        message: "Domain not yet verified",
+        error: "Please add the consent script to your website. Verification will happen automatically when the script loads.",
+        verificationToken: effectiveToken,
+        scriptUrl: scriptUrl,
+        instructions: [
+          "1. Add the consent script to your website's <head> section",
+          "2. The script will automatically verify your domain when it loads",
+          "3. Refresh this page to check verification status",
+        ],
       });
     }
   } catch (error) {
@@ -146,16 +220,20 @@ export async function GET(req, { params }) {
       return Response.json({ error: "Site ID is required" }, { status: 400 });
     }
 
-    // Get site from database
+    const verificationColumns = await hasVerificationColumns();
+    const bannerConfigExists = await hasBannerConfigColumn();
+
+    // Get site from database (avoid selecting columns that may not exist)
     const site = await prisma.site.findUnique({
       where: { siteId },
       select: {
         id: true,
         domain: true,
         userId: true,
-        isVerified: true,
-        verificationToken: true,
-        verifiedAt: true,
+        ...(bannerConfigExists ? { bannerConfig: true } : {}),
+        ...(verificationColumns.allExist
+          ? { isVerified: true, verificationToken: true, verifiedAt: true }
+          : {}),
       },
     });
 
@@ -171,24 +249,77 @@ export async function GET(req, { params }) {
       );
     }
 
-    if (!site.verificationToken) {
+    const verificationFromBanner =
+      site?.bannerConfig?._verification && typeof site.bannerConfig._verification === "object"
+        ? site.bannerConfig._verification
+        : null;
+
+    let effectiveToken = verificationColumns.allExist
+      ? site.verificationToken
+      : verificationFromBanner?.token;
+
+    let effectiveIsVerified = verificationColumns.allExist
+      ? (site.isVerified || false)
+      : (verificationFromBanner?.isVerified || false);
+
+    let effectiveVerifiedAt = verificationColumns.allExist
+      ? site.verifiedAt
+      : (verificationFromBanner?.verifiedAt || null);
+
+    if (!effectiveToken) {
       // Generate a new token if missing
       const newToken = `cm_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-      await prisma.site.update({
-        where: { id: site.id },
-        data: { verificationToken: newToken },
-      });
-      site.verificationToken = newToken;
+      effectiveToken = newToken;
+
+      if (verificationColumns.allExist) {
+        try {
+          await prisma.site.update({
+            where: { id: site.id },
+            data: { verificationToken: newToken },
+          });
+        } catch (updateError) {
+          // If update fails (schema validation), fallback to raw SQL
+          console.warn("Prisma update failed, using raw SQL:", updateError.message);
+          await prisma.$executeRaw`
+            UPDATE "sites"
+            SET "verificationToken" = ${newToken}
+            WHERE "id" = ${site.id}
+          `;
+        }
+      } else if (bannerConfigExists) {
+        const nextBannerConfig = {
+          ...(site.bannerConfig || {}),
+          _verification: {
+            ...(verificationFromBanner || {}),
+            token: newToken,
+            isVerified: false,
+            verifiedAt: null,
+          },
+        };
+        // Use raw SQL to avoid Prisma schema validation
+        await prisma.$executeRaw`
+          UPDATE "sites"
+          SET "bannerConfig" = ${JSON.stringify(nextBannerConfig)}::jsonb,
+              "updatedAt" = NOW()
+          WHERE "id" = ${site.id}
+        `;
+      }
     }
 
-    const verificationMetaTag = `<meta name="consent-manager-verification" content="${site.verificationToken}">`;
+    // Get script URL
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+      (req.headers.get("origin") || `http://${req.headers.get("host")}`);
+    const scriptUrl = `${baseUrl}/api/script/${siteId}?domain=${encodeURIComponent(site.domain)}`;
 
     return Response.json({
-      isVerified: site.isVerified || false,
-      verificationToken: site.verificationToken,
-      verificationMetaTag: verificationMetaTag,
-      verifiedAt: site.verifiedAt,
+      isVerified: effectiveIsVerified,
+      verificationToken: effectiveToken,
+      scriptUrl: scriptUrl,
+      verifiedAt: effectiveVerifiedAt,
       domain: site.domain,
+      message: effectiveIsVerified 
+        ? "Domain is verified. The script is working correctly."
+        : "Domain not verified. Add the script to your website to verify automatically.",
     });
   } catch (error) {
     console.error("Get verification status error:", error);

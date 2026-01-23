@@ -13,6 +13,7 @@ export default function DashboardPage() {
   const [results, setResults] = useState(null);
   const [error, setError] = useState("");
   const [sites, setSites] = useState([]);
+  const [verifyingId, setVerifyingId] = useState(null);
   const hasRefreshed = useRef(false);
 
   useEffect(() => {
@@ -119,6 +120,40 @@ export default function DashboardPage() {
     }
   };
 
+  const verifyDomain = async (siteId) => {
+    setVerifyingId(siteId);
+    try {
+      const response = await fetch(`/api/sites/${siteId}/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await response.json();
+
+      if (response.ok && data.verified) {
+        // Update results to show verified status
+        setResults((prev) => ({
+          ...prev,
+          isVerified: true,
+        }));
+        fetchSites(); // Refresh sites to get updated status
+        alert("Domain verified successfully! The script will now work on this domain.");
+      } else {
+        // Show detailed error message
+        let errorMessage = data.error || data.message || "Verification failed.";
+        if (data.debug && process.env.NODE_ENV === "development") {
+          console.log("DNS Verification Debug:", data.debug);
+          errorMessage += `\n\nCheck console for debug details.`;
+        }
+        alert(errorMessage);
+      }
+    } catch (err) {
+      console.error("Failed to verify domain:", err);
+      alert("An error occurred while verifying the domain. Please check the console for details.");
+    } finally {
+      setVerifyingId(null);
+    }
+  };
+
   if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -204,30 +239,80 @@ export default function DashboardPage() {
                   )}
                 </div>
 
+                {/* Script Section */}
                 <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-indigo-900 mb-4">
-                    Your Consent Script
-                  </h3>
+                  <div className="flex items-center gap-3 mb-4">
+                    {results.isVerified ? (
+                      <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded">
+                        ✓ Connected
+                      </span>
+                    ) : (
+                      <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
+                        ⚠ Not Connected
+                      </span>
+                    )}
+                    <h3 className="text-lg font-semibold text-indigo-900">
+                      Your Consent Script
+                    </h3>
+                  </div>
+                  
+                  {!results.isVerified && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                      <p className="text-sm text-blue-900 mb-2">
+                        <strong>How it works:</strong> Add the script below to your website. 
+                        Verification happens automatically when the script loads on your domain.
+                      </p>
+                      <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
+                        <li>Copy the script tag below</li>
+                        <li>Add it to your website&apos;s <code className="bg-blue-100 px-1 rounded">&lt;head&gt;</code> section</li>
+                        <li>The script will automatically verify your domain when it loads</li>
+                        <li>Refresh this page to check connection status</li>
+                      </ol>
+                    </div>
+                  )}
+
                   <p className="text-sm text-gray-700 mb-4">
-                    Add this script tag to your website&apos;s &lt;head&gt;
-                    section:
+                    Add this script tag to your website&apos;s <code className="bg-gray-200 px-1 rounded">&lt;head&gt;</code> section:
                   </p>
-                  <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
+                  <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto mb-4">
                     <code className="text-green-400 text-sm break-all">
                       {`<script src="${results.scriptUrl}"></script>`}
                     </code>
                   </div>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(
-                        `<script src="${results.scriptUrl}"></script>`
-                      );
-                      alert("Script copied to clipboard!");
-                    }}
-                    className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    Copy Script
-                  </button>
+                  
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          `<script src="${results.scriptUrl}"></script>`
+                        );
+                        alert("Script copied to clipboard!");
+                      }}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      Copy Script
+                    </button>
+                    {!results.isVerified && (
+                      <button
+                        onClick={() => {
+                          fetchSites();
+                          setResults((prev) => ({ ...prev }));
+                          alert("Checking connection status... Please refresh if you just added the script.");
+                        }}
+                        className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                      >
+                        Check Status
+                      </button>
+                    )}
+                  </div>
+
+                  {results.isVerified && (
+                    <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3">
+                      <p className="text-sm text-green-800">
+                        ✓ <strong>Connected!</strong> Your domain is verified and the script is working correctly.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -244,18 +329,38 @@ export default function DashboardPage() {
                   className="bg-white rounded-lg shadow p-6 flex justify-between items-center hover:shadow-md transition-shadow"
                 >
                   <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900 mb-1">{site.domain}</h3>
+                    <div className="flex items-center gap-3 mb-1">
+                      <h3 className="font-semibold text-gray-900">{site.domain}</h3>
+                      {site.isVerified ? (
+                        <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded">
+                          ✓ Verified
+                        </span>
+                      ) : (
+                        <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
+                          ⚠ Not Verified
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-600">
                       {Array.isArray(site.trackers) ? site.trackers.length : 0} trackers detected
                     </p>
                   </div>
                   <div className="flex gap-3 items-center">
-                    <button
-                      onClick={() => copyScript(site)}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-semibold"
-                    >
-                      Copy Script
-                    </button>
+                    {site.isVerified ? (
+                      <button
+                        onClick={() => copyScript(site)}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-semibold"
+                      >
+                        Copy Script
+                      </button>
+                    ) : (
+                      <Link
+                        href="/profile"
+                        className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm font-semibold"
+                      >
+                        Verify Domain
+                      </Link>
+                    )}
                     <button
                       onClick={() => deleteSite(site.id)}
                       className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-semibold"

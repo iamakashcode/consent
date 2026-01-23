@@ -42,6 +42,7 @@ export async function GET(req) {
               domain: true,
               siteId: true,
               trackers: true,
+              bannerConfig: true,
               createdAt: true,
               updatedAt: true,
             },
@@ -49,10 +50,10 @@ export async function GET(req) {
           // Add default values for missing fields
           sites = sites.map(site => ({ 
             ...site, 
-            bannerConfig: null,
-            isVerified: false,
-            verificationToken: null,
-            verifiedAt: null,
+            // If bannerConfig exists, we can use it to store verification fallback
+            isVerified: site?.bannerConfig?._verification?.isVerified || false,
+            verificationToken: site?.bannerConfig?._verification?.token || null,
+            verifiedAt: site?.bannerConfig?._verification?.verifiedAt || null,
           }));
         } catch (fallbackError) {
           console.error("Fallback fetch also failed:", fallbackError);
@@ -100,25 +101,45 @@ export async function DELETE(req) {
       );
     }
 
-    // Verify the site belongs to the user
-    const site = await prisma.site.findFirst({
-      where: {
-        id: siteId,
-        userId: session.user.id,
-      },
-    });
+    // Verify the site belongs to the user and delete it
+    // Use raw SQL to avoid Prisma schema validation issues
+    try {
+      const result = await prisma.$queryRaw`
+        DELETE FROM "sites"
+        WHERE "id" = ${siteId} AND "userId" = ${session.user.id}
+        RETURNING "id"
+      `;
+      
+      if (!result || result.length === 0) {
+        return Response.json(
+          { error: "Site not found or access denied" },
+          { status: 404 }
+        );
+      }
+    } catch (error) {
+      console.error("Error deleting site:", error);
+      // Fallback to Prisma if raw SQL fails
+      const site = await prisma.site.findFirst({
+        where: {
+          id: siteId,
+          userId: session.user.id,
+        },
+        select: {
+          id: true,
+        },
+      });
 
-    if (!site) {
-      return Response.json(
-        { error: "Site not found or access denied" },
-        { status: 404 }
-      );
+      if (!site) {
+        return Response.json(
+          { error: "Site not found or access denied" },
+          { status: 404 }
+        );
+      }
+
+      await prisma.site.delete({
+        where: { id: siteId },
+      });
     }
-
-    // Delete the site
-    await prisma.site.delete({
-      where: { id: siteId },
-    });
 
     return Response.json({ message: "Site deleted successfully" });
   } catch (error) {

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES } from "@/lib/banner-templates";
+import { hasVerificationColumns } from "@/lib/db-utils";
 
 export async function GET(req, { params }) {
   try {
@@ -17,17 +18,45 @@ export async function GET(req, { params }) {
     let siteVerified = false;
     let allowedDomain = null;
     if (siteId) {
-      const site = await prisma.site.findUnique({
-        where: { siteId },
-        select: { domain: true, bannerConfig: true, isVerified: true },
-      });
-      if (site) {
-        if (!domain) {
-          domain = site.domain;
+      const verificationColumns = await hasVerificationColumns();
+      try {
+        const site = await prisma.site.findUnique({
+          where: { siteId },
+          select: {
+            domain: true,
+            bannerConfig: true,
+            ...(verificationColumns.allExist ? { isVerified: true } : {}),
+          },
+        });
+        if (site) {
+          if (!domain) {
+            domain = site.domain;
+          }
+          bannerConfig = site.bannerConfig;
+
+          // If verification columns exist, use them; else fallback to bannerConfig._verification
+          if (verificationColumns.allExist) {
+            siteVerified = site.isVerified || false;
+          } else {
+            const v = site?.bannerConfig?._verification;
+            siteVerified = (v && v.isVerified) || false;
+          }
+
+          allowedDomain = site.domain;
         }
-        bannerConfig = site.bannerConfig;
-        siteVerified = site.isVerified || false;
-        allowedDomain = site.domain;
+      } catch (error) {
+        // If schema mismatch happens, fallback to bannerConfig only
+        const site = await prisma.site.findUnique({
+          where: { siteId },
+          select: { domain: true, bannerConfig: true },
+        });
+        if (site) {
+          if (!domain) domain = site.domain;
+          bannerConfig = site.bannerConfig;
+          const v = site?.bannerConfig?._verification;
+          siteVerified = (v && v.isVerified) || false;
+          allowedDomain = site.domain;
+        }
       }
     }
     
@@ -84,6 +113,11 @@ export async function GET(req, { params }) {
       "adobe.com"
     ];
 
+    // Get base URL for verification callback
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+      (req.headers.get("origin") || `http://${req.headers.get("host")}`);
+    const verifyCallbackUrl = `${baseUrl}/api/sites/${finalSiteId}/verify-callback`;
+
     // Generate a simple, reliable script
     const script = `(function(){
 console.log('[Consent SDK] Loading...', window.location.href);
@@ -96,17 +130,40 @@ var SITE_ID="${finalSiteId.replace(/"/g, '\\"')}";
 var CONSENT_KEY='cookie_consent_'+SITE_ID;
 var consent=localStorage.getItem(CONSENT_KEY)==='accepted';
 
-// Domain verification check - only work on verified domain
-if(IS_VERIFIED && ALLOWED_DOMAIN !== "*"){
+// Auto-verify domain by calling verification callback
+if(!IS_VERIFIED){
+console.log('[Consent SDK] Auto-verifying domain...');
+try{
+var verifyUrl="${verifyCallbackUrl.replace(/"/g, '\\"')}";
+fetch(verifyUrl,{
+method:'GET',
+mode:'cors',
+credentials:'omit'
+}).then(function(r){return r.json();}).then(function(data){
+if(data.verified){
+console.log('[Consent SDK] ✓ Domain verified successfully!');
+IS_VERIFIED=true;
+}else{
+console.warn('[Consent SDK] Verification failed:',data.error||'Unknown error');
+}
+}).catch(function(err){
+console.warn('[Consent SDK] Verification request failed:',err.message);
+});
+}else{
+console.log('[Consent SDK] Domain already verified');
+}
+
+// Domain check - only work on matching domain
+if(ALLOWED_DOMAIN !== "*"){
 var currentHost=window.location.hostname.toLowerCase();
 var allowedHost=ALLOWED_DOMAIN.toLowerCase().replace(/^www\\./,'');
 currentHost=currentHost.replace(/^www\\./,'');
 if(currentHost !== allowedHost){
 console.warn('[Consent SDK] Domain mismatch. Current:',currentHost,'Allowed:',allowedHost);
-console.warn('[Consent SDK] Script will not work on this domain. Please verify domain ownership.');
+console.warn('[Consent SDK] Script will not work on this domain.');
 return; // Exit if domain doesn't match
 }
-console.log('[Consent SDK] Domain verified:',currentHost,'matches allowed domain:',allowedHost);
+console.log('[Consent SDK] Domain matches:',currentHost);
 }
 console.log('[Consent SDK] Consent status:', consent, 'Key:', CONSENT_KEY);
 console.log('[Consent SDK] Document ready state:', document.readyState);
