@@ -57,6 +57,7 @@ export const authOptions = {
   session: {
     strategy: 'jwt',
     maxAge: parseInt(process.env.NEXTAUTH_SESSION_MAX_AGE) || 30 * 24 * 60 * 60, // Default: 30 days (configurable via env)
+    updateAge: 24 * 60 * 60, // Update session every 24 hours (prevents frequent refreshes)
   },
   jwt: {
     maxAge: parseInt(process.env.NEXTAUTH_JWT_MAX_AGE) || 30 * 24 * 60 * 60, // Default: 30 days (configurable via env)
@@ -67,30 +68,47 @@ export const authOptions = {
   },
           callbacks: {
             async jwt({ token, user, trigger }) {
-              if (user) {
-                token.id = user.id;
-                token.plan = user.plan;
-                token.isAdmin = user.isAdmin || false;
-              }
-              // Refresh plan and admin status from database if session is being updated
-              if (trigger === "update") {
-                const updatedUser = await getUserById(token.id);
-                if (updatedUser) {
-                  if (updatedUser.subscription) {
-                    token.plan = updatedUser.subscription.plan;
-                  }
-                  token.isAdmin = updatedUser.isAdmin || false;
+              try {
+                if (user) {
+                  token.id = user.id;
+                  token.plan = user.plan;
+                  token.isAdmin = user.isAdmin || false;
                 }
+                // Refresh plan and admin status from database if session is being updated
+                if (trigger === "update" && token.id) {
+                  try {
+                    const updatedUser = await getUserById(token.id);
+                    if (updatedUser) {
+                      if (updatedUser.subscription) {
+                        token.plan = updatedUser.subscription.plan;
+                      }
+                      token.isAdmin = updatedUser.isAdmin || false;
+                    }
+                  } catch (updateError) {
+                    console.error("[NextAuth] Error updating user data:", updateError);
+                    // Don't fail the session if update fails, just log the error
+                  }
+                }
+                return token;
+              } catch (error) {
+                console.error("[NextAuth] JWT callback error:", error);
+                // Return token even if there's an error to prevent session invalidation
+                return token;
               }
-              return token;
             },
             async session({ session, token }) {
-              if (session.user) {
-                session.user.id = token.id;
-                session.user.plan = token.plan;
-                session.user.isAdmin = token.isAdmin || false;
+              try {
+                if (session.user && token) {
+                  session.user.id = token.id;
+                  session.user.plan = token.plan || 'free';
+                  session.user.isAdmin = token.isAdmin || false;
+                }
+                return session;
+              } catch (error) {
+                console.error("[NextAuth] Session callback error:", error);
+                // Return session even if there's an error
+                return session;
               }
-              return session;
             },
           },
   secret: process.env.NEXTAUTH_SECRET,

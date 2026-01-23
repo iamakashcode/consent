@@ -128,24 +128,62 @@ export async function getUserByEmail(email) {
 }
 
 export async function getUserById(id) {
-  return prisma.user.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      email: true,
-      password: true,
-      name: true,
-      isAdmin: true,
-      createdAt: true,
-      updatedAt: true,
-      subscription: {
-        select: {
-          plan: true,
-          status: true,
-          currentPeriodStart: true,
-          currentPeriodEnd: true,
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        password: true,
+        name: true,
+        isAdmin: true,
+        createdAt: true,
+        updatedAt: true,
+        subscription: {
+          select: {
+            plan: true,
+            status: true,
+            currentPeriodStart: true,
+            currentPeriodEnd: true,
+          },
         },
       },
-    },
-  });
+    });
+    return user;
+  } catch (error) {
+    console.error('[getUserById] Database error:', error);
+    // If it's a column not found error, try without isAdmin
+    if (error.message?.includes('Unknown column') || error.message?.includes('column') || error.code === 'P2021') {
+      console.warn('[getUserById] isAdmin column might not exist, trying without it');
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            email: true,
+            password: true,
+            name: true,
+            createdAt: true,
+            updatedAt: true,
+            subscription: {
+              select: {
+                plan: true,
+                status: true,
+                currentPeriodStart: true,
+                currentPeriodEnd: true,
+              },
+            },
+          },
+        });
+        // Add isAdmin as false if not in database
+        return user ? { ...user, isAdmin: false } : null;
+      } catch (fallbackError) {
+        console.error('[getUserById] Fallback also failed:', fallbackError);
+        return null; // Return null instead of throwing to prevent session invalidation
+      }
+    }
+    // Return null instead of throwing to prevent session invalidation
+    console.error('[getUserById] Error fetching user, returning null:', error);
+    return null;
+  }
 }
