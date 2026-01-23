@@ -121,7 +121,6 @@ export async function GET(req, { params }) {
     // Generate a simple, reliable script
     const script = `(function(){
 console.log('[Consent SDK] Loading...', window.location.href);
-console.log('[Consent SDK] Script loaded successfully');
 var DOMAIN="${domain.replace(/"/g, '\\"')}";
 var ALLOWED_DOMAIN="${allowedDomain ? allowedDomain.replace(/"/g, '\\"') : "*"}";
 var IS_VERIFIED=${siteVerified ? "true" : "false"};
@@ -129,6 +128,104 @@ var TRACKERS=${JSON.stringify(trackerDomains)};
 var SITE_ID="${finalSiteId.replace(/"/g, '\\"')}";
 var CONSENT_KEY='cookie_consent_'+SITE_ID;
 var consent=localStorage.getItem(CONSENT_KEY)==='accepted';
+
+// CRITICAL: Set up blocking IMMEDIATELY before anything else
+function isTracker(url){
+if(!url)return false;
+var urlStr=String(url).toLowerCase();
+for(var i=0;i<TRACKERS.length;i++){
+if(urlStr.indexOf(TRACKERS[i].toLowerCase())>-1)return true;
+}
+return false;
+}
+
+function blockScript(s){
+if(s&&s.type!=='javascript/blocked'){
+s.setAttribute('data-original-type',s.type||'text/javascript');
+s.type='javascript/blocked';
+console.log('[Consent SDK] Blocked script:',s.src||s.getAttribute('src'));
+}
+}
+
+// Block existing scripts IMMEDIATELY
+if(!consent){
+console.log('[Consent SDK] Blocking trackers - consent not granted');
+var existingScripts=document.querySelectorAll('script[src]');
+existingScripts.forEach(function(s){
+if(isTracker(s.src)){
+blockScript(s);
+console.log('[Consent SDK] Blocked existing script:',s.src);
+}
+});
+}
+
+// Store original functions BEFORE intercepting
+var origCreate=document.createElement;
+var origFetch=window.fetch;
+var origXHROpen=XMLHttpRequest.prototype.open;
+var origXHRSend=XMLHttpRequest.prototype.send;
+
+// Intercept createElement IMMEDIATELY
+document.createElement=function(tag){
+var el=origCreate.call(document,tag);
+if(tag.toLowerCase()==='script'&&!consent){
+var src='';
+Object.defineProperty(el,'src',{
+get:function(){return src;},
+set:function(v){
+src=v;
+if(v)el.setAttribute('src',v);
+// Check consent dynamically
+if(isTracker(v)&&localStorage.getItem(CONSENT_KEY)!=='accepted'){
+blockScript(el);
+console.log('[Consent SDK] Blocked new script:',v);
+}
+}
+});
+// Also check if src is set via setAttribute
+var originalSetAttribute=el.setAttribute;
+el.setAttribute=function(name,value){
+originalSetAttribute.call(this,name,value);
+if(name==='src'&&isTracker(value)&&localStorage.getItem(CONSENT_KEY)!=='accepted'){
+blockScript(el);
+console.log('[Consent SDK] Blocked script via setAttribute:',value);
+}
+};
+}
+return el;
+};
+
+// Intercept fetch IMMEDIATELY - handle both fetch(url) and fetch(url, options)
+window.fetch=function(input,init){
+var url=typeof input==='string'?input:(input&&input.url?input.url:'');
+if(url&&isTracker(url)&&localStorage.getItem(CONSENT_KEY)!=='accepted'){
+console.log('[Consent SDK] Blocked fetch:',url);
+return Promise.reject(new Error('Blocked by consent manager'));
+}
+return origFetch.apply(this,arguments);
+};
+
+// Intercept XHR open and send IMMEDIATELY
+XMLHttpRequest.prototype.open=function(method,url){
+if(isTracker(url)&&localStorage.getItem(CONSENT_KEY)!=='accepted'){
+console.log('[Consent SDK] Blocked XHR open:',url);
+this._blocked=true;
+this._blockedUrl=url;
+return;
+}
+this._blocked=false;
+return origXHROpen.apply(this,arguments);
+};
+
+XMLHttpRequest.prototype.send=function(data){
+if(this._blocked){
+console.log('[Consent SDK] Blocked XHR send:',this._blockedUrl);
+return;
+}
+return origXHRSend.apply(this,arguments);
+};
+
+console.log('[Consent SDK] Tracker blocking initialized');
 
 // Domain check first - only work on matching domain
 var currentHost=window.location.hostname.toLowerCase();
@@ -214,25 +311,10 @@ setTimeout(connectDomain,2000);
 console.error('[Consent SDK] Error in connectDomain function:',e);
 }
 })();
+console.log('[Consent SDK] Script loaded successfully');
 console.log('[Consent SDK] Consent status:', consent, 'Key:', CONSENT_KEY);
 console.log('[Consent SDK] Document ready state:', document.readyState);
 console.log('[Consent SDK] Body exists:', !!document.body);
-
-function isTracker(url){
-if(!url)return false;
-for(var i=0;i<TRACKERS.length;i++){
-if(url.indexOf(TRACKERS[i])>-1)return true;
-}
-return false;
-}
-
-function blockScript(s){
-if(s.type!=='javascript/blocked'){
-s.setAttribute('data-original-type',s.type||'text/javascript');
-s.type='javascript/blocked';
-console.log('[Consent SDK] Blocked:',s.src);
-}
-}
 
 function showBanner(){
 console.log('[Consent SDK] showBanner called, consent:', consent, 'banner exists:', !!document.getElementById('cookie-banner'));
@@ -312,96 +394,35 @@ fallback.remove();
 }
 }
 
-var origCreate,origFetch,origXHR;
-
 function enableTrackers(){
 console.log('[Consent SDK] Enabling trackers...');
 consent=true;
+localStorage.setItem(CONSENT_KEY,'accepted');
 
 // Restore blocked scripts
 document.querySelectorAll('script[type="javascript/blocked"]').forEach(function(s){
 var n=document.createElement('script');
-n.src=s.src;
+n.src=s.src||s.getAttribute('src');
 if(s.hasAttribute('async'))n.async=true;
 if(s.hasAttribute('defer'))n.defer=true;
 if(s.id)n.id=s.id;
+if(s.className)n.className=s.className;
+// Copy all data attributes
+for(var i=0;i<s.attributes.length;i++){
+var attr=s.attributes[i];
+if(attr.name.startsWith('data-'))n.setAttribute(attr.name,attr.value);
+}
 s.parentNode.replaceChild(n,s);
-console.log('[Consent SDK] Restored script:',s.src);
+console.log('[Consent SDK] Restored script:',n.src);
 });
 
-// Restore original createElement
-if(origCreate){
+// Restore original functions
 document.createElement=origCreate;
-console.log('[Consent SDK] Restored createElement');
-}
-
-// Restore original fetch
-if(origFetch){
 window.fetch=origFetch;
-console.log('[Consent SDK] Restored fetch');
-}
-
-// Restore original XHR
-if(origXHR){
-XMLHttpRequest.prototype.open=origXHR;
-console.log('[Consent SDK] Restored XHR');
-}
+XMLHttpRequest.prototype.open=origXHROpen;
+XMLHttpRequest.prototype.send=origXHRSend;
 
 console.log('[Consent SDK] All trackers enabled');
-}
-
-if(!consent){
-// Block existing scripts
-document.querySelectorAll('script[src]').forEach(function(s){
-if(isTracker(s.src))blockScript(s);
-});
-
-// Store original functions
-origCreate=document.createElement;
-origFetch=window.fetch;
-origXHR=XMLHttpRequest.prototype.open;
-
-// Intercept createElement
-document.createElement=function(tag){
-var el=origCreate.call(document,tag);
-if(tag.toLowerCase()==='script'){
-var src='';
-Object.defineProperty(el,'src',{
-get:function(){return src;},
-set:function(v){
-src=v;
-el.setAttribute('src',v);
-// Check consent dynamically
-if(isTracker(v)&&localStorage.getItem(CONSENT_KEY)!=='accepted'){
-blockScript(el);
-}
-}
-});
-}
-return el;
-};
-
-// Intercept fetch
-window.fetch=function(url){
-// Check consent dynamically
-if(typeof url==='string'&&isTracker(url)&&localStorage.getItem(CONSENT_KEY)!=='accepted'){
-console.log('[Consent SDK] Blocked fetch:',url);
-return Promise.reject(new Error('Blocked'));
-}
-return origFetch.apply(this,arguments);
-};
-
-// Intercept XHR
-XMLHttpRequest.prototype.open=function(method,url){
-// Check consent dynamically
-if(isTracker(url)&&localStorage.getItem(CONSENT_KEY)!=='accepted'){
-console.log('[Consent SDK] Blocked XHR:',url);
-return;
-}
-return origXHR.apply(this,arguments);
-};
-
-console.log('[Consent SDK] Blocking active');
 }
 
 // Only show banner if consent not granted
