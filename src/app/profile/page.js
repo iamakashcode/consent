@@ -13,6 +13,7 @@ export default function ProfilePage() {
   const [copiedId, setCopiedId] = useState(null);
   const [verifyingId, setVerifyingId] = useState(null);
   const [verificationStatus, setVerificationStatus] = useState({});
+  const [siteStats, setSiteStats] = useState({}); // Store stats for each site
   const hasRefreshed = useRef(false);
 
   useEffect(() => {
@@ -39,6 +40,25 @@ export default function ProfilePage() {
       if (response.ok) {
         const data = await response.json();
         setSites(data);
+        // Fetch stats for each site
+        const statsPromises = data.map(async (site) => {
+          try {
+            const statsResponse = await fetch(`/api/sites/${site.siteId}/stats`);
+            if (statsResponse.ok) {
+              const stats = await statsResponse.json();
+              return { siteId: site.siteId, stats };
+            }
+          } catch (err) {
+            console.error(`Failed to fetch stats for ${site.siteId}:`, err);
+          }
+          return { siteId: site.siteId, stats: null };
+        });
+        const statsResults = await Promise.all(statsPromises);
+        const statsMap = {};
+        statsResults.forEach(({ siteId, stats }) => {
+          if (stats) statsMap[siteId] = stats;
+        });
+        setSiteStats(statsMap);
       }
     } catch (err) {
       console.error("Failed to fetch sites:", err);
@@ -296,6 +316,30 @@ export default function ProfilePage() {
                             {trackers.length} tracker
                             {trackers.length !== 1 ? "s" : ""} detected
                           </p>
+                        )}
+                        {/* Statistics */}
+                        {siteStats[site.siteId] && (
+                          <div className="mt-3 flex gap-4 text-sm">
+                            <div className="flex items-center gap-1">
+                              <svg className="h-4 w-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              <span className="text-gray-700 font-semibold">
+                                {siteStats[site.siteId].uniquePages || 0}
+                              </span>
+                              <span className="text-gray-600">pages</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                              <span className="text-gray-700 font-semibold">
+                                {siteStats[site.siteId].totalViews || 0}
+                              </span>
+                              <span className="text-gray-600">views</span>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>

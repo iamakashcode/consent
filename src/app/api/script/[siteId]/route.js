@@ -113,10 +113,11 @@ export async function GET(req, { params }) {
       "adobe.com"
     ];
 
-    // Get base URL for verification callback
+    // Get base URL for verification callback and tracking
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
       (req.headers.get("origin") || `http://${req.headers.get("host")}`);
     const verifyCallbackUrl = `${baseUrl}/api/sites/${finalSiteId}/verify-callback`;
+    const trackUrl = `${baseUrl}/api/sites/${finalSiteId}/track`;
 
     // Generate a simple, reliable script
     const script = `(function(){
@@ -311,6 +312,37 @@ setTimeout(connectDomain,2000);
 console.error('[Consent SDK] Error in connectDomain function:',e);
 }
 })();
+
+// Track page view
+(function trackPageView(){
+try{
+var trackData={
+pagePath:window.location.pathname+window.location.search,
+pageTitle:document.title||null,
+userAgent:navigator.userAgent||null,
+referer:document.referrer||null
+};
+fetch("${trackUrl.replace(/"/g, '\\"')}",{
+method:'POST',
+mode:'cors',
+credentials:'omit',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify(trackData),
+cache:'no-cache'
+}).then(function(r){
+if(r.ok){
+console.log('[Consent SDK] Page view tracked');
+}else{
+console.warn('[Consent SDK] Failed to track page view:',r.status);
+}
+}).catch(function(err){
+console.warn('[Consent SDK] Page view tracking error:',err.message);
+});
+}catch(e){
+console.warn('[Consent SDK] Error tracking page view:',e.message);
+}
+})();
+
 console.log('[Consent SDK] Script loaded successfully');
 console.log('[Consent SDK] Consent status:', consent, 'Key:', CONSENT_KEY);
 console.log('[Consent SDK] Document ready state:', document.readyState);

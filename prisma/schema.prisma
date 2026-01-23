@@ -22,21 +22,37 @@ model User {
 }
 
 model Site {
-  id               String   @id @default(cuid())
+  id               String      @id @default(cuid())
   domain           String
-  siteId           String   @unique
+  siteId           String      @unique
   userId           String
-  trackers         Json     @default("[]")
-  bannerConfig     Json?    // Banner customization settings
-  isVerified       Boolean  @default(false)
+  trackers         Json        @default("[]")
+  bannerConfig     Json?       // Banner customization settings
+  isVerified       Boolean     @default(false)
   verificationToken String?
   verifiedAt       DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pageViews        PageView[]
 
   @@unique([userId, domain])
   @@map("sites")
+}
+
+model PageView {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  pagePath  String   // The path/URL of the page
+  pageTitle String?  // Optional page title
+  viewedAt  DateTime @default(now())
+  userAgent String?  // Browser user agent
+  referer   String?  // Referrer URL
+
+  @@index([siteId, viewedAt])
+  @@index([siteId, pagePath])
+  @@map("page_views")
 }
 
 model Subscription {
