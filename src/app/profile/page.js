@@ -321,19 +321,70 @@ export default function ProfilePage() {
 
                     {/* Connection Status */}
                     <div className="border-t pt-4 mb-4">
-                      <div className="flex items-center gap-3 mb-3">
-                        <h4 className="text-sm font-semibold text-gray-700">
-                          Connection Status
-                        </h4>
-                        {site.isVerified ? (
-                          <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded">
-                            ✓ Connected
-                          </span>
-                        ) : (
-                          <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
-                            ⚠ Not Connected
-                          </span>
-                        )}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <h4 className="text-sm font-semibold text-gray-700">
+                            Connection Status
+                          </h4>
+                          {site.isVerified ? (
+                            <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded">
+                              ✓ Connected
+                            </span>
+                          ) : (
+                            <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
+                              ⚠ Not Connected
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!site.siteId) return;
+                            setLoading(true);
+                            try {
+                              // First refresh sites list to get latest status
+                              await fetchSites();
+                              // Also get verification info
+                              await getVerificationInfo(site);
+                              // Check the updated status
+                              const response = await fetch("/api/sites");
+                              if (response.ok) {
+                                const updatedSites = await response.json();
+                                const updatedSite = updatedSites.find(s => s.id === site.id);
+                                if (updatedSite?.isVerified) {
+                                  alert("✓ Domain is connected!");
+                                  // Refresh the sites list to update UI
+                                  await fetchSites();
+                                } else {
+                                  alert("Domain is not connected yet. Make sure the script is added to your website.");
+                                }
+                              }
+                            } catch (err) {
+                              console.error("Error checking connection:", err);
+                              alert("Error checking connection status");
+                            } finally {
+                              setLoading(false);
+                            }
+                          }}
+                          disabled={loading}
+                          className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                          {loading ? (
+                            <>
+                              <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Checking...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              Check Connection
+                            </>
+                          )}
+                        </button>
                       </div>
                       
                       {!site.isVerified && (
