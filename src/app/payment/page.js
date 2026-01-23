@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import Script from "next/script";
 import Link from "next/link";
+import Navigation from "@/components/Navigation";
 
 function PaymentContent() {
   const { data: session, status, update } = useSession();
@@ -102,8 +103,12 @@ function PaymentContent() {
           });
 
           if (verifyResponse.ok) {
-            alert("Payment successful! Your plan has been upgraded. Refreshing page...");
-            // Force a full page reload to get fresh session data
+            // Update session to reflect new plan
+            await update();
+            // Small delay to ensure session is refreshed
+            await new Promise(resolve => setTimeout(resolve, 500));
+            alert("Payment successful! Your plan has been upgraded. Redirecting...");
+            // Force full page reload to ensure fresh session data
             window.location.href = "/profile";
           } else {
             console.error("Verification failed:", verifyData);
@@ -171,7 +176,7 @@ function PaymentContent() {
         onLoad={() => console.log("Razorpay loaded")}
       />
       <div className="min-h-screen bg-gray-50">
-
+        <Navigation />
         <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-12">
           <div className="bg-white rounded-lg shadow-lg p-8">
             <div className="text-center mb-8">
@@ -203,6 +208,9 @@ function PaymentContent() {
                     <span className="text-2xl font-bold text-indigo-600">
                       {planPrices[plan]}
                     </span>
+                  </div>
+                  <div className="text-xs text-gray-500 text-center mb-4">
+                    (Amount in payment gateway: ₹{orderData.amount / 100} = {orderData.amount} paise)
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Billing Period</span>

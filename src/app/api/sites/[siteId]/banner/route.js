@@ -10,7 +10,17 @@ export async function PUT(req, { params }) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { siteId } = params;
+    // Await params as it's a Promise in Next.js
+    const resolvedParams = await params;
+    const { siteId } = resolvedParams;
+    
+    if (!siteId) {
+      return Response.json(
+        { error: "Site ID is required" },
+        { status: 400 }
+      );
+    }
+
     const { bannerConfig } = await req.json();
 
     if (!bannerConfig) {
@@ -80,7 +90,16 @@ export async function GET(req, { params }) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { siteId } = params;
+    // Await params as it's a Promise in Next.js
+    const resolvedParams = await params;
+    const { siteId } = resolvedParams;
+
+    if (!siteId) {
+      return Response.json(
+        { error: "Site ID is required" },
+        { status: 400 }
+      );
+    }
 
     const site = await prisma.site.findUnique({
       where: { id: siteId },

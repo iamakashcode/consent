@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { BANNER_TEMPLATES, DEFAULT_BANNER_CONFIG } from "@/lib/banner-templates";
 import Link from "next/link";
+import Navigation from "@/components/Navigation";
 
 export default function BannerPage() {
   const { data: session, status } = useSession();
@@ -133,6 +134,7 @@ export default function BannerPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Navigation />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-12">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
