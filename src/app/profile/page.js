@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 
 export default function ProfilePage() {
@@ -11,6 +11,7 @@ export default function ProfilePage() {
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState(null);
+  const hasRefreshed = useRef(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -19,13 +20,16 @@ export default function ProfilePage() {
   }, [status, router]);
 
   useEffect(() => {
-    if (session) {
-      fetchSites();
-      // Refresh session on mount to ensure plan is up to date
+    if (session && !hasRefreshed.current) {
+      // Refresh session once on mount to ensure plan is up to date
       // This helps when admin changes the plan
+      hasRefreshed.current = true;
       update();
+      fetchSites();
+    } else if (session) {
+      fetchSites();
     }
-  }, [session, update]);
+  }, [session]);
 
   const fetchSites = async () => {
     try {
