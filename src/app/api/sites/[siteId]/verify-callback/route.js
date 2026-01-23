@@ -5,6 +5,17 @@ import { hasVerificationColumns, hasBannerConfigColumn } from "@/lib/db-utils";
  * Verification callback endpoint - called by the consent script when it loads
  * This automatically verifies the domain when the script is added to the website
  */
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 200,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  });
+}
+
 export async function GET(req, { params }) {
   try {
     // Await params as it's a Promise in Next.js
@@ -15,30 +26,43 @@ export async function GET(req, { params }) {
       return Response.json({ error: "Site ID is required" }, { status: 400 });
     }
 
-    // Get the domain from the referer or origin header
-    const referer = req.headers.get("referer") || req.headers.get("origin");
-    const origin = req.headers.get("origin");
+    // Get domain from query parameter or headers
+    const { searchParams } = new URL(req.url);
+    const domainParam = searchParams.get("domain");
     
-    // Extract domain from referer/origin
+    // Extract domain from query param, referer, or origin header
     let requestDomain = null;
-    if (referer) {
-      try {
-        const url = new URL(referer);
-        requestDomain = url.hostname.toLowerCase().replace(/^www\./, "");
-      } catch (e) {
-        // Ignore URL parsing errors
+    
+    if (domainParam) {
+      requestDomain = domainParam.toLowerCase().replace(/^www\./, "").split("/")[0];
+    } else {
+      const referer = req.headers.get("referer") || req.headers.get("origin");
+      const origin = req.headers.get("origin");
+      
+      if (referer) {
+        try {
+          const url = new URL(referer);
+          requestDomain = url.hostname.toLowerCase().replace(/^www\./, "");
+        } catch (e) {
+          // Ignore URL parsing errors
+        }
       }
-    }
-    if (!requestDomain && origin) {
-      try {
-        const url = new URL(origin);
-        requestDomain = url.hostname.toLowerCase().replace(/^www\./, "");
-      } catch (e) {
-        // Ignore URL parsing errors
+      if (!requestDomain && origin) {
+        try {
+          const url = new URL(origin);
+          requestDomain = url.hostname.toLowerCase().replace(/^www\./, "");
+        } catch (e) {
+          // Ignore URL parsing errors
+        }
       }
     }
 
     if (!requestDomain) {
+      console.error("[Verify Callback] Could not determine domain. Headers:", {
+        referer: req.headers.get("referer"),
+        origin: req.headers.get("origin"),
+        domainParam,
+      });
       return Response.json({ error: "Could not determine domain from request" }, { status: 400 });
     }
 
@@ -67,12 +91,20 @@ export async function GET(req, { params }) {
     // Verify the domain matches
     if (requestDomain !== storedDomain) {
       console.log(`[Verify Callback] Domain mismatch: ${requestDomain} !== ${storedDomain}`);
-      return Response.json({ 
-        verified: false, 
+      return new Response(JSON.stringify({ 
+        connected: false, 
         error: "Domain mismatch",
         requestDomain,
         storedDomain,
-      }, { status: 400 });
+      }), {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
     }
 
     // Check if already verified
@@ -87,11 +119,19 @@ export async function GET(req, { params }) {
 
     if (effectiveIsVerified) {
       // Already verified, just return success
-      return Response.json({
-        verified: true,
-        message: "Domain already verified",
-        domain: site.domain,
-      });
+    return new Response(JSON.stringify({
+      connected: true,
+      message: "Domain already connected",
+      domain: site.domain,
+    }), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
     }
 
     // Mark as verified
@@ -131,18 +171,34 @@ export async function GET(req, { params }) {
       `;
     }
 
-    console.log(`[Verify Callback] ✓ Domain verified: ${site.domain} (${requestDomain})`);
+    console.log(`[Verify Callback] ✓ Domain connected: ${site.domain} (${requestDomain})`);
 
-    return Response.json({
-      verified: true,
-      message: "Domain verified successfully!",
+    return new Response(JSON.stringify({
+      connected: true,
+      message: "Domain connected successfully!",
       domain: site.domain,
+    }), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
     });
   } catch (error) {
-    console.error("Verification callback error:", error);
-    return Response.json(
-      { error: error.message || "Failed to verify domain" },
-      { status: 500 }
-    );
+    console.error("Connection callback error:", error);
+    return new Response(JSON.stringify({
+      connected: false,
+      error: error.message || "Failed to connect domain"
+    }), {
+      status: 500,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
   }
 }

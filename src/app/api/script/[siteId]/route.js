@@ -130,27 +130,37 @@ var SITE_ID="${finalSiteId.replace(/"/g, '\\"')}";
 var CONSENT_KEY='cookie_consent_'+SITE_ID;
 var consent=localStorage.getItem(CONSENT_KEY)==='accepted';
 
-// Auto-verify domain by calling verification callback
+// Auto-connect domain by calling verification callback
 if(!IS_VERIFIED){
-console.log('[Consent SDK] Auto-verifying domain...');
+console.log('[Consent SDK] Auto-connecting domain...');
 try{
-var verifyUrl="${verifyCallbackUrl.replace(/"/g, '\\"')}";
+var currentDomain=window.location.hostname.toLowerCase().replace(/^www\\./,'');
+var verifyUrl="${verifyCallbackUrl.replace(/"/g, '\\"')}?domain="+encodeURIComponent(currentDomain);
 fetch(verifyUrl,{
 method:'GET',
 mode:'cors',
-credentials:'omit'
-}).then(function(r){return r.json();}).then(function(data){
-if(data.verified){
-console.log('[Consent SDK] ✓ Domain verified successfully!');
+credentials:'omit',
+headers:{'Accept':'application/json'}
+}).then(function(r){
+if(!r.ok){
+console.warn('[Consent SDK] Connection request failed:',r.status,r.statusText);
+return null;
+}
+return r.json();
+}).then(function(data){
+if(data&&data.connected){
+console.log('[Consent SDK] ✓ Domain connected successfully!');
 IS_VERIFIED=true;
+}else if(data){
+console.warn('[Consent SDK] Connection failed:',data.error||'Unknown error');
 }else{
-console.warn('[Consent SDK] Verification failed:',data.error||'Unknown error');
+console.warn('[Consent SDK] Connection failed: Invalid response');
 }
 }).catch(function(err){
-console.warn('[Consent SDK] Verification request failed:',err.message);
+console.warn('[Consent SDK] Connection request failed:',err.message);
 });
 }else{
-console.log('[Consent SDK] Domain already verified');
+console.log('[Consent SDK] Domain already connected');
 }
 
 // Domain check - only work on matching domain

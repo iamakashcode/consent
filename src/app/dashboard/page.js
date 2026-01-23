@@ -129,21 +129,17 @@ export default function DashboardPage() {
       });
       const data = await response.json();
 
-      if (response.ok && data.verified) {
-        // Update results to show verified status
+      if (response.ok && (data.connected || data.verified)) {
+        // Update results to show connected status
         setResults((prev) => ({
           ...prev,
           isVerified: true,
         }));
         fetchSites(); // Refresh sites to get updated status
-        alert("Domain verified successfully! The script will now work on this domain.");
+        alert("Domain connected successfully! The script is now working on this domain.");
       } else {
         // Show detailed error message
-        let errorMessage = data.error || data.message || "Verification failed.";
-        if (data.debug && process.env.NODE_ENV === "development") {
-          console.log("DNS Verification Debug:", data.debug);
-          errorMessage += `\n\nCheck console for debug details.`;
-        }
+        let errorMessage = data.error || data.message || "Connection failed. Please add the script to your website.";
         alert(errorMessage);
       }
     } catch (err) {
@@ -260,12 +256,12 @@ export default function DashboardPage() {
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                       <p className="text-sm text-blue-900 mb-2">
                         <strong>How it works:</strong> Add the script below to your website. 
-                        Verification happens automatically when the script loads on your domain.
+                        Connection happens automatically when the script loads on your domain.
                       </p>
                       <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
                         <li>Copy the script tag below</li>
                         <li>Add it to your website&apos;s <code className="bg-blue-100 px-1 rounded">&lt;head&gt;</code> section</li>
-                        <li>The script will automatically verify your domain when it loads</li>
+                        <li>The script will automatically connect your domain when it loads</li>
                         <li>Refresh this page to check connection status</li>
                       </ol>
                     </div>
@@ -309,7 +305,7 @@ export default function DashboardPage() {
                   {results.isVerified && (
                     <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3">
                       <p className="text-sm text-green-800">
-                        ✓ <strong>Connected!</strong> Your domain is verified and the script is working correctly.
+                        ✓ <strong>Connected!</strong> Your domain is connected and the script is working correctly.
                       </p>
                     </div>
                   )}
@@ -333,11 +329,11 @@ export default function DashboardPage() {
                       <h3 className="font-semibold text-gray-900">{site.domain}</h3>
                       {site.isVerified ? (
                         <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded">
-                          ✓ Verified
+                          ✓ Connected
                         </span>
                       ) : (
                         <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
-                          ⚠ Not Verified
+                          ⚠ Not Connected
                         </span>
                       )}
                     </div>
@@ -358,7 +354,7 @@ export default function DashboardPage() {
                         href="/profile"
                         className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm font-semibold"
                       >
-                        Verify Domain
+                        View Script
                       </Link>
                     )}
                     <button

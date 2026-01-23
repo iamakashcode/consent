@@ -106,14 +106,14 @@ export default function ProfilePage() {
 
       const data = await response.json();
 
-      if (response.ok && data.verified) {
+      if (response.ok && (data.connected || data.verified)) {
         setVerificationStatus((prev) => ({
           ...prev,
           [site.id]: { verified: true, message: data.message },
         }));
-        // Refresh sites to get updated verification status
+        // Refresh sites to get updated connection status
         fetchSites();
-        alert("Domain verified successfully! The script will now work on this domain.");
+        alert("Domain connected successfully! The script is now working on this domain.");
       } else {
         setVerificationStatus((prev) => ({
           ...prev,
@@ -273,15 +273,15 @@ export default function ProfilePage() {
                           <h3 className="text-xl font-semibold text-gray-900">
                             {site.domain}
                           </h3>
-                          {site.isVerified ? (
-                            <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded">
-                              ✓ Verified
-                            </span>
-                          ) : (
-                            <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
-                              ⚠ Not Verified
-                            </span>
-                          )}
+                      {site.isVerified ? (
+                        <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded">
+                          ✓ Connected
+                        </span>
+                      ) : (
+                        <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
+                          ⚠ Not Connected
+                        </span>
+                      )}
                         </div>
                         <p className="text-sm text-gray-600">
                           Added on{" "}
@@ -340,12 +340,12 @@ export default function ProfilePage() {
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
                           <p className="text-sm text-blue-900 mb-2">
                             <strong>How it works:</strong> Add the script below to your website. 
-                            Verification happens automatically when the script loads on your domain.
+                            Connection happens automatically when the script loads on your domain.
                           </p>
                           <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
                             <li>Copy the script tag below</li>
                             <li>Add it to your website&apos;s <code className="bg-blue-100 px-1 rounded">&lt;head&gt;</code> section</li>
-                            <li>The script will automatically verify your domain when it loads</li>
+                            <li>The script will automatically connect your domain when it loads</li>
                             <li>Refresh this page to check connection status</li>
                           </ol>
                         </div>
@@ -354,7 +354,7 @@ export default function ProfilePage() {
                       {site.isVerified && (
                         <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
                           <p className="text-sm text-green-800">
-                            ✓ <strong>Connected!</strong> Your domain is verified and the script is working correctly.
+                            ✓ <strong>Connected!</strong> Your domain is connected and the script is working correctly.
                             {site.verifiedAt && (
                               <span className="ml-2">
                                 (Connected on {new Date(site.verifiedAt).toLocaleDateString()})
