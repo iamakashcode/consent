@@ -22,7 +22,16 @@ export async function GET(req, { params }) {
     const resolvedParams = await params;
     const { siteId } = resolvedParams;
 
+    console.log(`[Verify Callback] Received request for siteId: ${siteId}`);
+    console.log(`[Verify Callback] Request URL: ${req.url}`);
+    console.log(`[Verify Callback] Request headers:`, {
+      referer: req.headers.get("referer"),
+      origin: req.headers.get("origin"),
+      host: req.headers.get("host"),
+    });
+
     if (!siteId) {
+      console.error("[Verify Callback] Missing siteId");
       return new Response(JSON.stringify({ 
         connected: false,
         error: "Site ID is required" 
@@ -40,6 +49,7 @@ export async function GET(req, { params }) {
     // Get domain from query parameter or headers
     const { searchParams } = new URL(req.url);
     const domainParam = searchParams.get("domain");
+    console.log(`[Verify Callback] Domain param from query: ${domainParam}`);
     
     // Extract domain from query param, referer, or origin header
     let requestDomain = null;
@@ -179,23 +189,31 @@ export async function GET(req, { params }) {
     }
 
     // Mark as verified
+    console.log(`[Verify Callback] Marking domain as connected...`);
     if (verificationColumns.allExist) {
       try {
-        await prisma.site.update({
+        const updateResult = await prisma.site.update({
           where: { id: site.id },
           data: {
             isVerified: true,
             verifiedAt: new Date(),
           },
         });
+        console.log(`[Verify Callback] ✓ Successfully updated isVerified to true via Prisma`);
       } catch (updateError) {
-        console.warn("Prisma update failed, using raw SQL:", updateError.message);
-        await prisma.$executeRaw`
-          UPDATE "sites"
-          SET "isVerified" = true,
-              "verifiedAt" = NOW()
-          WHERE "id" = ${site.id}
-        `;
+        console.warn("[Verify Callback] Prisma update failed, using raw SQL:", updateError.message);
+        try {
+          await prisma.$executeRaw`
+            UPDATE "sites"
+            SET "isVerified" = true,
+                "verifiedAt" = NOW()
+            WHERE "id" = ${site.id}
+          `;
+          console.log(`[Verify Callback] ✓ Successfully updated isVerified to true via raw SQL`);
+        } catch (rawSqlError) {
+          console.error(`[Verify Callback] ✗ Raw SQL update also failed:`, rawSqlError.message);
+          throw rawSqlError;
+        }
       }
     } else if (bannerConfigExists) {
       const nextBannerConfig = {

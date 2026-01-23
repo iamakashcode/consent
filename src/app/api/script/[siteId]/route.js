@@ -145,38 +145,75 @@ console.log('[Consent SDK] Domain matches:',currentHost);
 
 // Auto-connect domain by calling verification callback (always try to connect)
 console.log('[Consent SDK] Attempting to connect domain...');
+(function connectDomain(){
 try{
 var currentDomain=window.location.hostname.toLowerCase().replace(/^www\\./,'');
 var verifyUrl="${verifyCallbackUrl.replace(/"/g, '\\"')}?domain="+encodeURIComponent(currentDomain);
 console.log('[Consent SDK] Calling verification endpoint:',verifyUrl);
-fetch(verifyUrl,{
+console.log('[Consent SDK] Current domain:',currentDomain);
+console.log('[Consent SDK] Allowed domain:',allowedHost||'*');
+
+var fetchOptions={
 method:'GET',
 mode:'cors',
 credentials:'omit',
-headers:{'Accept':'application/json'}
-}).then(function(r){
+headers:{'Accept':'application/json'},
+cache:'no-cache'
+};
+
+fetch(verifyUrl,fetchOptions).then(function(r){
 console.log('[Consent SDK] Verification response status:',r.status);
+console.log('[Consent SDK] Response headers:',r.headers);
 if(!r.ok){
 console.warn('[Consent SDK] Connection request failed:',r.status,r.statusText);
 return r.text().then(function(text){
-try{return JSON.parse(text);}catch(e){return {error:text};}
+console.log('[Consent SDK] Error response body:',text);
+try{
+var parsed=JSON.parse(text);
+console.error('[Consent SDK] Parsed error:',parsed);
+return parsed;
+}catch(e){
+console.error('[Consent SDK] Could not parse error response:',e);
+return {error:text};
+}
 });
 }
 return r.json();
 }).then(function(data){
-console.log('[Consent SDK] Verification response:',data);
+console.log('[Consent SDK] Verification response data:',JSON.stringify(data));
 if(data&&data.connected){
 console.log('[Consent SDK] ✓ Domain connected successfully!');
 IS_VERIFIED=true;
+// Try to notify user (optional)
+if(typeof window!=='undefined'&&window.console&&window.console.info){
+window.console.info('[Consent SDK] Domain connection successful!');
+}
 }else if(data){
 console.warn('[Consent SDK] Connection failed:',data.error||'Unknown error',data);
 if(data.requestDomain && data.storedDomain){
-console.warn('[Consent SDK] Request domain:',data.requestDomain,'Stored domain:',data.storedDomain);
+console.warn('[Consent SDK] Domain mismatch - Request:',data.requestDomain,'Stored:',data.storedDomain);
+}
+if(data.debug){
+console.warn('[Consent SDK] Debug info:',data.debug);
 }
 }
 }).catch(function(err){
 console.error('[Consent SDK] Connection request error:',err);
+console.error('[Consent SDK] Error details:',{
+message:err.message,
+stack:err.stack,
+name:err.name
 });
+// Retry once after 2 seconds if it's a network error
+if(err.message&&(err.message.includes('fetch')||err.message.includes('network')||err.message.includes('Failed to fetch'))){
+console.log('[Consent SDK] Network error detected, will retry in 2 seconds...');
+setTimeout(connectDomain,2000);
+}
+});
+}catch(e){
+console.error('[Consent SDK] Error in connectDomain function:',e);
+}
+})();
 console.log('[Consent SDK] Consent status:', consent, 'Key:', CONSENT_KEY);
 console.log('[Consent SDK] Document ready state:', document.readyState);
 console.log('[Consent SDK] Body exists:', !!document.body);
