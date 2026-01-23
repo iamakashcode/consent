@@ -28,6 +28,7 @@ export default function Navigation() {
         { href: "/profile", label: "Profile", icon: "👤" },
         { href: "/banner", label: "Banner", icon: "🎨" },
         { href: "/plans", label: "Plans", icon: "💳" },
+        ...(session.user?.isAdmin ? [{ href: "/admin", label: "Admin", icon: "⚙️" }] : []),
       ]
     : [
         { href: "/", label: "Home", icon: "🏠" },

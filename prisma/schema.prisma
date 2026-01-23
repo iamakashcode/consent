@@ -12,6 +12,7 @@ model User {
   email        String        @unique
   password     String
   name         String?
+  isAdmin      Boolean       @default(false)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   sites        Site[]

@@ -32,6 +32,7 @@ export const authOptions = {
           email: user.email,
           name: user.name,
           plan: user.subscription?.plan || 'free',
+          isAdmin: user.isAdmin || false,
         };
       },
     }),
@@ -52,12 +53,16 @@ export const authOptions = {
               if (user) {
                 token.id = user.id;
                 token.plan = user.plan;
+                token.isAdmin = user.isAdmin || false;
               }
-              // Refresh plan from database if session is being updated
+              // Refresh plan and admin status from database if session is being updated
               if (trigger === "update") {
                 const updatedUser = await getUserById(token.id);
-                if (updatedUser?.subscription) {
-                  token.plan = updatedUser.subscription.plan;
+                if (updatedUser) {
+                  if (updatedUser.subscription) {
+                    token.plan = updatedUser.subscription.plan;
+                  }
+                  token.isAdmin = updatedUser.isAdmin || false;
                 }
               }
               return token;
@@ -66,6 +71,7 @@ export const authOptions = {
               if (session.user) {
                 session.user.id = token.id;
                 session.user.plan = token.plan;
+                session.user.isAdmin = token.isAdmin || false;
               }
               return session;
             },

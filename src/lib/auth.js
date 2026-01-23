@@ -46,6 +46,16 @@ export async function getUserByEmail(email) {
     include: {
       subscription: true,
     },
+    select: {
+      id: true,
+      email: true,
+      password: true,
+      name: true,
+      isAdmin: true,
+      createdAt: true,
+      updatedAt: true,
+      subscription: true,
+    },
   });
 }
 
@@ -53,6 +63,16 @@ export async function getUserById(id) {
   return prisma.user.findUnique({
     where: { id },
     include: {
+      subscription: true,
+    },
+    select: {
+      id: true,
+      email: true,
+      password: true,
+      name: true,
+      isAdmin: true,
+      createdAt: true,
+      updatedAt: true,
       subscription: true,
     },
   });
