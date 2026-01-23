@@ -2,31 +2,40 @@ import { getSite } from "@/lib/store";
 
 export async function GET(req, { params }) {
   try {
-    const { siteId } = params;
+    const { siteId } = params || {};
     const { searchParams } = new URL(req.url);
     const domainParam = searchParams.get("domain");
 
-    if (!siteId) {
-      return new Response("// Invalid site ID", {
-        headers: { "Content-Type": "application/javascript" },
-      });
-    }
-
-    let domain;
-    const site = getSite(siteId);
-
-    if (site) {
-      domain = site.domain;
-    } else if (domainParam) {
-      domain = domainParam;
-    } else {
-      try {
-        const decoded = Buffer.from(siteId, "base64").toString("utf-8");
-        domain = decoded && !decoded.includes("-") ? decoded : "*";
-      } catch (e) {
-        domain = "*";
+    // Always try to get domain from query param first (most reliable)
+    let domain = domainParam || "";
+    
+    // If no domain param, try to get from store
+    if (!domain && siteId) {
+      const site = getSite(siteId);
+      if (site) {
+        domain = site.domain;
       }
     }
+    
+    // If still no domain, try to decode from siteId
+    if (!domain && siteId) {
+      try {
+        const decoded = Buffer.from(siteId, "base64").toString("utf-8");
+        if (decoded && !decoded.includes("-")) {
+          domain = decoded;
+        }
+      } catch (e) {
+        // Ignore decode errors
+      }
+    }
+    
+    // Fallback: use wildcard if no domain found
+    if (!domain) {
+      domain = "*";
+    }
+    
+    // Generate siteId for consent key (use provided siteId or generate from domain)
+    const finalSiteId = siteId || Buffer.from(domain).toString("base64").substring(0, 20);
 
     // Common tracker domains to block
     const trackerDomains = [
@@ -50,9 +59,9 @@ export async function GET(req, { params }) {
     // Generate a simple, reliable script
     const script = `(function(){
 console.log('[Consent SDK] Loading...');
-var DOMAIN="${domain}";
+var DOMAIN="${domain.replace(/"/g, '\\"')}";
 var TRACKERS=${JSON.stringify(trackerDomains)};
-var SITE_ID="${siteId}";
+var SITE_ID="${finalSiteId.replace(/"/g, '\\"')}";
 var CONSENT_KEY='cookie_consent_'+SITE_ID;
 var consent=localStorage.getItem(CONSENT_KEY)==='accepted';
 
@@ -166,9 +175,28 @@ console.log('[Consent SDK] Initialized');
     });
   } catch (error) {
     console.error("Script generation error:", error);
-    return new Response("// Error generating script: " + error.message, {
-      headers: { "Content-Type": "application/javascript" },
-      status: 500,
+    // Even on error, return a working script with default values
+    const fallbackScript = `(function(){
+console.log('[Consent SDK] Error occurred, using fallback');
+var TRACKERS=["google-analytics.com","googletagmanager.com","facebook.net","connect.facebook.net"];
+var CONSENT_KEY='cookie_consent_fallback';
+var consent=localStorage.getItem(CONSENT_KEY)==='accepted';
+function isTracker(url){if(!url)return false;for(var i=0;i<TRACKERS.length;i++){if(url.indexOf(TRACKERS[i])>-1)return true;}return false;}
+function blockScript(s){if(s.type!=='javascript/blocked'){s.setAttribute('data-original-type',s.type||'text/javascript');s.type='javascript/blocked';}}
+function showBanner(){if(consent||document.getElementById('cookie-banner'))return;if(!document.body){setTimeout(showBanner,100);return;}
+var b=document.createElement('div');b.id='cookie-banner';b.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#667eea;color:#fff;padding:20px;z-index:999999;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px;font-family:sans-serif;';
+b.innerHTML='<div style="flex:1;min-width:250px;"><h3 style="margin:0 0 8px 0;font-size:18px;">🍪 We use cookies</h3><p style="margin:0;font-size:14px;opacity:0.9;">This site uses tracking cookies. Accept to enable analytics.</p></div><div style="display:flex;gap:10px;"><button id="accept-btn" style="background:#fff;color:#667eea;border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;">Accept</button><button id="reject-btn" style="background:transparent;color:#fff;border:2px solid #fff;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;">Reject</button></div>';
+document.body.appendChild(b);
+document.getElementById('accept-btn').onclick=function(){consent=true;localStorage.setItem(CONSENT_KEY,'accepted');b.remove();};
+document.getElementById('reject-btn').onclick=function(){localStorage.setItem(CONSENT_KEY,'rejected');b.remove();};}
+if(!consent){document.querySelectorAll('script[src]').forEach(function(s){if(isTracker(s.src))blockScript(s);});}
+showBanner();setTimeout(showBanner,500);setTimeout(showBanner,2000);
+})();`;
+    return new Response(fallbackScript, {
+      headers: {
+        "Content-Type": "application/javascript; charset=utf-8",
+        "Cache-Control": "public, max-age=3600",
+      },
     });
   }
 }
