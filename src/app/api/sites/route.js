@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
+import { hasVerificationColumns, hasBannerConfigColumn } from "@/lib/db-utils";
 
 export async function GET(req) {
   try {
@@ -11,6 +12,9 @@ export async function GET(req) {
     }
 
     // Fetch sites - handle missing columns gracefully
+    const verificationColumns = await hasVerificationColumns();
+    const bannerConfigExists = await hasBannerConfigColumn();
+    
     let sites;
     try {
       sites = await prisma.site.findMany({
@@ -21,46 +25,63 @@ export async function GET(req) {
           domain: true,
           siteId: true,
           trackers: true,
-          bannerConfig: true,
-          isVerified: true,
-          verificationToken: true,
-          verifiedAt: true,
+          ...(bannerConfigExists ? { bannerConfig: true } : {}),
+          ...(verificationColumns.allExist
+            ? { isVerified: true, verificationToken: true, verifiedAt: true }
+            : {}),
           createdAt: true,
           updatedAt: true,
         },
       });
+      
+      // If verification columns don't exist, populate from bannerConfig fallback
+      if (!verificationColumns.allExist && bannerConfigExists) {
+        sites = sites.map(site => {
+          const verificationFromBanner =
+            site?.bannerConfig?._verification && typeof site.bannerConfig._verification === "object"
+              ? site.bannerConfig._verification
+              : null;
+          return {
+            ...site,
+            isVerified: verificationFromBanner?.isVerified || false,
+            verificationToken: verificationFromBanner?.token || null,
+            verifiedAt: verificationFromBanner?.verifiedAt || null,
+          };
+        });
+      }
     } catch (error) {
       // If columns don't exist yet, fetch without them and add defaults
-      if (error.message && (error.message.includes("isVerified") || error.message.includes("verificationToken") || error.message.includes("verifiedAt") || error.message.includes("bannerConfig"))) {
-        console.warn("Some columns missing, fetching with fallback:", error.message);
-        try {
-          sites = await prisma.site.findMany({
-            where: { userId: session.user.id },
-            orderBy: { createdAt: "desc" },
-            select: {
-              id: true,
-              domain: true,
-              siteId: true,
-              trackers: true,
-              bannerConfig: true,
-              createdAt: true,
-              updatedAt: true,
-            },
-          });
-          // Add default values for missing fields
-          sites = sites.map(site => ({ 
-            ...site, 
-            // If bannerConfig exists, we can use it to store verification fallback
-            isVerified: site?.bannerConfig?._verification?.isVerified || false,
-            verificationToken: site?.bannerConfig?._verification?.token || null,
-            verifiedAt: site?.bannerConfig?._verification?.verifiedAt || null,
-          }));
-        } catch (fallbackError) {
-          console.error("Fallback fetch also failed:", fallbackError);
-          throw fallbackError;
-        }
-      } else {
-        throw error;
+      console.warn("Error fetching sites, trying fallback:", error.message);
+      try {
+        sites = await prisma.site.findMany({
+          where: { userId: session.user.id },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            domain: true,
+            siteId: true,
+            trackers: true,
+            ...(bannerConfigExists ? { bannerConfig: true } : {}),
+            createdAt: true,
+            updatedAt: true,
+          },
+        });
+        // Add default values for missing fields
+        sites = sites.map(site => {
+          const verificationFromBanner =
+            site?.bannerConfig?._verification && typeof site.bannerConfig._verification === "object"
+              ? site.bannerConfig._verification
+              : null;
+          return {
+            ...site,
+            isVerified: verificationFromBanner?.isVerified || false,
+            verificationToken: verificationFromBanner?.token || null,
+            verifiedAt: verificationFromBanner?.verifiedAt || null,
+          };
+        });
+      } catch (fallbackError) {
+        console.error("Fallback fetch also failed:", fallbackError);
+        throw fallbackError;
       }
     }
 

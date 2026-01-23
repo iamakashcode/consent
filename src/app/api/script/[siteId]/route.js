@@ -130,51 +130,53 @@ var SITE_ID="${finalSiteId.replace(/"/g, '\\"')}";
 var CONSENT_KEY='cookie_consent_'+SITE_ID;
 var consent=localStorage.getItem(CONSENT_KEY)==='accepted';
 
-// Auto-connect domain by calling verification callback
-if(!IS_VERIFIED){
-console.log('[Consent SDK] Auto-connecting domain...');
+// Domain check first - only work on matching domain
+var currentHost=window.location.hostname.toLowerCase();
+var allowedHost=ALLOWED_DOMAIN !== "*" ? ALLOWED_DOMAIN.toLowerCase().replace(/^www\\./,'') : null;
+currentHost=currentHost.replace(/^www\\./,'');
+
+if(allowedHost && currentHost !== allowedHost){
+console.warn('[Consent SDK] Domain mismatch. Current:',currentHost,'Allowed:',allowedHost);
+console.warn('[Consent SDK] Script will not work on this domain.');
+return; // Exit if domain doesn't match
+}
+
+console.log('[Consent SDK] Domain matches:',currentHost);
+
+// Auto-connect domain by calling verification callback (always try to connect)
+console.log('[Consent SDK] Attempting to connect domain...');
 try{
 var currentDomain=window.location.hostname.toLowerCase().replace(/^www\\./,'');
 var verifyUrl="${verifyCallbackUrl.replace(/"/g, '\\"')}?domain="+encodeURIComponent(currentDomain);
+console.log('[Consent SDK] Calling verification endpoint:',verifyUrl);
 fetch(verifyUrl,{
 method:'GET',
 mode:'cors',
 credentials:'omit',
 headers:{'Accept':'application/json'}
 }).then(function(r){
+console.log('[Consent SDK] Verification response status:',r.status);
 if(!r.ok){
 console.warn('[Consent SDK] Connection request failed:',r.status,r.statusText);
-return null;
+return r.text().then(function(text){
+try{return JSON.parse(text);}catch(e){return {error:text};}
+});
 }
 return r.json();
 }).then(function(data){
+console.log('[Consent SDK] Verification response:',data);
 if(data&&data.connected){
 console.log('[Consent SDK] ✓ Domain connected successfully!');
 IS_VERIFIED=true;
 }else if(data){
-console.warn('[Consent SDK] Connection failed:',data.error||'Unknown error');
-}else{
-console.warn('[Consent SDK] Connection failed: Invalid response');
+console.warn('[Consent SDK] Connection failed:',data.error||'Unknown error',data);
+if(data.requestDomain && data.storedDomain){
+console.warn('[Consent SDK] Request domain:',data.requestDomain,'Stored domain:',data.storedDomain);
+}
 }
 }).catch(function(err){
-console.warn('[Consent SDK] Connection request failed:',err.message);
+console.error('[Consent SDK] Connection request error:',err);
 });
-}else{
-console.log('[Consent SDK] Domain already connected');
-}
-
-// Domain check - only work on matching domain
-if(ALLOWED_DOMAIN !== "*"){
-var currentHost=window.location.hostname.toLowerCase();
-var allowedHost=ALLOWED_DOMAIN.toLowerCase().replace(/^www\\./,'');
-currentHost=currentHost.replace(/^www\\./,'');
-if(currentHost !== allowedHost){
-console.warn('[Consent SDK] Domain mismatch. Current:',currentHost,'Allowed:',allowedHost);
-console.warn('[Consent SDK] Script will not work on this domain.');
-return; // Exit if domain doesn't match
-}
-console.log('[Consent SDK] Domain matches:',currentHost);
-}
 console.log('[Consent SDK] Consent status:', consent, 'Key:', CONSENT_KEY);
 console.log('[Consent SDK] Document ready state:', document.readyState);
 console.log('[Consent SDK] Body exists:', !!document.body);

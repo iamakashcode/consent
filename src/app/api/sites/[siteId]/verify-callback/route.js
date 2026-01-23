@@ -23,7 +23,18 @@ export async function GET(req, { params }) {
     const { siteId } = resolvedParams;
 
     if (!siteId) {
-      return Response.json({ error: "Site ID is required" }, { status: 400 });
+      return new Response(JSON.stringify({ 
+        connected: false,
+        error: "Site ID is required" 
+      }), {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
     }
 
     // Get domain from query parameter or headers
@@ -62,8 +73,25 @@ export async function GET(req, { params }) {
         referer: req.headers.get("referer"),
         origin: req.headers.get("origin"),
         domainParam,
+        url: req.url,
       });
-      return Response.json({ error: "Could not determine domain from request" }, { status: 400 });
+      return new Response(JSON.stringify({ 
+        connected: false,
+        error: "Could not determine domain from request",
+        debug: {
+          referer: req.headers.get("referer"),
+          origin: req.headers.get("origin"),
+          domainParam,
+        }
+      }), {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
     }
 
     const verificationColumns = await hasVerificationColumns();
@@ -82,20 +110,34 @@ export async function GET(req, { params }) {
     });
 
     if (!site) {
-      return Response.json({ error: "Site not found" }, { status: 404 });
+      console.error("[Verify Callback] Site not found for siteId:", siteId);
+      return new Response(JSON.stringify({ 
+        connected: false,
+        error: "Site not found" 
+      }), {
+        status: 404,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
     }
 
     // Clean the stored domain for comparison
     const storedDomain = site.domain.toLowerCase().replace(/^www\./, "");
 
     // Verify the domain matches
+    console.log(`[Verify Callback] Comparing domains - Request: "${requestDomain}", Stored: "${storedDomain}"`);
     if (requestDomain !== storedDomain) {
-      console.log(`[Verify Callback] Domain mismatch: ${requestDomain} !== ${storedDomain}`);
+      console.warn(`[Verify Callback] Domain mismatch: ${requestDomain} !== ${storedDomain}`);
       return new Response(JSON.stringify({ 
         connected: false, 
         error: "Domain mismatch",
         requestDomain,
         storedDomain,
+        message: `Domain ${requestDomain} does not match stored domain ${storedDomain}`,
       }), {
         status: 400,
         headers: {
@@ -106,6 +148,8 @@ export async function GET(req, { params }) {
         },
       });
     }
+    
+    console.log(`[Verify Callback] Domain match confirmed: ${requestDomain}`);
 
     // Check if already verified
     const verificationFromBanner =
