@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import Script from "next/script";
 import Link from "next/link";
-import Navigation from "@/components/Navigation";
 
 function PaymentContent() {
   const { data: session, status, update } = useSession();
@@ -176,7 +175,6 @@ function PaymentContent() {
         onLoad={() => console.log("Razorpay loaded")}
       />
       <div className="min-h-screen bg-gray-50">
-        <Navigation />
         <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-12">
           <div className="bg-white rounded-lg shadow-lg p-8">
             <div className="text-center mb-8">
