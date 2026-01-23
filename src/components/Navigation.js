@@ -3,12 +3,21 @@
 import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function Navigation() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Refresh session on mount and when pathname changes to ensure plan is up to date
+  // This helps when admin changes the plan
+  useEffect(() => {
+    if (session && status === "authenticated") {
+      // Refresh on mount and when navigating
+      update();
+    }
+  }, [session, status, pathname, update]);
 
   // Don't show navigation on login/signup pages
   if (pathname === "/login" || pathname === "/signup") {

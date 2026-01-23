@@ -79,7 +79,12 @@ export default function AdminDashboard() {
       });
 
       if (response.ok) {
-        alert("User updated successfully!");
+        const data = await response.json();
+        const planChanged = updates.plan !== undefined;
+        const message = planChanged
+          ? `User updated successfully! Plan changed to ${updates.plan}. The user will need to refresh their page or log out and log back in to see the changes.`
+          : "User updated successfully!";
+        alert(message);
         fetchUsers();
         fetchStats();
       } else {

@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 
 export default function DashboardPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const router = useRouter();
   const [domain, setDomain] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,8 +23,11 @@ export default function DashboardPage() {
   useEffect(() => {
     if (session) {
       fetchSites();
+      // Refresh session on mount to ensure plan is up to date
+      // This helps when admin changes the plan
+      update();
     }
-  }, [session]);
+  }, [session, update]);
 
   const fetchSites = async () => {
     try {

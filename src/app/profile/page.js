@@ -21,8 +21,11 @@ export default function ProfilePage() {
   useEffect(() => {
     if (session) {
       fetchSites();
+      // Refresh session on mount to ensure plan is up to date
+      // This helps when admin changes the plan
+      update();
     }
-  }, [session]);
+  }, [session, update]);
 
   const fetchSites = async () => {
     try {
