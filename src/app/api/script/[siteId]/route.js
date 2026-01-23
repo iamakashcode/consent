@@ -309,7 +309,7 @@ console.log('[Consent SDK] Initialized - Consent:',consent?'granted':'not grante
     return new Response(script, {
       headers: {
         "Content-Type": "application/javascript; charset=utf-8",
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "public, max-age=60, must-revalidate", // Reduced to 60 seconds to allow banner updates to show quickly
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET",
       },
@@ -336,7 +336,7 @@ showBanner();setTimeout(showBanner,500);setTimeout(showBanner,2000);
     return new Response(fallbackScript, {
       headers: {
         "Content-Type": "application/javascript; charset=utf-8",
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "public, max-age=60, must-revalidate", // Reduced to 60 seconds to allow banner updates to show quickly
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET",
       },

@@ -77,7 +77,7 @@ export default function BannerPage() {
       });
 
       if (response.ok) {
-        alert("Banner settings saved successfully!");
+        alert("Banner settings saved successfully!\n\nNote: If changes don't appear immediately, clear your browser cache or do a hard refresh (Ctrl+Shift+R or Cmd+Shift+R). The script cache expires after 60 seconds.");
         fetchSites(); // Refresh sites
       } else {
         const data = await response.json();

@@ -38,6 +38,10 @@ export const authOptions = {
   ],
   session: {
     strategy: 'jwt',
+    maxAge: parseInt(process.env.NEXTAUTH_SESSION_MAX_AGE) || 30 * 24 * 60 * 60, // Default: 30 days (configurable via env)
+  },
+  jwt: {
+    maxAge: parseInt(process.env.NEXTAUTH_JWT_MAX_AGE) || 30 * 24 * 60 * 60, // Default: 30 days (configurable via env)
   },
   pages: {
     signIn: '/login',
