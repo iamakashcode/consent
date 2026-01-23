@@ -135,7 +135,7 @@ export default function Home() {
           <p className="text-xl text-indigo-100 mb-8">
             Start managing cookie consent for your website today. No credit card
             required.
-          </p>
+      </p>
           {session ? (
             <Link
               href="/dashboard"

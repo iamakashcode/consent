@@ -63,15 +63,46 @@ export async function POST(req) {
       );
     }
 
-      // Check if site already exists
-      const existingSite = await prisma.site.findUnique({
-        where: {
-          userId_domain: {
-            userId,
-            domain: cleanDomain,
+      // Check if site already exists - handle missing columns gracefully
+      let existingSite;
+      try {
+        existingSite = await prisma.site.findUnique({
+          where: {
+            userId_domain: {
+              userId,
+              domain: cleanDomain,
+            },
           },
-        },
-      });
+        });
+      } catch (error) {
+        // If verification columns don't exist, fetch without selecting them
+        if (error.message && error.message.includes("isVerified")) {
+          existingSite = await prisma.site.findUnique({
+            where: {
+              userId_domain: {
+                userId,
+                domain: cleanDomain,
+              },
+            },
+            select: {
+              id: true,
+              domain: true,
+              siteId: true,
+              trackers: true,
+              bannerConfig: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          });
+          if (existingSite) {
+            existingSite.isVerified = false;
+            existingSite.verificationToken = null;
+            existingSite.verifiedAt = null;
+          }
+        } else {
+          throw error;
+        }
+      }
 
     let site;
     let siteId;

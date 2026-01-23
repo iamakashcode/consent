@@ -10,7 +10,7 @@ export async function GET(req) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Fetch sites - try with bannerConfig, fallback if field doesn't exist
+    // Fetch sites - handle missing columns gracefully
     let sites;
     try {
       sites = await prisma.site.findMany({
@@ -30,31 +30,34 @@ export async function GET(req) {
         },
       });
     } catch (error) {
-      // If bannerConfig field doesn't exist yet, fetch without it
-      if (error.message && error.message.includes("bannerConfig")) {
-        sites = await prisma.site.findMany({
-          where: { userId: session.user.id },
-          orderBy: { createdAt: "desc" },
-          select: {
-            id: true,
-            domain: true,
-            siteId: true,
-            trackers: true,
-            isVerified: true,
-            verificationToken: true,
-            verifiedAt: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        });
-        // Add null bannerConfig and default verification to each site
-        sites = sites.map(site => ({ 
-          ...site, 
-          bannerConfig: null,
-          isVerified: site.isVerified || false,
-          verificationToken: site.verificationToken || null,
-          verifiedAt: site.verifiedAt || null,
-        }));
+      // If columns don't exist yet, fetch without them and add defaults
+      if (error.message && (error.message.includes("isVerified") || error.message.includes("verificationToken") || error.message.includes("verifiedAt") || error.message.includes("bannerConfig"))) {
+        console.warn("Some columns missing, fetching with fallback:", error.message);
+        try {
+          sites = await prisma.site.findMany({
+            where: { userId: session.user.id },
+            orderBy: { createdAt: "desc" },
+            select: {
+              id: true,
+              domain: true,
+              siteId: true,
+              trackers: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          });
+          // Add default values for missing fields
+          sites = sites.map(site => ({ 
+            ...site, 
+            bannerConfig: null,
+            isVerified: false,
+            verificationToken: null,
+            verifiedAt: null,
+          }));
+        } catch (fallbackError) {
+          console.error("Fallback fetch also failed:", fallbackError);
+          throw fallbackError;
+        }
       } else {
         throw error;
       }
