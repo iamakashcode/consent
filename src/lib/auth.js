@@ -43,9 +43,6 @@ export async function createUser(email, password, name) {
 export async function getUserByEmail(email) {
   return prisma.user.findUnique({
     where: { email },
-    include: {
-      subscription: true,
-    },
     select: {
       id: true,
       email: true,
@@ -54,7 +51,14 @@ export async function getUserByEmail(email) {
       isAdmin: true,
       createdAt: true,
       updatedAt: true,
-      subscription: true,
+      subscription: {
+        select: {
+          plan: true,
+          status: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+        },
+      },
     },
   });
 }
@@ -62,9 +66,6 @@ export async function getUserByEmail(email) {
 export async function getUserById(id) {
   return prisma.user.findUnique({
     where: { id },
-    include: {
-      subscription: true,
-    },
     select: {
       id: true,
       email: true,
@@ -73,7 +74,14 @@ export async function getUserById(id) {
       isAdmin: true,
       createdAt: true,
       updatedAt: true,
-      subscription: true,
+      subscription: {
+        select: {
+          plan: true,
+          status: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+        },
+      },
     },
   });
 }
