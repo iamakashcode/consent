@@ -14,16 +14,20 @@ export async function GET(req, { params }) {
     
     // If no domain param, try to get from database
     let bannerConfig = null;
+    let siteVerified = false;
+    let allowedDomain = null;
     if (siteId) {
       const site = await prisma.site.findUnique({
         where: { siteId },
-        select: { domain: true, bannerConfig: true },
+        select: { domain: true, bannerConfig: true, isVerified: true },
       });
       if (site) {
         if (!domain) {
           domain = site.domain;
         }
         bannerConfig = site.bannerConfig;
+        siteVerified = site.isVerified || false;
+        allowedDomain = site.domain;
       }
     }
     
@@ -85,10 +89,25 @@ export async function GET(req, { params }) {
 console.log('[Consent SDK] Loading...', window.location.href);
 console.log('[Consent SDK] Script loaded successfully');
 var DOMAIN="${domain.replace(/"/g, '\\"')}";
+var ALLOWED_DOMAIN="${allowedDomain ? allowedDomain.replace(/"/g, '\\"') : "*"}";
+var IS_VERIFIED=${siteVerified ? "true" : "false"};
 var TRACKERS=${JSON.stringify(trackerDomains)};
 var SITE_ID="${finalSiteId.replace(/"/g, '\\"')}";
 var CONSENT_KEY='cookie_consent_'+SITE_ID;
 var consent=localStorage.getItem(CONSENT_KEY)==='accepted';
+
+// Domain verification check - only work on verified domain
+if(IS_VERIFIED && ALLOWED_DOMAIN !== "*"){
+var currentHost=window.location.hostname.toLowerCase();
+var allowedHost=ALLOWED_DOMAIN.toLowerCase().replace(/^www\\./,'');
+currentHost=currentHost.replace(/^www\\./,'');
+if(currentHost !== allowedHost){
+console.warn('[Consent SDK] Domain mismatch. Current:',currentHost,'Allowed:',allowedHost);
+console.warn('[Consent SDK] Script will not work on this domain. Please verify domain ownership.');
+return; // Exit if domain doesn't match
+}
+console.log('[Consent SDK] Domain verified:',currentHost,'matches allowed domain:',allowedHost);
+}
 console.log('[Consent SDK] Consent status:', consent, 'Key:', CONSENT_KEY);
 console.log('[Consent SDK] Document ready state:', document.readyState);
 console.log('[Consent SDK] Body exists:', !!document.body);

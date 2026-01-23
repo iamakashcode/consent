@@ -80,6 +80,16 @@ export async function POST(req) {
       // Update existing site
       site = existingSite;
       siteId = existingSite.siteId;
+      
+      // Generate verification token if missing
+      if (!existingSite.verificationToken) {
+        const verificationToken = `cm_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+        await prisma.site.update({
+          where: { id: existingSite.id },
+          data: { verificationToken },
+        });
+        site.verificationToken = verificationToken;
+      }
     } else {
       // Fetch the website
       let html;
@@ -113,6 +123,9 @@ export async function POST(req) {
       // Generate unique siteId
       siteId = generateSiteId();
 
+      // Generate verification token
+      const verificationToken = `cm_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+
       // Create or update site in database
       site = await prisma.site.upsert({
         where: {
@@ -126,10 +139,13 @@ export async function POST(req) {
           siteId: siteId,
           userId,
           trackers: trackers,
+          verificationToken: verificationToken,
+          isVerified: false, // Will be verified after user adds meta tag
         },
         update: {
           trackers: trackers,
           updatedAt: new Date(),
+          // Don't reset verification if already verified
         },
       });
     }

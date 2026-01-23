@@ -22,6 +22,9 @@ export async function GET(req) {
           siteId: true,
           trackers: true,
           bannerConfig: true,
+          isVerified: true,
+          verificationToken: true,
+          verifiedAt: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -37,12 +40,21 @@ export async function GET(req) {
             domain: true,
             siteId: true,
             trackers: true,
+            isVerified: true,
+            verificationToken: true,
+            verifiedAt: true,
             createdAt: true,
             updatedAt: true,
           },
         });
-        // Add null bannerConfig to each site
-        sites = sites.map(site => ({ ...site, bannerConfig: null }));
+        // Add null bannerConfig and default verification to each site
+        sites = sites.map(site => ({ 
+          ...site, 
+          bannerConfig: null,
+          isVerified: site.isVerified || false,
+          verificationToken: site.verificationToken || null,
+          verifiedAt: site.verifiedAt || null,
+        }));
       } else {
         throw error;
       }

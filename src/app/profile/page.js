@@ -11,6 +11,8 @@ export default function ProfilePage() {
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState(null);
+  const [verifyingId, setVerifyingId] = useState(null);
+  const [verificationStatus, setVerificationStatus] = useState({});
   const hasRefreshed = useRef(false);
 
   useEffect(() => {
@@ -87,6 +89,74 @@ export default function ProfilePage() {
     } catch (err) {
       console.error("Failed to delete site:", err);
       alert("An error occurred while deleting the site");
+    }
+  };
+
+  const verifyDomain = async (site) => {
+    if (!site.siteId) {
+      alert("Site ID not found");
+      return;
+    }
+
+    setVerifyingId(site.id);
+    try {
+      const response = await fetch(`/api/sites/${site.siteId}/verify`, {
+        method: "POST",
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.verified) {
+        setVerificationStatus((prev) => ({
+          ...prev,
+          [site.id]: { verified: true, message: data.message },
+        }));
+        // Refresh sites to get updated verification status
+        fetchSites();
+        alert("Domain verified successfully! The script will now work on this domain.");
+      } else {
+        setVerificationStatus((prev) => ({
+          ...prev,
+          [site.id]: {
+            verified: false,
+            message: data.message || "Verification failed",
+            instruction: data.instruction,
+            token: data.verificationToken,
+          },
+        }));
+        alert(
+          data.message ||
+            "Verification failed. Please make sure you've added the meta tag to your website."
+        );
+      }
+    } catch (err) {
+      console.error("Failed to verify domain:", err);
+      alert("An error occurred while verifying the domain");
+    } finally {
+      setVerifyingId(null);
+    }
+  };
+
+  const getVerificationInfo = async (site) => {
+    if (!site.siteId) return;
+
+    try {
+      const response = await fetch(`/api/sites/${site.siteId}/verify`);
+      const data = await response.json();
+
+      if (response.ok) {
+        setVerificationStatus((prev) => ({
+          ...prev,
+          [site.id]: {
+            verified: data.isVerified,
+            token: data.verificationToken,
+            metaTag: data.verificationMetaTag,
+            verifiedAt: data.verifiedAt,
+          },
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to get verification info:", err);
     }
   };
 
@@ -203,9 +273,15 @@ export default function ProfilePage() {
                           <h3 className="text-xl font-semibold text-gray-900">
                             {site.domain}
                           </h3>
-                          <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded">
-                            Active
-                          </span>
+                          {site.isVerified ? (
+                            <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded">
+                              ✓ Verified
+                            </span>
+                          ) : (
+                            <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
+                              ⚠ Not Verified
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm text-gray-600">
                           Added on{" "}
@@ -243,11 +319,69 @@ export default function ProfilePage() {
                       </div>
                     )}
 
+                    {/* Domain Verification Section */}
+                    {!site.isVerified && (
+                      <div className="border-t pt-4 mb-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">
+                          Domain Verification
+                        </h4>
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-3">
+                          <p className="text-sm text-yellow-800 mb-3">
+                            <strong>Important:</strong> Your domain must be verified before the script will work. 
+                            Add this meta tag to your website&apos;s <code className="bg-yellow-100 px-1 rounded">&lt;head&gt;</code> section:
+                          </p>
+                          <div className="bg-gray-900 rounded-lg p-3 mb-3">
+                            <code className="text-green-400 text-sm break-all">
+                              {verificationStatus[site.id]?.metaTag ||
+                                `<meta name="consent-manager-verification" content="${site.verificationToken || "loading..."}">`}
+                            </code>
+                          </div>
+                          <button
+                            onClick={() => verifyDomain(site)}
+                            disabled={verifyingId === site.id}
+                            className="px-4 py-2 bg-yellow-600 text-white rounded-lg font-semibold hover:bg-yellow-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                          >
+                            {verifyingId === site.id
+                              ? "Verifying..."
+                              : "Verify Domain"}
+                          </button>
+                          {verificationStatus[site.id]?.message &&
+                            !verificationStatus[site.id]?.verified && (
+                              <p className="text-xs text-yellow-700 mt-2">
+                                {verificationStatus[site.id].message}
+                              </p>
+                            )}
+                        </div>
+                      </div>
+                    )}
+
+                    {site.isVerified && (
+                      <div className="border-t pt-4 mb-4">
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
+                          <p className="text-sm text-green-800">
+                            ✓ Domain verified on{" "}
+                            {site.verifiedAt
+                              ? new Date(site.verifiedAt).toLocaleDateString()
+                              : "recently"}
+                            . The script will only work on this domain.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Script Section */}
                     <div className="border-t pt-4">
                       <h4 className="text-sm font-semibold text-gray-700 mb-2">
                         Consent Script
                       </h4>
+                      {!site.isVerified && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
+                          <p className="text-sm text-red-800">
+                            ⚠️ <strong>Warning:</strong> This script will not work until the domain is verified. 
+                            Please verify your domain above first.
+                          </p>
+                        </div>
+                      )}
                       <div className="bg-gray-900 rounded-lg p-4 mb-3">
                         <code className="text-green-400 text-sm break-all">
                           {scriptTag}
