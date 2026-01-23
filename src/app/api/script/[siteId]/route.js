@@ -105,7 +105,13 @@ b.remove();
 console.log('[Consent SDK] Banner shown');
 }
 
+var origCreate,origFetch,origXHR;
+
 function enableTrackers(){
+console.log('[Consent SDK] Enabling trackers...');
+consent=true;
+
+// Restore blocked scripts
 document.querySelectorAll('script[type="javascript/blocked"]').forEach(function(s){
 var n=document.createElement('script');
 n.src=s.src;
@@ -113,16 +119,42 @@ if(s.hasAttribute('async'))n.async=true;
 if(s.hasAttribute('defer'))n.defer=true;
 if(s.id)n.id=s.id;
 s.parentNode.replaceChild(n,s);
+console.log('[Consent SDK] Restored script:',s.src);
 });
-console.log('[Consent SDK] Trackers enabled');
+
+// Restore original createElement
+if(origCreate){
+document.createElement=origCreate;
+console.log('[Consent SDK] Restored createElement');
+}
+
+// Restore original fetch
+if(origFetch){
+window.fetch=origFetch;
+console.log('[Consent SDK] Restored fetch');
+}
+
+// Restore original XHR
+if(origXHR){
+XMLHttpRequest.prototype.open=origXHR;
+console.log('[Consent SDK] Restored XHR');
+}
+
+console.log('[Consent SDK] All trackers enabled');
 }
 
 if(!consent){
+// Block existing scripts
 document.querySelectorAll('script[src]').forEach(function(s){
 if(isTracker(s.src))blockScript(s);
 });
 
-var origCreate=document.createElement;
+// Store original functions
+origCreate=document.createElement;
+origFetch=window.fetch;
+origXHR=XMLHttpRequest.prototype.open;
+
+// Intercept createElement
 document.createElement=function(tag){
 var el=origCreate.call(document,tag);
 if(tag.toLowerCase()==='script'){
@@ -132,39 +164,52 @@ get:function(){return src;},
 set:function(v){
 src=v;
 el.setAttribute('src',v);
-if(isTracker(v)&&!consent)blockScript(el);
+// Check consent dynamically
+if(isTracker(v)&&localStorage.getItem(CONSENT_KEY)!=='accepted'){
+blockScript(el);
+}
 }
 });
 }
 return el;
 };
 
-var origFetch=window.fetch;
+// Intercept fetch
 window.fetch=function(url){
-if(typeof url==='string'&&isTracker(url)&&!consent){
+// Check consent dynamically
+if(typeof url==='string'&&isTracker(url)&&localStorage.getItem(CONSENT_KEY)!=='accepted'){
 console.log('[Consent SDK] Blocked fetch:',url);
 return Promise.reject(new Error('Blocked'));
 }
 return origFetch.apply(this,arguments);
 };
 
-var origXHR=XMLHttpRequest.prototype.open;
+// Intercept XHR
 XMLHttpRequest.prototype.open=function(method,url){
-if(isTracker(url)&&!consent){
+// Check consent dynamically
+if(isTracker(url)&&localStorage.getItem(CONSENT_KEY)!=='accepted'){
 console.log('[Consent SDK] Blocked XHR:',url);
 return;
 }
 return origXHR.apply(this,arguments);
 };
+
+console.log('[Consent SDK] Blocking active');
 }
 
+// Only show banner if consent not granted
+if(!consent){
 showBanner();
 if(document.readyState==='loading'){
 document.addEventListener('DOMContentLoaded',showBanner);
 }
 setTimeout(showBanner,500);
 setTimeout(showBanner,2000);
-console.log('[Consent SDK] Initialized');
+}else{
+console.log('[Consent SDK] Consent already granted - trackers enabled');
+}
+
+console.log('[Consent SDK] Initialized - Consent:',consent?'granted':'not granted');
 })();`;
 
     return new Response(script, {
