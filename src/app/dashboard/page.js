@@ -43,7 +43,10 @@ export default function DashboardPage() {
       const response = await fetch("/api/subscription");
       if (response.ok) {
         const data = await response.json();
+        console.log("[Dashboard] Subscription data:", data);
         setSubscription(data);
+      } else {
+        console.error("[Dashboard] Failed to fetch subscription:", response.status);
       }
     } catch (err) {
       console.error("Failed to fetch subscription:", err);
@@ -178,11 +181,22 @@ export default function DashboardPage() {
     return null;
   }
 
+  // If no plan selected, redirect to plans
+  const currentPlan = session.user?.plan;
+  if (!currentPlan) {
+    router.push("/plans");
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-lg">Redirecting to plans...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-12">
-        {/* Trial Countdown Banner */}
+        {/* Trial Countdown Banner - Show if subscription exists and has trial */}
         {subscription && subscription.plan === "basic" && subscription.trialEndAt && isTrialActive(subscription.trialEndAt) && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <div className="flex items-center justify-between">
@@ -253,13 +267,13 @@ export default function DashboardPage() {
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
                 {error}
-                {error.includes("plan limit") && (
+                {(error.includes("plan limit") || error.includes("select a plan")) && (
                   <div className="mt-2">
                     <Link
                       href="/plans"
                       className="text-indigo-600 hover:text-indigo-700 font-semibold underline"
                     >
-                      View Plans & Upgrade →
+                      {error.includes("select a plan") ? "Choose a Plan →" : "View Plans & Upgrade →"}
                     </Link>
                   </div>
                 )}

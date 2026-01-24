@@ -42,7 +42,19 @@ export async function POST(req) {
       return Response.json({ error: "User not found" }, { status: 404 });
     }
 
-    const plan = user.subscription?.plan || "basic";
+    const plan = user.subscription?.plan;
+    
+    // Check if user has a plan
+    if (!plan) {
+      return Response.json(
+        {
+          error: "Please select a plan to add domains. Visit the plans page to choose a plan.",
+          requiresPlan: true,
+        },
+        { status: 403 }
+      );
+    }
+    
     const siteCount = await prisma.site.count({
       where: { userId },
     });

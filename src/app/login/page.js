@@ -22,8 +22,9 @@ function LoginContent() {
         router.push(redirect);
       } else {
         // Check if user has a plan, if not redirect to plans
-        const plan = session.user?.plan || "basic";
-        if (plan === "basic" && !session.user?.hasActiveSubscription) {
+        const plan = session.user?.plan;
+        if (!plan) {
+          // No plan selected, redirect to plans page
           router.push("/plans");
         } else {
           router.push("/dashboard");

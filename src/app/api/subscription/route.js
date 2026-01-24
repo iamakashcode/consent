@@ -28,8 +28,8 @@ export async function GET(req) {
 
     if (!subscription) {
       return Response.json({
-        plan: "basic",
-        status: "active",
+        plan: null,
+        status: null,
         trialEndAt: null,
         currentPeriodEnd: null,
       });

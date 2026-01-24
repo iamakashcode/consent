@@ -124,7 +124,7 @@ export async function POST(req) {
     const periodEnd = new Date();
     periodEnd.setMonth(periodEnd.getMonth() + 1); // 1 month subscription
 
-    // For basic plan, if trial just ended, extend from now
+    // For basic plan, set up trial if this is first payment
     // Otherwise, if upgrading from trial, start payment period from now
     const existingSubscription = await prisma.subscription.findUnique({
       where: { userId: session.user.id },
@@ -132,20 +132,35 @@ export async function POST(req) {
 
     let trialEndAt = existingSubscription?.trialEndAt;
     
-    // If basic plan and trial hasn't ended yet, keep trialEndAt
-    // If trial has ended or this is a new subscription, set trial end
-    if (plan === "basic" && !trialEndAt) {
-      trialEndAt = calculateTrialEndDate(plan);
+    // If basic plan and no trial set yet, create trial
+    // If this is payment after trial, keep existing trialEndAt but extend period
+    if (plan === "basic") {
+      if (!trialEndAt) {
+        // New basic plan subscription - start trial
+        trialEndAt = calculateTrialEndDate(plan);
+      }
+      // If trial exists, keep it (payment extends period but trial date stays)
     }
 
-    await prisma.subscription.update({
+    await prisma.subscription.upsert({
       where: { userId: session.user.id },
-      data: {
+      create: {
+        userId: session.user.id,
         plan: plan,
         status: "active",
         currentPeriodStart: now,
         currentPeriodEnd: periodEnd,
         trialEndAt: plan === "basic" ? trialEndAt : null, // Only basic plan has trial
+        razorpayPaymentId: paymentId,
+        razorpaySignature: signature,
+        cancelAtPeriodEnd: false,
+      },
+      update: {
+        plan: plan,
+        status: "active",
+        currentPeriodStart: now,
+        currentPeriodEnd: periodEnd,
+        trialEndAt: plan === "basic" ? (trialEndAt || calculateTrialEndDate(plan)) : null, // Keep or set trial for basic
         razorpayPaymentId: paymentId,
         razorpaySignature: signature,
         cancelAtPeriodEnd: false,

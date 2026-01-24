@@ -35,7 +35,7 @@ export async function POST(req) {
       );
     }
 
-    const currentPlan = user.subscription?.plan || "basic";
+    const currentPlan = user.subscription?.plan;
     const planHierarchy = { basic: 0, starter: 1, pro: 2 };
     
     console.log("Plan check:", {
@@ -45,25 +45,29 @@ export async function POST(req) {
       sessionUserId: session.user.id,
     });
     
-    if (planHierarchy[currentPlan] >= planHierarchy[plan]) {
-      // If session is out of sync, suggest refreshing
-      const sessionPlan = session.user?.plan || "basic";
-      if (sessionPlan !== currentPlan) {
+    // If user has a plan, check if they're trying to downgrade or stay on same plan
+    if (currentPlan) {
+      if (planHierarchy[currentPlan] >= planHierarchy[plan]) {
+        // If session is out of sync, suggest refreshing
+        const sessionPlan = session.user?.plan;
+        if (sessionPlan !== currentPlan) {
+          return Response.json(
+            { 
+              error: `You are already on ${currentPlan} plan or higher. Your session shows ${sessionPlan || 'no plan'}. Please refresh the page.`,
+              currentPlan: currentPlan,
+              sessionPlan: sessionPlan,
+              needsRefresh: true
+            },
+            { status: 400 }
+          );
+        }
         return Response.json(
-          { 
-            error: `You are already on ${currentPlan} plan or higher. Your session shows ${sessionPlan}. Please refresh the page.`,
-            currentPlan: currentPlan,
-            sessionPlan: sessionPlan,
-            needsRefresh: true
-          },
+          { error: `You are already on ${currentPlan} plan or higher` },
           { status: 400 }
         );
       }
-      return Response.json(
-        { error: `You are already on ${currentPlan} plan or higher` },
-        { status: 400 }
-      );
     }
+    // If no plan, allow them to select any plan
 
     const amount = PLAN_PRICING[plan];
     const trialDays = PLAN_TRIAL_DAYS[plan] || 0;

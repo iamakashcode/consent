@@ -43,7 +43,10 @@ export default function ProfilePage() {
       const response = await fetch("/api/subscription");
       if (response.ok) {
         const data = await response.json();
+        console.log("[Profile] Subscription data:", data);
         setSubscription(data);
+      } else {
+        console.error("[Profile] Failed to fetch subscription:", response.status, await response.text());
       }
     } catch (err) {
       console.error("Failed to fetch subscription:", err);
@@ -214,9 +217,33 @@ export default function ProfilePage() {
     pro: Infinity,
   };
 
-  const currentPlan = session.user?.plan || "basic";
-  const siteLimit = planLimits[currentPlan] || 1;
+  const currentPlan = session.user?.plan;
+  const siteLimit = currentPlan ? (planLimits[currentPlan] || 1) : 0; // No plan = 0 sites allowed
   const sitesUsed = sites.length;
+  
+  // If no plan selected, show message to select plan
+  if (!currentPlan) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-12">
+          <div className="bg-white rounded-lg shadow p-8 text-center">
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">
+              Welcome! Choose Your Plan
+            </h1>
+            <p className="text-gray-600 mb-6">
+              Please select a plan to start using the service.
+            </p>
+            <Link
+              href="/plans"
+              className="inline-block bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+            >
+              View Plans & Get Started
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -231,10 +258,12 @@ export default function ProfilePage() {
               <p className="text-gray-600">{session.user?.email}</p>
             </div>
             <div className="text-right">
-              <div className="inline-block bg-indigo-100 text-indigo-800 px-4 py-2 rounded-lg font-semibold mb-2">
-                {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Plan
-              </div>
-              {/* Trial Countdown */}
+              {currentPlan && (
+                <div className="inline-block bg-indigo-100 text-indigo-800 px-4 py-2 rounded-lg font-semibold mb-2">
+                  {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Plan
+                </div>
+              )}
+              {/* Trial Countdown - Show if subscription exists and has trial */}
               {subscription && subscription.plan === "basic" && subscription.trialEndAt && isTrialActive(subscription.trialEndAt) && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-left">
                   <p className="text-sm font-semibold text-blue-900 mb-1">
@@ -261,10 +290,19 @@ export default function ProfilePage() {
                   </p>
                 </div>
               )}
-              <p className="text-sm text-gray-600 mb-3">
-                {sitesUsed} / {siteLimit === Infinity ? "∞" : siteLimit} sites
-              </p>
-              {currentPlan !== "pro" && (
+              {currentPlan && (
+                <p className="text-sm text-gray-600 mb-3">
+                  {sitesUsed} / {siteLimit === Infinity ? "∞" : siteLimit} sites
+                </p>
+              )}
+              {!currentPlan ? (
+                <Link
+                  href="/plans"
+                  className="inline-block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-semibold"
+                >
+                  Choose a Plan
+                </Link>
+              ) : currentPlan !== "pro" && (
                 <Link
                   href="/plans"
                   className="inline-block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-semibold"
@@ -560,7 +598,7 @@ export default function ProfilePage() {
             <div>
               <p className="text-sm text-gray-600 mb-1">Current Plan</p>
               <p className="text-2xl font-bold text-indigo-600">
-                {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}
+                {currentPlan ? (currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)) : "No Plan"}
               </p>
             </div>
           </div>

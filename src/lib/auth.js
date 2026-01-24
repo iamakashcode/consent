@@ -18,12 +18,7 @@ export async function createUser(email, password, name) {
         email,
         password: hashedPassword,
         name,
-        subscription: {
-          create: {
-            plan: 'basic',
-            status: 'active',
-          },
-        },
+        // Don't create subscription automatically - user must choose a plan
       },
       select: {
         id: true,

@@ -43,7 +43,7 @@ export const authOptions = {
             id: user.id,
             email: user.email,
             name: user.name,
-            plan: user.subscription?.plan || 'basic',
+            plan: user.subscription?.plan || null, // null means no plan selected
             isAdmin: user.isAdmin || false,
           };
         } catch (error) {
@@ -100,7 +100,7 @@ export const authOptions = {
               try {
                 if (session.user && token) {
                   session.user.id = token.id;
-                  session.user.plan = token.plan || 'basic';
+                  session.user.plan = token.plan || null; // null means no plan selected
                   session.user.isAdmin = token.isAdmin || false;
                 }
                 return session;

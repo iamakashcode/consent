@@ -79,12 +79,13 @@ export default function PlansPage() {
     return null;
   }
 
+  // Get current plan (null if no plan selected)
+  let currentPlan = session.user?.plan;
   // Map legacy "free" plan to "basic"
-  let currentPlan = session.user?.plan || "basic";
   if (currentPlan === "free") {
     currentPlan = "basic";
   }
-  const currentPlanLevel = planHierarchy[currentPlan] || 0;
+  const currentPlanLevel = currentPlan ? (planHierarchy[currentPlan] || 0) : -1; // -1 means no plan
 
   const handlePlanSelect = async (selectedPlan) => {
     const selectedPlanLevel = planHierarchy[selectedPlan] || 0;
@@ -102,9 +103,15 @@ export default function PlansPage() {
       return;
     }
 
-    // If selecting basic plan (shouldn't happen, but handle it)
+    // Allow selecting basic plan if user has no plan
     if (selectedPlan === "basic") {
-      return;
+      if (!currentPlan) {
+        // User can select basic plan - it will start trial
+        // Continue to payment flow
+      } else if (currentPlan === "basic") {
+        // User already has basic plan, do nothing
+        return;
+      }
     }
 
     // Navigate to payment page for the selected plan
@@ -123,9 +130,15 @@ export default function PlansPage() {
           <p className="text-xl text-gray-600">
             Select the plan that best fits your needs
           </p>
-          <p className="text-sm text-gray-500 mt-2">
-            Current Plan: <span className="font-semibold text-indigo-600">{PLAN_DETAILS[currentPlan]?.name || currentPlan || "Basic"}</span>
-          </p>
+          {currentPlan ? (
+            <p className="text-sm text-gray-500 mt-2">
+              Current Plan: <span className="font-semibold text-indigo-600">{PLAN_DETAILS[currentPlan]?.name || currentPlan}</span>
+            </p>
+          ) : (
+            <p className="text-sm text-gray-500 mt-2">
+              <span className="font-semibold text-indigo-600">No plan selected</span> - Choose a plan to get started
+            </p>
+          )}
         </div>
 
         {loading && (
@@ -140,8 +153,8 @@ export default function PlansPage() {
         <div className="grid md:grid-cols-3 gap-8">
           {Object.entries(PLAN_DETAILS).map(([planKey, plan]) => {
             const isCurrentPlan = planKey === currentPlan;
-            const isUpgrade = planHierarchy[planKey] > currentPlanLevel;
-            const isDowngrade = planHierarchy[planKey] < currentPlanLevel;
+            const isUpgrade = currentPlan ? (planHierarchy[planKey] > currentPlanLevel) : true; // If no plan, all are "upgrades"
+            const isDowngrade = currentPlan ? (planHierarchy[planKey] < currentPlanLevel) : false;
 
             return (
               <div

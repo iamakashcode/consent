@@ -29,7 +29,7 @@ export async function POST(req) {
         id: user.id,
         email: user.email,
         name: user.name,
-        plan: user.subscription?.plan || "basic",
+        plan: user.subscription?.plan || null, // null means no plan selected
         isAdmin: user.isAdmin || false,
       },
     });
