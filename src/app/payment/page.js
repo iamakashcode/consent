@@ -61,30 +61,60 @@ function PaymentContent() {
         return;
       }
 
+      // If subscription setup is required (Basic trial or Starter/Pro subscription), redirect to Razorpay
+      if (data.requiresPaymentSetup && (data.subscriptionAuthUrl || data.redirectToRazorpay)) {
+        // Update session first
+        await update();
+        
+        if (data.subscriptionAuthUrl) {
+          // Redirect to Razorpay subscription authentication page
+          console.log("Redirecting to Razorpay:", data.subscriptionAuthUrl);
+          window.location.href = data.subscriptionAuthUrl;
+          return;
+        }
+        
+        // If no auth URL but redirect is required, fetch it
+        if (data.subscriptionId) {
+          try {
+            const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
+            const authData = await authResponse.json();
+            if (authData.authUrl) {
+              console.log("Fetched auth URL, redirecting:", authData.authUrl);
+              window.location.href = authData.authUrl;
+              return;
+            }
+          } catch (err) {
+            console.error("Error fetching auth URL:", err);
+            setError("Failed to get payment setup link. Please try again.");
+            setLoading(false);
+            return;
+          }
+        }
+        
+        // If we reach here, couldn't get auth URL
+        setError("Failed to redirect to payment setup. Please try again.");
+        setLoading(false);
+        return;
+      }
+      
       // If basic plan with trial, handle subscription setup
       if (data.trial && data.success) {
         // Update session to reflect new plan
         await update();
         
-        // If payment setup is required, redirect to Razorpay subscription auth URL
-        if (data.requiresPaymentSetup && data.subscriptionAuthUrl) {
-          // Redirect to Razorpay subscription authentication page
-          window.location.href = data.subscriptionAuthUrl;
-          return;
-        }
-        
-        // Fallback: if subscription ID exists but no auth URL, show setup button
-        if (data.requiresPaymentSetup && data.subscriptionId) {
-          setOrderData({ 
-            trial: true, 
-            ...data,
-            showPaymentLink: true 
-          });
-          return;
-        }
-        
-        // Trial started without payment setup required
+        // If we reach here, payment setup wasn't required or failed
         setOrderData({ trial: true, ...data });
+        return;
+      }
+      
+      // If subscription (Starter/Pro), handle subscription setup
+      if (data.subscription && data.success) {
+        // Update session to reflect new plan
+        await update();
+        
+        // If we reach here, redirect failed - show error
+        setError("Failed to redirect to payment setup. Please try again.");
+        setLoading(false);
         return;
       }
 
@@ -296,6 +326,54 @@ function PaymentContent() {
                 >
                   Go to Profile
                 </Link>
+              </div>
+            ) : orderData && orderData.subscription ? (
+              <div className="space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-start">
+                    <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-semibold text-blue-900 mb-1">
+                        Recurring Subscription
+                      </p>
+                      <p className="text-xs text-blue-700">
+                        This is a monthly recurring subscription. You'll be charged {planPrices[plan]} every month automatically.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 rounded-lg p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-gray-600">Plan</span>
+                    <span className="font-semibold text-gray-900">
+                      {planNames[plan]}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-gray-600">Monthly Amount</span>
+                    <span className="text-2xl font-bold text-indigo-600">
+                      {planPrices[plan]}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Billing Period</span>
+                    <span className="font-semibold text-gray-900">Monthly (Recurring)</span>
+                  </div>
+                </div>
+
+                <div className="text-center">
+                  <p className="text-sm text-gray-600 mb-4">
+                    Redirecting to Razorpay to set up your subscription...
+                  </p>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+                </div>
+
+                <p className="text-xs text-center text-gray-500">
+                  By proceeding, you agree to our terms and conditions. This is a recurring monthly subscription.
+                </p>
               </div>
             ) : orderData && (
               <div className="space-y-6">

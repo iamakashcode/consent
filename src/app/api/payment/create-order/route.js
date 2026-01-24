@@ -237,6 +237,29 @@ export async function POST(req) {
       // Razorpay subscription has authenticate_url or short_url for payment method setup
       const authUrl = razorpaySubscription.authenticate_url || razorpaySubscription.short_url;
       
+      if (!authUrl) {
+        console.warn("No auth URL in subscription response, fetching from Razorpay...");
+        // Fetch subscription again to get auth URL
+        try {
+          const fetchedSub = await razorpay.subscriptions.fetch(razorpaySubscription.id);
+          const fetchedAuthUrl = fetchedSub.authenticate_url || fetchedSub.short_url;
+          if (fetchedAuthUrl) {
+            return Response.json({
+              success: true,
+              trial: true,
+              trialDays: trialDays,
+              trialEndAt: trialEndAt.toISOString(),
+              subscriptionId: razorpaySubscription.id,
+              subscriptionAuthUrl: fetchedAuthUrl,
+              requiresPaymentSetup: true,
+              message: `Please add a payment method to start your ${trialDays}-day free trial. Payment will be automatically deducted after the trial period.`,
+            });
+          }
+        } catch (error) {
+          console.error("Error fetching subscription auth URL:", error);
+        }
+      }
+      
       return Response.json({
         success: true,
         trial: true,
@@ -245,6 +268,7 @@ export async function POST(req) {
         subscriptionId: razorpaySubscription.id,
         subscriptionAuthUrl: authUrl,
         requiresPaymentSetup: true,
+        redirectToRazorpay: true, // Force redirect
         message: `Please add a payment method to start your ${trialDays}-day free trial. Payment will be automatically deducted after the trial period.`,
       });
     }
@@ -253,60 +277,90 @@ export async function POST(req) {
       return Response.json({ error: "Invalid plan" }, { status: 400 });
     }
 
-    // Check if there's a recent order (within last 5 minutes) to avoid creating duplicates
-    const existingSubscription = await prisma.subscription.findUnique({
-      where: { userId: session.user.id },
-    });
-
-    // If there's an existing order and it's recent, reuse it
-    if (existingSubscription?.razorpayOrderId) {
+    // For Starter and Pro plans, create Razorpay SUBSCRIPTION (not one-time order)
+    // This ensures recurring monthly payments
+    console.log(`Creating Razorpay subscription for ${plan} plan...`);
+    
+    // Get or create Razorpay plan for this plan type
+    let razorpayPlan;
+    try {
+      razorpayPlan = await getOrCreateRazorpayPlan(plan, amount, 0); // No trial for starter/pro
+    } catch (error) {
+      console.error("Failed to get/create Razorpay plan:", error);
+      return Response.json(
+        { error: "Failed to set up subscription plan. Please try again." },
+        { status: 500 }
+      );
+    }
+    
+    // Create Razorpay subscription (recurring monthly)
+    let razorpaySubscription;
+    try {
+      razorpaySubscription = await createRazorpaySubscription(
+        razorpayPlan.id,
+        {
+          name: user.name || "User",
+          email: user.email,
+          contact: user.phone || undefined,
+        },
+        0 // No trial for starter/pro
+      );
+      
+      console.log("Created Razorpay subscription:", razorpaySubscription.id);
+    } catch (error) {
+      console.error("Failed to create Razorpay subscription:", error);
+      return Response.json(
+        { error: "Failed to create subscription. Please try again." },
+        { status: 500 }
+      );
+    }
+    
+    // Get authentication URL for payment method setup
+    let authUrl = razorpaySubscription.authenticate_url || razorpaySubscription.short_url;
+    
+    if (!authUrl) {
+      // Try fetching subscription to get auth URL
       try {
-        const existingOrder = await razorpay.orders.fetch(existingSubscription.razorpayOrderId);
-        const orderAge = Date.now() - (existingOrder.created_at * 1000);
-        const fiveMinutes = 5 * 60 * 1000;
-        
-        // If order is less than 5 minutes old and not paid, reuse it
-        if (orderAge < fiveMinutes && existingOrder.status === "created") {
-          console.log("Reusing existing order:", { orderId: existingOrder.id, age: orderAge });
-          return Response.json({
-            orderId: existingOrder.id,
-            amount: existingOrder.amount,
-            currency: existingOrder.currency,
-            key: process.env.RAZORPAY_KEY_ID || "rzp_test_1DP5mmOlF5G5ag",
-          });
-        }
+        const fetchedSub = await razorpay.subscriptions.fetch(razorpaySubscription.id);
+        authUrl = fetchedSub.authenticate_url || fetchedSub.short_url;
       } catch (error) {
-        // If order doesn't exist or can't be fetched, create a new one
-        console.log("Existing order not found or invalid, creating new one");
+        console.error("Error fetching subscription auth URL:", error);
       }
     }
-
-    // Create new Razorpay order
-    const order = await createRazorpayOrder(amount);
     
-    console.log("Created Razorpay order:", { orderId: order.id, amount: order.amount, amountInRupees: order.amount / 100 });
-
-    // Store order ID in subscription (temporary)
-    const updated = await prisma.subscription.upsert({
+    // Store subscription in database
+    await prisma.subscription.upsert({
       where: { userId: session.user.id },
       create: {
         userId: session.user.id,
-        plan: "basic", // Will update after payment
-        status: "active",
-        razorpayOrderId: order.id,
+        plan: plan,
+        status: "pending", // Will be activated after payment method is added
+        razorpayPlanId: razorpayPlan.id,
+        razorpaySubscriptionId: razorpaySubscription.id,
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
       },
       update: {
-        razorpayOrderId: order.id,
+        plan: plan,
+        status: "pending",
+        razorpayPlanId: razorpayPlan.id,
+        razorpaySubscriptionId: razorpaySubscription.id,
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       },
     });
     
-    console.log("Stored order ID in subscription:", { orderId: updated.razorpayOrderId, userId: session.user.id });
-
     return Response.json({
-      orderId: order.id,
-      amount: order.amount, // Amount in paise (900 for ₹9)
-      currency: order.currency,
-      key: process.env.RAZORPAY_KEY_ID || "rzp_test_1DP5mmOlF5G5ag",
+      success: true,
+      subscription: true,
+      subscriptionId: razorpaySubscription.id,
+      subscriptionAuthUrl: authUrl,
+      requiresPaymentSetup: true,
+      redirectToRazorpay: true,
+      plan: plan,
+      amount: amount,
+      amountInRupees: amount / 100,
+      message: `Set up your ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan subscription. This is a recurring monthly subscription.`,
     });
   } catch (error) {
     console.error("Payment order creation error:", error);
