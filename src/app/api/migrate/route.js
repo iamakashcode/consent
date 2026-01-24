@@ -1,84 +1,74 @@
 /**
- * TEMPORARY MIGRATION ROUTE
+ * MIGRATION ROUTE - Apply pending migrations via API
  * 
- * ⚠️ WARNING: This route should be DELETED after running migrations!
- * It's a temporary helper to run migrations on Vercel.
+ * This route applies all pending migrations by running the SQL directly.
+ * Use this after deploying to Vercel when migrations weren't run during build.
  * 
  * Usage:
- * 1. Deploy this route
- * 2. Visit: https://your-app.vercel.app/api/migrate
- * 3. Check the response
- * 4. DELETE this file immediately after use
+ * curl -X POST https://your-app.vercel.app/api/migrate \
+ *   -H "Authorization: Bearer YOUR_MIGRATION_TOKEN"
+ * 
+ * Set MIGRATION_TOKEN in Vercel environment variables for security.
  */
 
 import { prisma } from "@/lib/prisma";
+import { readFileSync } from "fs";
+import { join } from "path";
 
-export async function GET(req) {
-  // Basic security check - you can add more if needed
+export async function POST(req) {
+  // Security check
   const authHeader = req.headers.get("authorization");
-  const expectedToken = process.env.MIGRATION_TOKEN || "temporary-migration-token-change-me";
+  const expectedToken = process.env.MIGRATION_TOKEN;
+  
+  if (!expectedToken) {
+    return Response.json(
+      { error: "MIGRATION_TOKEN not configured. Set it in Vercel environment variables." },
+      { status: 500 }
+    );
+  }
   
   if (authHeader !== `Bearer ${expectedToken}`) {
     return Response.json(
-      { error: "Unauthorized. Set MIGRATION_TOKEN env var and use: Authorization: Bearer <token>" },
+      { error: "Unauthorized. Use: Authorization: Bearer <MIGRATION_TOKEN>" },
       { status: 401 }
     );
   }
 
   try {
-    // Check current schema
-    const result = await prisma.$queryRaw`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'sites' 
-      AND column_name IN ('isVerified', 'verificationToken', 'verifiedAt')
-    `;
+    const results = [];
+    
+    // Apply pending migrations by running their SQL
+    // Check which migrations need to be applied
+    const migrationDirs = [
+      "20260124130000_add_last_seen_at",
+      "20260124140000_add_trial_support",
+      "20260124150000_add_razorpay_subscription_fields",
+    ];
 
-    const existingColumns = result.map((r) => r.column_name);
-    const missingColumns = ['isVerified', 'verificationToken', 'verifiedAt'].filter(
-      col => !existingColumns.includes(col)
-    );
-
-    if (missingColumns.length === 0) {
-      return Response.json({
-        success: true,
-        message: "All columns already exist",
-        existingColumns,
-      });
+    for (const migrationDir of migrationDirs) {
+      try {
+        const migrationPath = join(process.cwd(), "prisma", "migrations", migrationDir, "migration.sql");
+        const migrationSQL = readFileSync(migrationPath, "utf-8");
+        
+        // Execute migration SQL
+        await prisma.$executeRawUnsafe(migrationSQL);
+        results.push({ migration: migrationDir, status: "applied" });
+      } catch (error) {
+        // Migration might already be applied or file doesn't exist
+        if (error.code === "ENOENT") {
+          results.push({ migration: migrationDir, status: "skipped", reason: "File not found" });
+        } else if (error.message?.includes("already exists") || error.message?.includes("duplicate")) {
+          results.push({ migration: migrationDir, status: "already_applied" });
+        } else {
+          results.push({ migration: migrationDir, status: "error", error: error.message });
+        }
+      }
     }
-
-    // Run migration SQL
-    await prisma.$executeRawUnsafe(`
-      DO $$
-      BEGIN
-          IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                         WHERE table_name='sites' AND column_name='isVerified') THEN
-              ALTER TABLE "sites" ADD COLUMN "isVerified" BOOLEAN NOT NULL DEFAULT false;
-          END IF;
-
-          IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                         WHERE table_name='sites' AND column_name='verificationToken') THEN
-              ALTER TABLE "sites" ADD COLUMN "verificationToken" TEXT;
-          END IF;
-
-          IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                         WHERE table_name='sites' AND column_name='verifiedAt') THEN
-              ALTER TABLE "sites" ADD COLUMN "verifiedAt" TIMESTAMP(3);
-          END IF;
-      END $$;
-    `);
-
-    // Generate tokens for existing sites
-    await prisma.$executeRawUnsafe(`
-      UPDATE "sites" 
-      SET "verificationToken" = 'cm_' || EXTRACT(EPOCH FROM NOW())::TEXT || '_' || SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 13) 
-      WHERE "verificationToken" IS NULL;
-    `);
-
+    
     return Response.json({
       success: true,
-      message: "Migration completed successfully",
-      addedColumns: missingColumns,
+      message: "Migrations processed",
+      results,
     });
   } catch (error) {
     console.error("Migration error:", error);
@@ -86,9 +76,16 @@ export async function GET(req) {
       {
         success: false,
         error: error.message,
-        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
       },
       { status: 500 }
     );
   }
+}
+
+export async function GET(req) {
+  return Response.json({
+    message: "Migration endpoint",
+    usage: "POST to this endpoint with Authorization: Bearer <MIGRATION_TOKEN>",
+    note: "Set MIGRATION_TOKEN in Vercel environment variables",
+  });
 }
