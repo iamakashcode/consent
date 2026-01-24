@@ -8,28 +8,38 @@ export const razorpay = new Razorpay({
 
 // Plan pricing (in paise - 1 INR = 100 paise)
 export const PLAN_PRICING = {
-  free: 0,
+  basic: 500, // ₹5 = 500 paise
   starter: 900, // ₹9 = 900 paise
-  pro: 2900, // ₹29 = 2900 paise
+  pro: 2000, // ₹20 = 2000 paise
+};
+
+// Trial period in days (only for basic plan)
+export const PLAN_TRIAL_DAYS = {
+  basic: 7,
+  starter: 0,
+  pro: 0,
 };
 
 // Plan details
 export const PLAN_DETAILS = {
-  free: {
-    name: "Free",
-    price: 0,
+  basic: {
+    name: "Basic",
+    price: 5,
     sites: 1,
+    trialDays: 7,
     features: [
       "1 website",
       "Basic tracker detection",
       "Cookie consent banner",
       "Community support",
+      "7-day free trial",
     ],
   },
   starter: {
     name: "Starter",
     price: 9,
     sites: 5,
+    trialDays: 0,
     features: [
       "5 websites",
       "Advanced tracker detection",
@@ -40,8 +50,9 @@ export const PLAN_DETAILS = {
   },
   pro: {
     name: "Pro",
-    price: 29,
+    price: 20,
     sites: Infinity,
+    trialDays: 0,
     features: [
       "Unlimited websites",
       "All tracker types",
@@ -67,6 +78,48 @@ export async function createRazorpayOrder(amount, currency = "INR") {
     return order;
   } catch (error) {
     console.error("Razorpay order creation error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Create Razorpay subscription for recurring payments
+ */
+export async function createRazorpaySubscription(planId, customerId, amount, currency = "INR") {
+  try {
+    // Create a subscription plan first (if not exists)
+    // For now, we'll create a subscription directly
+    const subscription = await razorpay.subscriptions.create({
+      plan_id: planId, // Plan ID from Razorpay (needs to be created in Razorpay dashboard)
+      customer_notify: 1,
+      total_count: 12, // 12 months
+      start_at: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60), // Start after 7 days (trial end)
+    });
+    return subscription;
+  } catch (error) {
+    console.error("Razorpay subscription creation error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Create a Razorpay plan (one-time setup, can be done manually in dashboard)
+ */
+export async function createRazorpayPlan(planName, amount, interval = "monthly") {
+  try {
+    const plan = await razorpay.plans.create({
+      period: interval === "monthly" ? "monthly" : "yearly",
+      interval: 1,
+      item: {
+        name: `${planName} Plan`,
+        amount: amount, // in paise
+        currency: "INR",
+        description: `Subscription for ${planName} plan`,
+      },
+    });
+    return plan;
+  } catch (error) {
+    console.error("Razorpay plan creation error:", error);
     throw error;
   }
 }

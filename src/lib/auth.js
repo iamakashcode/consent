@@ -20,7 +20,7 @@ export async function createUser(email, password, name) {
         name,
         subscription: {
           create: {
-            plan: 'free',
+            plan: 'basic',
             status: 'active',
           },
         },

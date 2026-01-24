@@ -103,7 +103,7 @@ export default function BannerPage() {
     return null;
   }
 
-  const currentPlan = session.user?.plan || "free";
+  const currentPlan = session.user?.plan || "basic";
   const hasBannerAccess = currentPlan === "starter" || currentPlan === "pro";
 
   if (!hasBannerAccess) {

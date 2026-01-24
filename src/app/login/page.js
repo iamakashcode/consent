@@ -1,16 +1,36 @@
 "use client";
 
-import { useState } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { signIn, useSession } from "next-auth/react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { data: session } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  
+  // Check if user just registered and needs to select a plan
+  useEffect(() => {
+    if (session?.user) {
+      const redirect = searchParams?.get("redirect");
+      if (redirect) {
+        router.push(redirect);
+      } else {
+        // Check if user has a plan, if not redirect to plans
+        const plan = session.user?.plan || "basic";
+        if (plan === "basic" && !session.user?.hasActiveSubscription) {
+          router.push("/plans");
+        } else {
+          router.push("/dashboard");
+        }
+      }
+    }
+  }, [session, router, searchParams]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -27,7 +47,13 @@ export default function LoginPage() {
       if (result?.error) {
         setError("Invalid email or password");
       } else {
-        router.push("/dashboard");
+        // Check redirect parameter
+        const redirect = searchParams?.get("redirect");
+        if (redirect) {
+          router.push(redirect);
+        } else {
+          router.push("/dashboard");
+        }
         router.refresh();
       }
     } catch (err) {
@@ -107,5 +133,17 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-lg">Loading...</div>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }

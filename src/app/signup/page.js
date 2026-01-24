@@ -31,7 +31,8 @@ export default function SignupPage() {
       if (!response.ok) {
         setError(data.error || "An error occurred");
       } else {
-        router.push("/login?registered=true");
+        // Redirect to login first, then auto-redirect to plans after login
+        router.push("/login?registered=true&redirect=/plans");
       }
     } catch (err) {
       setError("An error occurred. Please try again.");

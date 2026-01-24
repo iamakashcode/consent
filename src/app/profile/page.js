@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { getRemainingTrialDays, isTrialActive, formatTrialEndDate } from "@/lib/trial-utils";
 
 export default function ProfilePage() {
   const { data: session, status, update } = useSession();
@@ -14,6 +15,7 @@ export default function ProfilePage() {
   const [verifyingId, setVerifyingId] = useState(null);
   const [verificationStatus, setVerificationStatus] = useState({});
   const [siteStats, setSiteStats] = useState({}); // Store stats for each site
+  const [subscription, setSubscription] = useState(null); // Subscription details with trial info
   const hasRefreshed = useRef(false);
 
   useEffect(() => {
@@ -29,10 +31,24 @@ export default function ProfilePage() {
       hasRefreshed.current = true;
       update();
       fetchSites();
+      fetchSubscription();
     } else if (session) {
       fetchSites();
+      fetchSubscription();
     }
   }, [session]);
+
+  const fetchSubscription = async () => {
+    try {
+      const response = await fetch("/api/subscription");
+      if (response.ok) {
+        const data = await response.json();
+        setSubscription(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch subscription:", err);
+    }
+  };
 
   const fetchSites = async () => {
     try {
@@ -193,12 +209,12 @@ export default function ProfilePage() {
   }
 
   const planLimits = {
-    free: 1,
+    basic: 1,
     starter: 5,
     pro: Infinity,
   };
 
-  const currentPlan = session.user?.plan || "free";
+  const currentPlan = session.user?.plan || "basic";
   const siteLimit = planLimits[currentPlan] || 1;
   const sitesUsed = sites.length;
 
@@ -218,6 +234,33 @@ export default function ProfilePage() {
               <div className="inline-block bg-indigo-100 text-indigo-800 px-4 py-2 rounded-lg font-semibold mb-2">
                 {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Plan
               </div>
+              {/* Trial Countdown */}
+              {subscription && subscription.plan === "basic" && subscription.trialEndAt && isTrialActive(subscription.trialEndAt) && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-left">
+                  <p className="text-sm font-semibold text-blue-900 mb-1">
+                    🎉 Free Trial Active
+                  </p>
+                  <p className="text-xs text-blue-700">
+                    {getRemainingTrialDays(subscription.trialEndAt)} day{getRemainingTrialDays(subscription.trialEndAt) !== 1 ? 's' : ''} remaining
+                  </p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    Trial ends: {formatTrialEndDate(subscription.trialEndAt)}
+                  </p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    Payment of ₹5 will be deducted automatically after trial ends.
+                  </p>
+                </div>
+              )}
+              {subscription && subscription.plan === "basic" && subscription.trialEndAt && !isTrialActive(subscription.trialEndAt) && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3 text-left">
+                  <p className="text-sm font-semibold text-yellow-900 mb-1">
+                    ⚠️ Trial Expired
+                  </p>
+                  <p className="text-xs text-yellow-700">
+                    Please complete payment to continue using the service.
+                  </p>
+                </div>
+              )}
               <p className="text-sm text-gray-600 mb-3">
                 {sitesUsed} / {siteLimit === Infinity ? "∞" : siteLimit} sites
               </p>

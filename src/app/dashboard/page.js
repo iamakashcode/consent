@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { getRemainingTrialDays, isTrialActive, formatTrialEndDate } from "@/lib/trial-utils";
 
 export default function DashboardPage() {
   const { data: session, status, update } = useSession();
@@ -14,6 +15,7 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [sites, setSites] = useState([]);
   const [verifyingId, setVerifyingId] = useState(null);
+  const [subscription, setSubscription] = useState(null);
   const hasRefreshed = useRef(false);
 
   useEffect(() => {
@@ -29,10 +31,24 @@ export default function DashboardPage() {
       hasRefreshed.current = true;
       update();
       fetchSites();
+      fetchSubscription();
     } else if (session) {
       fetchSites();
+      fetchSubscription();
     }
   }, [session]);
+
+  const fetchSubscription = async () => {
+    try {
+      const response = await fetch("/api/subscription");
+      if (response.ok) {
+        const data = await response.json();
+        setSubscription(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch subscription:", err);
+    }
+  };
 
   const fetchSites = async () => {
     try {
@@ -166,6 +182,51 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gray-50">
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-12">
+        {/* Trial Countdown Banner */}
+        {subscription && subscription.plan === "basic" && subscription.trialEndAt && isTrialActive(subscription.trialEndAt) && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-blue-900 mb-1">
+                  🎉 Free Trial Active
+                </p>
+                <p className="text-xs text-blue-700">
+                  {getRemainingTrialDays(subscription.trialEndAt)} day{getRemainingTrialDays(subscription.trialEndAt) !== 1 ? 's' : ''} remaining • Trial ends: {formatTrialEndDate(subscription.trialEndAt)}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  Payment of ₹5 will be deducted automatically after trial ends.
+                </p>
+              </div>
+              <Link
+                href="/plans"
+                className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+              >
+                View Plans
+              </Link>
+            </div>
+          </div>
+        )}
+        {subscription && subscription.plan === "basic" && subscription.trialEndAt && !isTrialActive(subscription.trialEndAt) && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-yellow-900 mb-1">
+                  ⚠️ Trial Expired
+                </p>
+                <p className="text-xs text-yellow-700">
+                  Please complete payment to continue using the service.
+                </p>
+              </div>
+              <Link
+                href="/plans"
+                className="text-xs bg-yellow-600 text-white px-3 py-1.5 rounded-lg hover:bg-yellow-700 transition-colors font-semibold"
+              >
+                Complete Payment
+              </Link>
+            </div>
+          </div>
+        )}
+        
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">
             Add New Domain

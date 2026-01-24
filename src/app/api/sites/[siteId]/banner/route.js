@@ -52,8 +52,8 @@ export async function PUT(req, { params }) {
       include: { subscription: true },
     });
 
-    const plan = user.subscription?.plan || "free";
-    if (plan === "free") {
+    const plan = user.subscription?.plan || "basic";
+    if (plan === "basic") {
       return Response.json(
         { error: "Banner customization is available for Starter and Pro plans only" },
         { status: 403 }

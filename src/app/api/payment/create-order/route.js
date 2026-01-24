@@ -1,7 +1,8 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
-import { createRazorpayOrder, PLAN_PRICING, razorpay } from "@/lib/razorpay";
+import { createRazorpayOrder, PLAN_PRICING, PLAN_TRIAL_DAYS, razorpay } from "@/lib/razorpay";
 import { prisma } from "@/lib/prisma";
+import { calculateTrialEndDate } from "@/lib/subscription";
 
 export async function POST(req) {
   try {
@@ -13,9 +14,9 @@ export async function POST(req) {
 
     const { plan } = await req.json();
 
-    if (!plan || !["starter", "pro"].includes(plan)) {
+    if (!plan || !["basic", "starter", "pro"].includes(plan)) {
       return Response.json(
-        { error: "Invalid plan. Choose 'starter' or 'pro'" },
+        { error: "Invalid plan. Choose 'basic', 'starter', or 'pro'" },
         { status: 400 }
       );
     }
@@ -34,8 +35,8 @@ export async function POST(req) {
       );
     }
 
-    const currentPlan = user.subscription?.plan || "free";
-    const planHierarchy = { free: 0, starter: 1, pro: 2 };
+    const currentPlan = user.subscription?.plan || "basic";
+    const planHierarchy = { basic: 0, starter: 1, pro: 2 };
     
     console.log("Plan check:", {
       sessionPlan: session.user?.plan,
@@ -46,7 +47,7 @@ export async function POST(req) {
     
     if (planHierarchy[currentPlan] >= planHierarchy[plan]) {
       // If session is out of sync, suggest refreshing
-      const sessionPlan = session.user?.plan || "free";
+      const sessionPlan = session.user?.plan || "basic";
       if (sessionPlan !== currentPlan) {
         return Response.json(
           { 
@@ -65,6 +66,52 @@ export async function POST(req) {
     }
 
     const amount = PLAN_PRICING[plan];
+    const trialDays = PLAN_TRIAL_DAYS[plan] || 0;
+    
+    // For basic plan with trial, start trial without payment
+    // Set up subscription for automatic payment after trial
+    if (plan === "basic" && trialDays > 0) {
+      const trialEndAt = calculateTrialEndDate(plan);
+      
+      // Create a Razorpay plan for recurring payments (if not exists)
+      // Note: In production, create these plans in Razorpay dashboard
+      let razorpayPlanId = process.env.RAZORPAY_BASIC_PLAN_ID; // Set this in .env
+      
+      // If no plan ID, we'll use one-time payment for now
+      // In production, create plans in Razorpay dashboard and store IDs
+      
+      // Update subscription to start trial
+      await prisma.subscription.upsert({
+        where: { userId: session.user.id },
+        create: {
+          userId: session.user.id,
+          plan: "basic",
+          status: "active",
+          trialEndAt: trialEndAt,
+          currentPeriodStart: new Date(),
+          // Set period end to trial end (will be extended after payment)
+          currentPeriodEnd: trialEndAt,
+          razorpayPlanId: razorpayPlanId || null,
+        },
+        update: {
+          plan: "basic",
+          status: "active",
+          trialEndAt: trialEndAt,
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: trialEndAt,
+          cancelAtPeriodEnd: false,
+          razorpayPlanId: razorpayPlanId || null,
+        },
+      });
+
+      return Response.json({
+        success: true,
+        trial: true,
+        trialDays: trialDays,
+        trialEndAt: trialEndAt.toISOString(),
+        message: `Your ${trialDays}-day free trial has started! Payment will be automatically deducted after the trial period.`,
+      });
+    }
     
     if (amount === 0) {
       return Response.json({ error: "Invalid plan" }, { status: 400 });
@@ -108,7 +155,7 @@ export async function POST(req) {
       where: { userId: session.user.id },
       create: {
         userId: session.user.id,
-        plan: "free", // Will update after payment
+        plan: "basic", // Will update after payment
         status: "active",
         razorpayOrderId: order.id,
       },

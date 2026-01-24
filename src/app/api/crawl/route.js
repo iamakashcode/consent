@@ -42,14 +42,14 @@ export async function POST(req) {
       return Response.json({ error: "User not found" }, { status: 404 });
     }
 
-    const plan = user.subscription?.plan || "free";
+    const plan = user.subscription?.plan || "basic";
     const siteCount = await prisma.site.count({
       where: { userId },
     });
 
     // Check limits based on plan
     const limits = {
-      free: 1,
+      basic: 1,
       starter: 5,
       pro: Infinity,
     };

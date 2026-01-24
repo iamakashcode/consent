@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { hasVerificationColumns, hasBannerConfigColumn } from "@/lib/db-utils";
+import { isSubscriptionActive } from "@/lib/subscription";
 
 /**
  * Verification callback endpoint - called by the consent script when it loads
@@ -126,6 +127,25 @@ export async function GET(req, { params }) {
         error: "Site not found" 
       }), {
         status: 404,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
+    }
+
+    // Check subscription status - block if inactive
+    const subscriptionStatus = await isSubscriptionActive(site.userId);
+    if (!subscriptionStatus.isActive) {
+      console.warn(`[Verify Callback] Subscription inactive for user ${site.userId}: ${subscriptionStatus.reason}`);
+      return new Response(JSON.stringify({ 
+        connected: false,
+        error: "Subscription inactive",
+        message: `Your subscription is inactive: ${subscriptionStatus.reason}. Please renew to continue.`,
+      }), {
+        status: 403,
         headers: {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",

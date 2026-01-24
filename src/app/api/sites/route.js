@@ -106,6 +106,15 @@ export async function GET(req) {
       // If columns don't exist yet, fetch without them and add defaults
       console.warn("Error fetching sites, trying fallback:", error.message);
       try {
+        // Re-check hasLastSeenAt in fallback (might have failed due to column not existing)
+        const hasLastSeenAtFallback = await prisma.$queryRaw`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'sites' 
+          AND column_name = 'lastSeenAt'
+          LIMIT 1
+        `.then(result => Array.isArray(result) && result.length > 0).catch(() => false);
+
         sites = await prisma.site.findMany({
           where: { userId: session.user.id },
           orderBy: { createdAt: "desc" },
@@ -115,7 +124,7 @@ export async function GET(req) {
             siteId: true,
             trackers: true,
             ...(bannerConfigExists ? { bannerConfig: true } : {}),
-            ...(hasLastSeenAt ? { lastSeenAt: true } : {}),
+            ...(hasLastSeenAtFallback ? { lastSeenAt: true } : {}),
             createdAt: true,
             updatedAt: true,
           },
@@ -135,7 +144,7 @@ export async function GET(req) {
         });
         
         // Check lastSeenAt for fallback sites too
-        if (hasLastSeenAt) {
+        if (hasLastSeenAtFallback) {
           const now = new Date();
           sites = sites.map(site => {
             if (site.isVerified && site.lastSeenAt) {
@@ -160,10 +169,18 @@ export async function GET(req) {
     return Response.json(sites);
   } catch (error) {
     console.error("Error fetching sites:", error);
+    // Get session again in catch block to avoid scope issues
+    let userId = null;
+    try {
+      const session = await getServerSession(authOptions);
+      userId = session?.user?.id;
+    } catch (sessionError) {
+      // Ignore session errors in error handler
+    }
     console.error("Error details:", {
       message: error.message,
       stack: error.stack,
-      userId: session?.user?.id,
+      userId: userId,
     });
     return Response.json(
       { 

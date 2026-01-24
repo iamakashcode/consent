@@ -5,17 +5,18 @@ import { useSession } from "next-auth/react";
 
 const plans = [
   {
-    name: "Free",
-    price: "$0",
-    period: "forever",
+    name: "Basic",
+    price: "₹5",
+    period: "per month",
     description: "Perfect for getting started",
     features: [
       "1 website",
       "Basic tracker detection",
       "Cookie consent banner",
       "Community support",
+      "7-day free trial",
     ],
-    cta: "Get Started",
+    cta: "Start Free Trial",
     popular: false,
   },
   {
@@ -35,7 +36,7 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "₹29",
+    price: "₹20",
     period: "per month",
     description: "For agencies and enterprises",
     features: [
@@ -115,7 +116,7 @@ export default function Pricing() {
                 ))}
               </ul>
 
-              {plan.name === "Free" ? (
+              {plan.name === "Basic" ? (
                 <Link
                   href={session ? "/plans" : "/signup"}
                   className={`block w-full text-center py-3 px-6 rounded-lg font-semibold transition-colors ${

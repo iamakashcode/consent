@@ -23,7 +23,7 @@ function PaymentContent() {
   }, [status, router]);
 
   useEffect(() => {
-    if (session && plan && ["starter", "pro"].includes(plan) && !orderData) {
+    if (session && plan && ["basic", "starter", "pro"].includes(plan) && !orderData) {
       createOrder();
     }
   }, [session, plan]);
@@ -51,6 +51,12 @@ function PaymentContent() {
           return;
         }
         throw new Error(data.error || "Failed to create order");
+      }
+
+      // If basic plan with trial, show success message
+      if (data.trial && data.success) {
+        setOrderData({ trial: true, ...data });
+        return;
       }
 
       setOrderData(data);
@@ -159,13 +165,15 @@ function PaymentContent() {
   }
 
   const planNames = {
+    basic: "Basic",
     starter: "Starter",
     pro: "Pro",
   };
 
   const planPrices = {
+    basic: "₹5",
     starter: "₹9",
-    pro: "₹29",
+    pro: "₹20",
   };
 
   return (
@@ -192,7 +200,35 @@ function PaymentContent() {
               </div>
             )}
 
-            {orderData && (
+            {orderData && orderData.trial ? (
+              <div className="space-y-6">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                  <div className="mb-4">
+                    <svg className="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <h2 className="text-2xl font-bold text-green-900 mb-2">
+                    Free Trial Started!
+                  </h2>
+                  <p className="text-green-800 mb-4">
+                    Your {orderData.trialDays}-day free trial for the {planNames[plan]} plan has started.
+                  </p>
+                  <p className="text-sm text-green-700 mb-4">
+                    Trial ends on: {new Date(orderData.trialEndAt).toLocaleDateString()}
+                  </p>
+                  <p className="text-sm text-green-600">
+                    Payment of {planPrices[plan]} will be automatically deducted after the trial period ends.
+                  </p>
+                </div>
+                <Link
+                  href="/profile"
+                  className="block w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors text-center"
+                >
+                  Go to Profile
+                </Link>
+              </div>
+            ) : orderData && (
               <div className="space-y-6">
                 <div className="bg-gray-50 rounded-lg p-6">
                   <div className="flex justify-between items-center mb-4">

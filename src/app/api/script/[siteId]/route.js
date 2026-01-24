@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES } from "@/lib/banner-templates";
 import { hasVerificationColumns } from "@/lib/db-utils";
+import { isSubscriptionActive } from "@/lib/subscription";
 
 export async function GET(req, { params }) {
   try {
@@ -17,6 +18,7 @@ export async function GET(req, { params }) {
     let bannerConfig = null;
     let siteVerified = false;
     let allowedDomain = null;
+    let userId = null;
     if (siteId) {
       const verificationColumns = await hasVerificationColumns();
       try {
@@ -25,6 +27,7 @@ export async function GET(req, { params }) {
           select: {
             domain: true,
             bannerConfig: true,
+            userId: true,
             ...(verificationColumns.allExist ? { isVerified: true } : {}),
           },
         });
@@ -33,6 +36,7 @@ export async function GET(req, { params }) {
             domain = site.domain;
           }
           bannerConfig = site.bannerConfig;
+          userId = site.userId;
 
           // If verification columns exist, use them; else fallback to bannerConfig._verification
           if (verificationColumns.allExist) {
@@ -53,6 +57,7 @@ export async function GET(req, { params }) {
         if (site) {
           if (!domain) domain = site.domain;
           bannerConfig = site.bannerConfig;
+          userId = site.userId;
           const v = site?.bannerConfig?._verification;
           siteVerified = (v && v.isVerified) || false;
           allowedDomain = site.domain;
@@ -75,6 +80,28 @@ export async function GET(req, { params }) {
     // Fallback: use wildcard if no domain found
     if (!domain) {
       domain = "*";
+    }
+
+    // Check subscription status - block script if subscription is inactive
+    if (userId) {
+      const subscriptionStatus = await isSubscriptionActive(userId);
+      if (!subscriptionStatus.isActive) {
+        console.warn(`[Script] Subscription inactive for user ${userId}: ${subscriptionStatus.reason}`);
+        // Return a blocked script that shows a message
+        const blockedScript = `(function(){
+console.error('[Consent SDK] Access denied: Subscription inactive. ${subscriptionStatus.reason}');
+if(typeof window!=='undefined'&&window.console){
+window.console.error('[Consent SDK] Please renew your subscription to continue using the consent script.');
+}
+})();`;
+        return new Response(blockedScript, {
+          headers: {
+            "Content-Type": "application/javascript; charset=utf-8",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
     }
     
     // Generate siteId for consent key (use provided siteId or generate from domain)

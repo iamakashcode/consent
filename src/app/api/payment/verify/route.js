@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
 import { verifyPaymentSignature, razorpay } from "@/lib/razorpay";
 import { prisma } from "@/lib/prisma";
+import { calculateTrialEndDate } from "@/lib/subscription";
 
 export async function POST(req) {
   try {
@@ -123,6 +124,20 @@ export async function POST(req) {
     const periodEnd = new Date();
     periodEnd.setMonth(periodEnd.getMonth() + 1); // 1 month subscription
 
+    // For basic plan, if trial just ended, extend from now
+    // Otherwise, if upgrading from trial, start payment period from now
+    const existingSubscription = await prisma.subscription.findUnique({
+      where: { userId: session.user.id },
+    });
+
+    let trialEndAt = existingSubscription?.trialEndAt;
+    
+    // If basic plan and trial hasn't ended yet, keep trialEndAt
+    // If trial has ended or this is a new subscription, set trial end
+    if (plan === "basic" && !trialEndAt) {
+      trialEndAt = calculateTrialEndDate(plan);
+    }
+
     await prisma.subscription.update({
       where: { userId: session.user.id },
       data: {
@@ -130,6 +145,7 @@ export async function POST(req) {
         status: "active",
         currentPeriodStart: now,
         currentPeriodEnd: periodEnd,
+        trialEndAt: plan === "basic" ? trialEndAt : null, // Only basic plan has trial
         razorpayPaymentId: paymentId,
         razorpaySignature: signature,
         cancelAtPeriodEnd: false,

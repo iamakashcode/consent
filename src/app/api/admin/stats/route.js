@@ -67,7 +67,7 @@ export async function GET(req) {
 
     // Calculate plan distribution
     const planDistribution = {
-      free: 0,
+      basic: 0,
       starter: 0,
       pro: 0,
     };

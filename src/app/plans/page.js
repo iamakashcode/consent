@@ -6,10 +6,10 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 
 const PLAN_DETAILS = {
-  free: {
-    name: "Free",
-    price: "₹0",
-    period: "forever",
+  basic: {
+    name: "Basic",
+    price: "₹5",
+    period: "per month",
     description: "Perfect for getting started",
     sites: 1,
     features: [
@@ -17,6 +17,7 @@ const PLAN_DETAILS = {
       "Basic tracker detection",
       "Cookie consent banner",
       "Community support",
+      "7-day free trial",
     ],
     popular: false,
   },
@@ -37,7 +38,7 @@ const PLAN_DETAILS = {
   },
   pro: {
     name: "Pro",
-    price: "₹29",
+    price: "₹20",
     period: "per month",
     description: "For agencies and enterprises",
     sites: Infinity,
@@ -53,7 +54,7 @@ const PLAN_DETAILS = {
   },
 };
 
-const planHierarchy = { free: 0, starter: 1, pro: 2 };
+const planHierarchy = { basic: 0, starter: 1, pro: 2 };
 
 export default function PlansPage() {
   const { data: session, status } = useSession();
@@ -78,7 +79,11 @@ export default function PlansPage() {
     return null;
   }
 
-  const currentPlan = session.user?.plan || "free";
+  // Map legacy "free" plan to "basic"
+  let currentPlan = session.user?.plan || "basic";
+  if (currentPlan === "free") {
+    currentPlan = "basic";
+  }
   const currentPlanLevel = planHierarchy[currentPlan] || 0;
 
   const handlePlanSelect = async (selectedPlan) => {
@@ -97,8 +102,8 @@ export default function PlansPage() {
       return;
     }
 
-    // If selecting free plan (shouldn't happen, but handle it)
-    if (selectedPlan === "free") {
+    // If selecting basic plan (shouldn't happen, but handle it)
+    if (selectedPlan === "basic") {
       return;
     }
 
@@ -119,7 +124,7 @@ export default function PlansPage() {
             Select the plan that best fits your needs
           </p>
           <p className="text-sm text-gray-500 mt-2">
-            Current Plan: <span className="font-semibold text-indigo-600">{PLAN_DETAILS[currentPlan].name}</span>
+            Current Plan: <span className="font-semibold text-indigo-600">{PLAN_DETAILS[currentPlan]?.name || currentPlan || "Basic"}</span>
           </p>
         </div>
 
@@ -219,7 +224,7 @@ export default function PlansPage() {
                         : "bg-gray-100 text-gray-900 hover:bg-gray-200"
                     }`}
                   >
-                    {planKey === "free" ? "Select Free" : `Upgrade to ${plan.name}`}
+                    {planKey === "basic" ? "Select Basic" : `Upgrade to ${plan.name}`}
                   </button>
                 )}
               </div>
@@ -239,7 +244,7 @@ export default function PlansPage() {
                     Feature
                   </th>
                   <th className="text-center py-3 px-4 font-semibold text-gray-900">
-                    Free
+                    Basic
                   </th>
                   <th className="text-center py-3 px-4 font-semibold text-gray-900">
                     Starter

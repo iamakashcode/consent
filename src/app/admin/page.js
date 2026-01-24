@@ -214,7 +214,7 @@ export default function AdminDashboard() {
               <div className="bg-white rounded-lg shadow p-6">
                 <div className="text-sm font-medium text-gray-500">Active Plans</div>
                 <div className="mt-2 text-sm space-y-1">
-                  <div>Free: {stats.planDistribution.free || 0}</div>
+                  <div>Basic: {stats.planDistribution.basic || 0}</div>
                   <div>Starter: {stats.planDistribution.starter || 0}</div>
                   <div>Pro: {stats.planDistribution.pro || 0}</div>
                 </div>
@@ -243,7 +243,7 @@ export default function AdminDashboard() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.name || "-"}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <span className="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
-                            {user.subscription?.plan || "free"}
+                            {user.subscription?.plan || "basic"}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -314,11 +314,11 @@ export default function AdminDashboard() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.name || "-"}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <select
-                          value={user.subscription?.plan || "free"}
+                          value={user.subscription?.plan || "basic"}
                           onChange={(e) => handleUpdateUser(user.id, { plan: e.target.value })}
                           className="text-xs border border-gray-300 rounded px-2 py-1"
                         >
-                          <option value="free">Free</option>
+                          <option value="basic">Basic</option>
                           <option value="starter">Starter</option>
                           <option value="pro">Pro</option>
                         </select>
@@ -398,7 +398,7 @@ export default function AdminDashboard() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <span className="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
-                          {site.user.subscription?.plan || "free"}
+                          {site.user.subscription?.plan || "basic"}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

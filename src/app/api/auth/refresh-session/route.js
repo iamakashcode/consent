@@ -29,7 +29,7 @@ export async function POST(req) {
         id: user.id,
         email: user.email,
         name: user.name,
-        plan: user.subscription?.plan || "free",
+        plan: user.subscription?.plan || "basic",
         isAdmin: user.isAdmin || false,
       },
     });
