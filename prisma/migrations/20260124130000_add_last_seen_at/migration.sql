@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "sites" ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMP(3);

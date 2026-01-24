@@ -188,27 +188,51 @@ export async function GET(req, { params }) {
     });
     }
 
-    // Mark as verified
+    // Mark as verified and update lastSeenAt
     console.log(`[Verify Callback] Marking domain as connected...`);
+    
+    // Check if lastSeenAt column exists
+    const hasLastSeenAt = await prisma.$queryRaw`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'sites' 
+      AND column_name = 'lastSeenAt'
+      LIMIT 1
+    `.then(result => Array.isArray(result) && result.length > 0).catch(() => false);
+    
     if (verificationColumns.allExist) {
       try {
+        const updateData = {
+          isVerified: true,
+          verifiedAt: new Date(),
+        };
+        if (hasLastSeenAt) {
+          updateData.lastSeenAt = new Date();
+        }
         const updateResult = await prisma.site.update({
           where: { id: site.id },
-          data: {
-            isVerified: true,
-            verifiedAt: new Date(),
-          },
+          data: updateData,
         });
         console.log(`[Verify Callback] ✓ Successfully updated isVerified to true via Prisma`);
       } catch (updateError) {
         console.warn("[Verify Callback] Prisma update failed, using raw SQL:", updateError.message);
         try {
-          await prisma.$executeRaw`
-            UPDATE "sites"
-            SET "isVerified" = true,
-                "verifiedAt" = NOW()
-            WHERE "id" = ${site.id}
-          `;
+          if (hasLastSeenAt) {
+            await prisma.$executeRaw`
+              UPDATE "sites"
+              SET "isVerified" = true,
+                  "verifiedAt" = NOW(),
+                  "lastSeenAt" = NOW()
+              WHERE "id" = ${site.id}
+            `;
+          } else {
+            await prisma.$executeRaw`
+              UPDATE "sites"
+              SET "isVerified" = true,
+                  "verifiedAt" = NOW()
+              WHERE "id" = ${site.id}
+            `;
+          }
           console.log(`[Verify Callback] ✓ Successfully updated isVerified to true via raw SQL`);
         } catch (rawSqlError) {
           console.error(`[Verify Callback] ✗ Raw SQL update also failed:`, rawSqlError.message);
@@ -225,12 +249,23 @@ export async function GET(req, { params }) {
           verifiedAt: new Date().toISOString(),
         },
       };
-      await prisma.$executeRaw`
-        UPDATE "sites"
-        SET "bannerConfig" = ${JSON.stringify(nextBannerConfig)}::jsonb,
-            "updatedAt" = NOW()
-        WHERE "id" = ${site.id}
-      `;
+      // Update lastSeenAt if column exists
+      if (hasLastSeenAt) {
+        await prisma.$executeRaw`
+          UPDATE "sites"
+          SET "bannerConfig" = ${JSON.stringify(nextBannerConfig)}::jsonb,
+              "updatedAt" = NOW(),
+              "lastSeenAt" = NOW()
+          WHERE "id" = ${site.id}
+        `;
+      } else {
+        await prisma.$executeRaw`
+          UPDATE "sites"
+          SET "bannerConfig" = ${JSON.stringify(nextBannerConfig)}::jsonb,
+              "updatedAt" = NOW()
+          WHERE "id" = ${site.id}
+        `;
+      }
     }
 
     console.log(`[Verify Callback] ✓ Domain connected: ${site.domain} (${requestDomain})`);

@@ -15,6 +15,15 @@ export async function GET(req) {
     const verificationColumns = await hasVerificationColumns();
     const bannerConfigExists = await hasBannerConfigColumn();
     
+    // Check if lastSeenAt column exists
+    const hasLastSeenAt = await prisma.$queryRaw`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'sites' 
+      AND column_name = 'lastSeenAt'
+      LIMIT 1
+    `.then(result => Array.isArray(result) && result.length > 0).catch(() => false);
+    
     let sites;
     try {
       sites = await prisma.site.findMany({
@@ -29,6 +38,7 @@ export async function GET(req) {
           ...(verificationColumns.allExist
             ? { isVerified: true, verificationToken: true, verifiedAt: true }
             : {}),
+          ...(hasLastSeenAt ? { lastSeenAt: true } : {}),
           createdAt: true,
           updatedAt: true,
         },
@@ -49,6 +59,49 @@ export async function GET(req) {
           };
         });
       }
+
+      // Check lastSeenAt and mark as disconnected if inactive for > 48 hours
+      if (hasLastSeenAt) {
+        const now = new Date();
+        sites = sites.map(site => {
+          if (site.isVerified && site.lastSeenAt) {
+            const lastSeen = new Date(site.lastSeenAt);
+            const hoursSinceLastSeen = (now - lastSeen) / (1000 * 60 * 60);
+            
+            if (hoursSinceLastSeen > 48) {
+              console.log(`[Sites API] Site ${site.siteId} inactive for ${hoursSinceLastSeen.toFixed(1)} hours, marking as disconnected`);
+              // Update database
+              prisma.site.update({
+                where: { id: site.id },
+                data: { isVerified: false },
+              }).catch(err => {
+                // Try raw SQL if Prisma fails
+                prisma.$executeRaw`
+                  UPDATE "sites"
+                  SET "isVerified" = false
+                  WHERE "id" = ${site.id}
+                `.catch(console.warn);
+              });
+              return { ...site, isVerified: false };
+            }
+          } else if (site.isVerified && !site.lastSeenAt) {
+            // Verified but never seen - mark as disconnected
+            console.log(`[Sites API] Site ${site.siteId} verified but never seen, marking as disconnected`);
+            prisma.site.update({
+              where: { id: site.id },
+              data: { isVerified: false },
+            }).catch(err => {
+              prisma.$executeRaw`
+                UPDATE "sites"
+                SET "isVerified" = false
+                WHERE "id" = ${site.id}
+              `.catch(console.warn);
+            });
+            return { ...site, isVerified: false };
+          }
+          return site;
+        });
+      }
     } catch (error) {
       // If columns don't exist yet, fetch without them and add defaults
       console.warn("Error fetching sites, trying fallback:", error.message);
@@ -62,6 +115,7 @@ export async function GET(req) {
             siteId: true,
             trackers: true,
             ...(bannerConfigExists ? { bannerConfig: true } : {}),
+            ...(hasLastSeenAt ? { lastSeenAt: true } : {}),
             createdAt: true,
             updatedAt: true,
           },
@@ -79,6 +133,23 @@ export async function GET(req) {
             verifiedAt: verificationFromBanner?.verifiedAt || null,
           };
         });
+        
+        // Check lastSeenAt for fallback sites too
+        if (hasLastSeenAt) {
+          const now = new Date();
+          sites = sites.map(site => {
+            if (site.isVerified && site.lastSeenAt) {
+              const lastSeen = new Date(site.lastSeenAt);
+              const hoursSinceLastSeen = (now - lastSeen) / (1000 * 60 * 60);
+              if (hoursSinceLastSeen > 48) {
+                return { ...site, isVerified: false };
+              }
+            } else if (site.isVerified && !site.lastSeenAt) {
+              return { ...site, isVerified: false };
+            }
+            return site;
+          });
+        }
       } catch (fallbackError) {
         console.error("Fallback fetch also failed:", fallbackError);
         throw fallbackError;

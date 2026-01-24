@@ -223,6 +223,15 @@ export async function GET(req, { params }) {
     const verificationColumns = await hasVerificationColumns();
     const bannerConfigExists = await hasBannerConfigColumn();
 
+    // Check if lastSeenAt column exists
+    const hasLastSeenAt = await prisma.$queryRaw`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'sites' 
+      AND column_name = 'lastSeenAt'
+      LIMIT 1
+    `.then(result => Array.isArray(result) && result.length > 0).catch(() => false);
+
     // Get site from database (avoid selecting columns that may not exist)
     const site = await prisma.site.findUnique({
       where: { siteId },
@@ -234,6 +243,7 @@ export async function GET(req, { params }) {
         ...(verificationColumns.allExist
           ? { isVerified: true, verificationToken: true, verifiedAt: true }
           : {}),
+        ...(hasLastSeenAt ? { lastSeenAt: true } : {}),
       },
     });
 
@@ -265,6 +275,78 @@ export async function GET(req, { params }) {
     let effectiveVerifiedAt = verificationColumns.allExist
       ? site.verifiedAt
       : (verificationFromBanner?.verifiedAt || null);
+
+    // Check if script is still active (lastSeenAt within last 48 hours)
+    // If script hasn't pinged in 48 hours, mark as disconnected
+    if (effectiveIsVerified && hasLastSeenAt && site.lastSeenAt) {
+      const lastSeen = new Date(site.lastSeenAt);
+      const now = new Date();
+      const hoursSinceLastSeen = (now - lastSeen) / (1000 * 60 * 60);
+      
+      if (hoursSinceLastSeen > 48) {
+        console.log(`[Verify GET] Script inactive for ${hoursSinceLastSeen.toFixed(1)} hours, marking as disconnected`);
+        effectiveIsVerified = false;
+        
+        // Update database to reflect disconnected status
+        if (verificationColumns.allExist) {
+          try {
+            await prisma.site.update({
+              where: { id: site.id },
+              data: { isVerified: false },
+            });
+          } catch (updateError) {
+            try {
+              await prisma.$executeRaw`
+                UPDATE "sites"
+                SET "isVerified" = false
+                WHERE "id" = ${site.id}
+              `;
+            } catch (rawSqlError) {
+              console.warn("[Verify GET] Could not update isVerified:", rawSqlError.message);
+            }
+          }
+        } else if (bannerConfigExists) {
+          const nextBannerConfig = {
+            ...(site.bannerConfig || {}),
+            _verification: {
+              ...(verificationFromBanner || {}),
+              token: effectiveToken,
+              isVerified: false,
+              verifiedAt: verificationFromBanner?.verifiedAt || null,
+            },
+          };
+          await prisma.$executeRaw`
+            UPDATE "sites"
+            SET "bannerConfig" = ${JSON.stringify(nextBannerConfig)}::jsonb,
+                "updatedAt" = NOW()
+            WHERE "id" = ${site.id}
+          `;
+        }
+      }
+    } else if (effectiveIsVerified && hasLastSeenAt && !site.lastSeenAt) {
+      // If verified but never seen, mark as disconnected
+      console.log(`[Verify GET] Script verified but never seen, marking as disconnected`);
+      effectiveIsVerified = false;
+      
+      if (verificationColumns.allExist) {
+        try {
+          await prisma.site.update({
+            where: { id: site.id },
+            data: { isVerified: false },
+          });
+        } catch (updateError) {
+          try {
+            await prisma.$executeRaw`
+              UPDATE "sites"
+              SET "isVerified" = false
+              WHERE "id" = ${site.id}
+            `;
+          } catch (rawSqlError) {
+            console.warn("[Verify GET] Could not update isVerified:", rawSqlError.message);
+          }
+        }
+      }
+    }
 
     if (!effectiveToken) {
       // Generate a new token if missing

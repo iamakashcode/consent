@@ -78,7 +78,7 @@ export async function POST(req, { params }) {
     const finalUserAgent = userAgent || req.headers.get("user-agent") || null;
     const finalReferer = referer || req.headers.get("referer") || null;
 
-    // Create page view record
+    // Create page view record and update lastSeenAt
     try {
       await prisma.pageView.create({
         data: {
@@ -89,6 +89,37 @@ export async function POST(req, { params }) {
           referer: finalReferer,
         },
       });
+
+      // Update lastSeenAt to indicate script is still active
+      // Check if lastSeenAt column exists
+      const hasLastSeenAt = await prisma.$queryRaw`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'sites' 
+        AND column_name = 'lastSeenAt'
+        LIMIT 1
+      `.then(result => Array.isArray(result) && result.length > 0).catch(() => false);
+
+      if (hasLastSeenAt) {
+        try {
+          await prisma.site.update({
+            where: { id: site.id },
+            data: { lastSeenAt: new Date() },
+          });
+        } catch (updateError) {
+          // If Prisma update fails, try raw SQL
+          try {
+            await prisma.$executeRaw`
+              UPDATE "sites"
+              SET "lastSeenAt" = NOW()
+              WHERE "id" = ${site.id}
+            `;
+          } catch (rawSqlError) {
+            // Ignore if column doesn't exist yet
+            console.warn("[Track] Could not update lastSeenAt:", rawSqlError.message);
+          }
+        }
+      }
 
       return new Response(
         JSON.stringify({
