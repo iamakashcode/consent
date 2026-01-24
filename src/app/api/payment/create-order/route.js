@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
-import { createRazorpayOrder, PLAN_PRICING, PLAN_TRIAL_DAYS, razorpay } from "@/lib/razorpay";
+import { createRazorpayOrder, PLAN_PRICING, PLAN_TRIAL_DAYS, razorpay, getOrCreateRazorpayPlan, createRazorpaySubscription } from "@/lib/razorpay";
 import { prisma } from "@/lib/prisma";
 import { calculateTrialEndDate } from "@/lib/subscription";
 
@@ -27,6 +27,13 @@ export async function POST(req) {
       where: { id: session.user.id },
       include: { subscription: true },
     });
+    
+    if (!user) {
+      return Response.json(
+        { error: "User not found" },
+        { status: 404 }
+      );
+    }
 
     if (!user) {
       return Response.json(
@@ -91,30 +98,40 @@ export async function POST(req) {
     const amount = PLAN_PRICING[plan];
     const trialDays = PLAN_TRIAL_DAYS[plan] || 0;
     
-    // For basic plan with trial, start trial without payment
-    // Set up subscription for automatic payment after trial
+    // For basic plan with trial, set up Razorpay subscription with trial period
+    // This requires user to add payment method, then Razorpay will auto-charge after trial
     if (plan === "basic" && trialDays > 0) {
       const trialEndAt = calculateTrialEndDate(plan);
       
-      // Create a Razorpay plan for recurring payments (if not exists)
-      // Note: In production, create these plans in Razorpay dashboard
-      let razorpayPlanId = process.env.RAZORPAY_BASIC_PLAN_ID; // Set this in .env
-      
-      // If no plan ID, we'll use one-time payment for now
-      // In production, create plans in Razorpay dashboard and store IDs
-      
-      // Check if subscription already exists with trial
+      // Check if subscription already exists with active trial
       const existingSubscription = await prisma.subscription.findUnique({
         where: { userId: session.user.id },
       });
       
-      // Only create/update if trial hasn't been set up yet, or if trial has expired
-      const shouldSetupTrial = !existingSubscription || 
-                                !existingSubscription.trialEndAt || 
-                                new Date(existingSubscription.trialEndAt) < new Date();
+      // If subscription exists with active trial, return existing info
+      if (existingSubscription && 
+          existingSubscription.trialEndAt && 
+          new Date(existingSubscription.trialEndAt) > new Date() &&
+          existingSubscription.razorpaySubscriptionId) {
+        return Response.json({
+          success: true,
+          trial: true,
+          trialDays: trialDays,
+          trialEndAt: existingSubscription.trialEndAt.toISOString(),
+          subscriptionId: existingSubscription.razorpaySubscriptionId,
+          message: `Your ${trialDays}-day free trial is already active! Payment will be automatically deducted after the trial period.`,
+        });
+      }
       
-      if (shouldSetupTrial) {
-        // Update subscription to start trial
+      // Get or create Razorpay plan for basic
+      const amount = PLAN_PRICING.basic;
+      let razorpayPlan;
+      try {
+        razorpayPlan = await getOrCreateRazorpayPlan("basic", amount, trialDays);
+      } catch (error) {
+        console.error("Failed to get/create Razorpay plan:", error);
+        // Fallback: create subscription in database without Razorpay subscription
+        // User will need to set up payment later
         await prisma.subscription.upsert({
           where: { userId: session.user.id },
           create: {
@@ -123,9 +140,7 @@ export async function POST(req) {
             status: "active",
             trialEndAt: trialEndAt,
             currentPeriodStart: new Date(),
-            // Set period end to trial end (will be extended after payment)
             currentPeriodEnd: trialEndAt,
-            razorpayPlanId: razorpayPlanId || null,
           },
           update: {
             plan: "basic",
@@ -133,27 +148,104 @@ export async function POST(req) {
             trialEndAt: trialEndAt,
             currentPeriodStart: new Date(),
             currentPeriodEnd: trialEndAt,
-            cancelAtPeriodEnd: false,
-            razorpayPlanId: razorpayPlanId || null,
           },
         });
-      } else {
-        // Trial already active, return existing trial info
+        
         return Response.json({
           success: true,
           trial: true,
           trialDays: trialDays,
-          trialEndAt: existingSubscription.trialEndAt.toISOString(),
-          message: `Your ${trialDays}-day free trial is already active! Payment will be automatically deducted after the trial period.`,
+          trialEndAt: trialEndAt.toISOString(),
+          requiresSetup: true,
+          message: `Your ${trialDays}-day free trial has started! Please set up payment method to enable automatic billing after trial.`,
         });
       }
+      
+      // Create Razorpay subscription with trial
+      let razorpaySubscription;
+      try {
+        razorpaySubscription = await createRazorpaySubscription(
+          razorpayPlan.id,
+          {
+            name: user.name || "User",
+            email: user.email,
+            contact: user.phone || undefined,
+          },
+          trialDays
+        );
+        
+        console.log("Created Razorpay subscription:", razorpaySubscription.id);
+      } catch (error) {
+        console.error("Failed to create Razorpay subscription:", error);
+        // Fallback: create subscription in database
+        await prisma.subscription.upsert({
+          where: { userId: session.user.id },
+          create: {
+            userId: session.user.id,
+            plan: "basic",
+            status: "active",
+            trialEndAt: trialEndAt,
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: trialEndAt,
+            razorpayPlanId: razorpayPlan.id,
+          },
+          update: {
+            plan: "basic",
+            status: "active",
+            trialEndAt: trialEndAt,
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: trialEndAt,
+            razorpayPlanId: razorpayPlan.id,
+          },
+        });
+        
+        return Response.json({
+          success: true,
+          trial: true,
+          trialDays: trialDays,
+          trialEndAt: trialEndAt.toISOString(),
+          requiresSetup: true,
+          message: `Your ${trialDays}-day free trial has started! Please set up payment method to enable automatic billing after trial.`,
+        });
+      }
+      
+      // Store subscription in database
+      await prisma.subscription.upsert({
+        where: { userId: session.user.id },
+        create: {
+          userId: session.user.id,
+          plan: "basic",
+          status: "pending", // Will be activated after user adds payment method
+          trialEndAt: trialEndAt,
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: trialEndAt,
+          razorpayPlanId: razorpayPlan.id,
+          razorpaySubscriptionId: razorpaySubscription.id,
+        },
+        update: {
+          plan: "basic",
+          status: "pending",
+          trialEndAt: trialEndAt,
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: trialEndAt,
+          razorpayPlanId: razorpayPlan.id,
+          razorpaySubscriptionId: razorpaySubscription.id,
+        },
+      });
 
+      // Return subscription details for frontend to redirect to Razorpay subscription auth
+      // Razorpay subscription has authenticate_url or short_url for payment method setup
+      const authUrl = razorpaySubscription.authenticate_url || razorpaySubscription.short_url;
+      
       return Response.json({
         success: true,
         trial: true,
         trialDays: trialDays,
         trialEndAt: trialEndAt.toISOString(),
-        message: `Your ${trialDays}-day free trial has started! Payment will be automatically deducted after the trial period.`,
+        subscriptionId: razorpaySubscription.id,
+        subscriptionAuthUrl: authUrl,
+        requiresPaymentSetup: true,
+        message: `Please add a payment method to start your ${trialDays}-day free trial. Payment will be automatically deducted after the trial period.`,
       });
     }
     

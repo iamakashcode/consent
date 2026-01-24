@@ -61,10 +61,29 @@ function PaymentContent() {
         return;
       }
 
-      // If basic plan with trial, show success message
+      // If basic plan with trial, handle subscription setup
       if (data.trial && data.success) {
         // Update session to reflect new plan
         await update();
+        
+        // If payment setup is required, redirect to Razorpay subscription auth URL
+        if (data.requiresPaymentSetup && data.subscriptionAuthUrl) {
+          // Redirect to Razorpay subscription authentication page
+          window.location.href = data.subscriptionAuthUrl;
+          return;
+        }
+        
+        // Fallback: if subscription ID exists but no auth URL, show setup button
+        if (data.requiresPaymentSetup && data.subscriptionId) {
+          setOrderData({ 
+            trial: true, 
+            ...data,
+            showPaymentLink: true 
+          });
+          return;
+        }
+        
+        // Trial started without payment setup required
         setOrderData({ trial: true, ...data });
         return;
       }
@@ -212,25 +231,65 @@ function PaymentContent() {
 
             {orderData && orderData.trial ? (
               <div className="space-y-6">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-                  <div className="mb-4">
-                    <svg className="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                {orderData.showPaymentLink ? (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+                    <div className="mb-4">
+                      <svg className="mx-auto h-12 w-12 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <h2 className="text-2xl font-bold text-yellow-900 mb-2">
+                      Payment Setup Required
+                    </h2>
+                    <p className="text-yellow-800 mb-4">
+                      To start your {orderData.trialDays}-day free trial, please add a payment method.
+                    </p>
+                    <p className="text-sm text-yellow-700 mb-4">
+                      Your card will not be charged until after the trial period ends.
+                    </p>
+                    <button
+                      onClick={() => {
+                        // Fetch subscription auth URL from API
+                        fetch(`/api/payment/get-subscription-auth?subscriptionId=${orderData.subscriptionId}`)
+                          .then(res => res.json())
+                          .then(data => {
+                            if (data.authUrl) {
+                              window.location.href = data.authUrl;
+                            } else {
+                              setError("Failed to get payment setup link. Please contact support.");
+                            }
+                          })
+                          .catch(err => {
+                            console.error("Error fetching auth URL:", err);
+                            setError("Failed to set up payment. Please try again.");
+                          });
+                      }}
+                      className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+                    >
+                      Add Payment Method
+                    </button>
                   </div>
-                  <h2 className="text-2xl font-bold text-green-900 mb-2">
-                    Free Trial Started!
-                  </h2>
-                  <p className="text-green-800 mb-4">
-                    Your {orderData.trialDays}-day free trial for the {planNames[plan]} plan has started.
-                  </p>
-                  <p className="text-sm text-green-700 mb-4">
-                    Trial ends on: {new Date(orderData.trialEndAt).toLocaleDateString()}
-                  </p>
-                  <p className="text-sm text-green-600">
-                    Payment of {planPrices[plan]} will be automatically deducted after the trial period ends.
-                  </p>
-                </div>
+                ) : (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                    <div className="mb-4">
+                      <svg className="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <h2 className="text-2xl font-bold text-green-900 mb-2">
+                      Free Trial Started!
+                    </h2>
+                    <p className="text-green-800 mb-4">
+                      Your {orderData.trialDays}-day free trial for the {planNames[plan]} plan has started.
+                    </p>
+                    <p className="text-sm text-green-700 mb-4">
+                      Trial ends on: {new Date(orderData.trialEndAt).toLocaleDateString()}
+                    </p>
+                    <p className="text-sm text-green-600">
+                      Payment of {planPrices[plan]} will be automatically deducted after the trial period ends.
+                    </p>
+                  </div>
+                )}
                 <Link
                   href="/profile"
                   className="block w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors text-center"

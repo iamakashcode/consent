@@ -83,18 +83,35 @@ export async function createRazorpayOrder(amount, currency = "INR") {
 }
 
 /**
- * Create Razorpay subscription for recurring payments
+ * Create Razorpay subscription for recurring payments with trial
+ * @param {string} planId - Razorpay plan ID
+ * @param {Object} customer - Customer details { name, email, contact }
+ * @param {number} trialDays - Number of trial days (0 for no trial)
+ * @returns {Promise<Object>} Razorpay subscription object
  */
-export async function createRazorpaySubscription(planId, customerId, amount, currency = "INR") {
+export async function createRazorpaySubscription(planId, customer, trialDays = 0) {
   try {
-    // Create a subscription plan first (if not exists)
-    // For now, we'll create a subscription directly
-    const subscription = await razorpay.subscriptions.create({
-      plan_id: planId, // Plan ID from Razorpay (needs to be created in Razorpay dashboard)
+    // Calculate start_at timestamp (after trial period)
+    const startAt = trialDays > 0 
+      ? Math.floor(Date.now() / 1000) + (trialDays * 24 * 60 * 60)
+      : Math.floor(Date.now() / 1000);
+    
+    const subscriptionData = {
+      plan_id: planId,
       customer_notify: 1,
-      total_count: 12, // 12 months
-      start_at: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60), // Start after 7 days (trial end)
-    });
+      total_count: 12, // 12 months of recurring payments
+      start_at: startAt,
+      notes: {
+        customer_name: customer.name,
+        customer_email: customer.email,
+      },
+    };
+
+    // If trial period, add offer_id for trial (or handle via plan settings)
+    // Note: Razorpay plans can have trial periods built-in
+    // For now, we'll use start_at to delay first charge
+    
+    const subscription = await razorpay.subscriptions.create(subscriptionData);
     return subscription;
   } catch (error) {
     console.error("Razorpay subscription creation error:", error);
@@ -104,22 +121,63 @@ export async function createRazorpaySubscription(planId, customerId, amount, cur
 
 /**
  * Create a Razorpay plan (one-time setup, can be done manually in dashboard)
+ * @param {string} planName - Name of the plan (basic, starter, pro)
+ * @param {number} amount - Amount in paise
+ * @param {number} trialDays - Trial period in days (0 for no trial)
+ * @param {string} interval - "monthly" or "yearly"
+ * @returns {Promise<Object>} Razorpay plan object
  */
-export async function createRazorpayPlan(planName, amount, interval = "monthly") {
+export async function createRazorpayPlan(planName, amount, trialDays = 0, interval = "monthly") {
   try {
-    const plan = await razorpay.plans.create({
+    const planData = {
       period: interval === "monthly" ? "monthly" : "yearly",
       interval: 1,
       item: {
-        name: `${planName} Plan`,
+        name: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan`,
         amount: amount, // in paise
         currency: "INR",
-        description: `Subscription for ${planName} plan`,
+        description: `Monthly subscription for ${planName} plan`,
       },
-    });
+    };
+
+    // Add trial period if specified
+    if (trialDays > 0) {
+      planData.trial_period = trialDays;
+    }
+
+    const plan = await razorpay.plans.create(planData);
     return plan;
   } catch (error) {
     console.error("Razorpay plan creation error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get or create Razorpay plan for a given plan type
+ * This ensures the plan exists before creating subscriptions
+ */
+export async function getOrCreateRazorpayPlan(planName, amount, trialDays = 0) {
+  try {
+    // Check if plan ID is set in environment
+    const envPlanId = process.env[`RAZORPAY_${planName.toUpperCase()}_PLAN_ID`];
+    if (envPlanId) {
+      // Verify plan exists
+      try {
+        const plan = await razorpay.plans.fetch(envPlanId);
+        return plan;
+      } catch (error) {
+        console.warn(`Plan ID ${envPlanId} not found, creating new plan`);
+      }
+    }
+
+    // Create new plan if not found
+    console.log(`Creating Razorpay plan for ${planName}...`);
+    const plan = await createRazorpayPlan(planName, amount, trialDays);
+    console.log(`✅ Created Razorpay plan: ${plan.id} for ${planName}`);
+    return plan;
+  } catch (error) {
+    console.error(`Error getting/creating plan for ${planName}:`, error);
     throw error;
   }
 }
