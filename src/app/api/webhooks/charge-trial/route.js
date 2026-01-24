@@ -131,15 +131,16 @@ export async function POST(req) {
             },
           });
 
-        console.log(`[Charge Trial] Created order ${order.id} for user ${subscription.userId} (${subscription.user.email})`);
+          console.log(`[Charge Trial] Created order ${order.id} for user ${subscription.userId} (${subscription.user.email})`);
 
-        results.push({
-          userId: subscription.userId,
-          email: subscription.user.email,
-          status: "order_created",
-          orderId: order.id,
-          amount: amount / 100, // Convert paise to rupees
-        });
+          results.push({
+            userId: subscription.userId,
+            email: subscription.user.email,
+            status: "order_created",
+            orderId: order.id,
+            amount: amount / 100, // Convert paise to rupees
+          });
+        }
 
         // TODO: Send email notification to user about payment due
         // You can integrate with an email service here
