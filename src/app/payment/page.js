@@ -23,7 +23,7 @@ function PaymentContent() {
   }, [status, router]);
 
   useEffect(() => {
-    if (session && plan && ["basic", "starter", "pro"].includes(plan) && !orderData) {
+    if (session && plan && ["basic", "starter", "pro"].includes(plan) && !orderData && !loading) {
       createOrder();
     }
   }, [session, plan]);
@@ -46,15 +46,25 @@ function PaymentContent() {
       if (!response.ok) {
         // If session is out of sync, refresh the page
         if (data.needsRefresh) {
-          alert(data.error + "\n\nRefreshing page to sync your session...");
-          window.location.reload();
+          // Don't show alert, just refresh - the error message is confusing
+          console.log("Session out of sync, refreshing...", data);
+          // Update session first, then refresh
+          await update();
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
           return;
         }
-        throw new Error(data.error || "Failed to create order");
+        // For other errors, show them
+        setError(data.error || "Failed to create order");
+        setLoading(false);
+        return;
       }
 
       // If basic plan with trial, show success message
       if (data.trial && data.success) {
+        // Update session to reflect new plan
+        await update();
         setOrderData({ trial: true, ...data });
         return;
       }
@@ -151,13 +161,13 @@ function PaymentContent() {
     );
   }
 
-  if (!session || !plan || !["starter", "pro"].includes(plan)) {
+  if (!session || !plan || !["basic", "starter", "pro"].includes(plan)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Invalid Plan</h1>
-          <Link href="/" className="text-indigo-600 hover:text-indigo-700">
-            Go to Home
+          <Link href="/plans" className="text-indigo-600 hover:text-indigo-700">
+            Go to Plans
           </Link>
         </div>
       </div>

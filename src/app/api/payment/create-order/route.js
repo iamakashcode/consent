@@ -43,31 +43,50 @@ export async function POST(req) {
       databasePlan: currentPlan,
       requestedPlan: plan,
       sessionUserId: session.user.id,
+      hasSubscription: !!user.subscription,
     });
     
-    // If user has a plan, check if they're trying to downgrade or stay on same plan
-    if (currentPlan) {
-      if (planHierarchy[currentPlan] >= planHierarchy[plan]) {
-        // If session is out of sync, suggest refreshing
-        const sessionPlan = session.user?.plan;
-        if (sessionPlan !== currentPlan) {
-          return Response.json(
-            { 
-              error: `You are already on ${currentPlan} plan or higher. Your session shows ${sessionPlan || 'no plan'}. Please refresh the page.`,
-              currentPlan: currentPlan,
-              sessionPlan: sessionPlan,
-              needsRefresh: true
-            },
-            { status: 400 }
-          );
-        }
+    // Special handling for basic plan: always allow if user has no plan or has basic plan
+    // This allows trial setup for new users and retry for existing basic users
+    if (plan === "basic") {
+      if (!currentPlan) {
+        // No plan - allow basic plan selection (will create trial)
+        console.log("User has no plan, allowing basic plan selection");
+      } else if (currentPlan === "basic") {
+        // Already has basic - allow (might be retrying trial setup or checking status)
+        console.log("User already has basic plan, allowing trial setup/retry");
+      } else {
+        // Has higher plan - block downgrade
         return Response.json(
-          { error: `You are already on ${currentPlan} plan or higher` },
+          { error: `You are already on ${currentPlan} plan. Cannot downgrade to basic.` },
           { status: 400 }
         );
       }
+    } else {
+      // For starter/pro plans, check if user already has this plan or higher
+      if (currentPlan) {
+        if (planHierarchy[currentPlan] >= planHierarchy[plan]) {
+          // If session is out of sync, suggest refreshing
+          const sessionPlan = session.user?.plan;
+          if (sessionPlan !== currentPlan) {
+            return Response.json(
+              { 
+                error: `You are already on ${currentPlan} plan or higher. Your session shows ${sessionPlan || 'no plan'}. Please refresh the page.`,
+                currentPlan: currentPlan,
+                sessionPlan: sessionPlan,
+                needsRefresh: true
+              },
+              { status: 400 }
+            );
+          }
+          return Response.json(
+            { error: `You are already on ${currentPlan} plan or higher` },
+            { status: 400 }
+          );
+        }
+      }
+      // If no plan, allow them to select any plan
     }
-    // If no plan, allow them to select any plan
 
     const amount = PLAN_PRICING[plan];
     const trialDays = PLAN_TRIAL_DAYS[plan] || 0;
@@ -84,29 +103,50 @@ export async function POST(req) {
       // If no plan ID, we'll use one-time payment for now
       // In production, create plans in Razorpay dashboard and store IDs
       
-      // Update subscription to start trial
-      await prisma.subscription.upsert({
+      // Check if subscription already exists with trial
+      const existingSubscription = await prisma.subscription.findUnique({
         where: { userId: session.user.id },
-        create: {
-          userId: session.user.id,
-          plan: "basic",
-          status: "active",
-          trialEndAt: trialEndAt,
-          currentPeriodStart: new Date(),
-          // Set period end to trial end (will be extended after payment)
-          currentPeriodEnd: trialEndAt,
-          razorpayPlanId: razorpayPlanId || null,
-        },
-        update: {
-          plan: "basic",
-          status: "active",
-          trialEndAt: trialEndAt,
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: trialEndAt,
-          cancelAtPeriodEnd: false,
-          razorpayPlanId: razorpayPlanId || null,
-        },
       });
+      
+      // Only create/update if trial hasn't been set up yet, or if trial has expired
+      const shouldSetupTrial = !existingSubscription || 
+                                !existingSubscription.trialEndAt || 
+                                new Date(existingSubscription.trialEndAt) < new Date();
+      
+      if (shouldSetupTrial) {
+        // Update subscription to start trial
+        await prisma.subscription.upsert({
+          where: { userId: session.user.id },
+          create: {
+            userId: session.user.id,
+            plan: "basic",
+            status: "active",
+            trialEndAt: trialEndAt,
+            currentPeriodStart: new Date(),
+            // Set period end to trial end (will be extended after payment)
+            currentPeriodEnd: trialEndAt,
+            razorpayPlanId: razorpayPlanId || null,
+          },
+          update: {
+            plan: "basic",
+            status: "active",
+            trialEndAt: trialEndAt,
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: trialEndAt,
+            cancelAtPeriodEnd: false,
+            razorpayPlanId: razorpayPlanId || null,
+          },
+        });
+      } else {
+        // Trial already active, return existing trial info
+        return Response.json({
+          success: true,
+          trial: true,
+          trialDays: trialDays,
+          trialEndAt: existingSubscription.trialEndAt.toISOString(),
+          message: `Your ${trialDays}-day free trial is already active! Payment will be automatically deducted after the trial period.`,
+        });
+      }
 
       return Response.json({
         success: true,
