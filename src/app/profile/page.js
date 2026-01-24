@@ -44,12 +44,21 @@ export default function ProfilePage() {
       if (response.ok) {
         const data = await response.json();
         console.log("[Profile] Subscription data:", data);
-        setSubscription(data);
+        // Data is now { subscriptions: [...], count: number, activeCount: number }
+        // For backward compatibility, set the first subscription if exists
+        if (data.subscriptions && data.subscriptions.length > 0) {
+          const firstSub = data.subscriptions[0].subscription;
+          setSubscription(firstSub); // Show first domain's subscription for trial banner
+        } else {
+          setSubscription(null);
+        }
       } else {
         console.error("[Profile] Failed to fetch subscription:", response.status, await response.text());
+        setSubscription(null);
       }
     } catch (err) {
       console.error("Failed to fetch subscription:", err);
+      setSubscription(null);
     }
   };
 
@@ -211,39 +220,11 @@ export default function ProfilePage() {
     return null;
   }
 
-  const planLimits = {
-    basic: 1,
-    starter: 5,
-    pro: Infinity,
-  };
-
-  const currentPlan = session.user?.plan;
-  const siteLimit = currentPlan ? (planLimits[currentPlan] || 1) : 0; // No plan = 0 sites allowed
+  // Plans are now domain-based, not account-based
+  // Each domain has its own subscription
   const sitesUsed = sites.length;
   
-  // If no plan selected, show message to select plan
-  if (!currentPlan) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-12">
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              Welcome! Choose Your Plan
-            </h1>
-            <p className="text-gray-600 mb-6">
-              Please select a plan to start using the service.
-            </p>
-            <Link
-              href="/plans"
-              className="inline-block bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
-            >
-              View Plans & Get Started
-            </Link>
-          </div>
-        </main>
-      </div>
-    );
-  }
+  // No account-level plan check needed - each domain has its own plan
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -258,11 +239,7 @@ export default function ProfilePage() {
               <p className="text-gray-600">{session.user?.email}</p>
             </div>
             <div className="text-right">
-              {currentPlan && (
-                <div className="inline-block bg-indigo-100 text-indigo-800 px-4 py-2 rounded-lg font-semibold mb-2">
-                  {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Plan
-                </div>
-              )}
+              {/* Plans are per-domain, not account-level */}
               {/* Trial Countdown - Show if subscription exists and has trial */}
               {subscription && subscription.plan === "basic" && subscription.trialEndAt && isTrialActive(subscription.trialEndAt) && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-left">
@@ -290,26 +267,15 @@ export default function ProfilePage() {
                   </p>
                 </div>
               )}
-              {currentPlan && (
-                <p className="text-sm text-gray-600 mb-3">
-                  {sitesUsed} / {siteLimit === Infinity ? "∞" : siteLimit} sites
-                </p>
-              )}
-              {!currentPlan ? (
-                <Link
-                  href="/plans"
-                  className="inline-block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-semibold"
-                >
-                  Choose a Plan
-                </Link>
-              ) : currentPlan !== "pro" && (
-                <Link
-                  href="/plans"
-                  className="inline-block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-semibold"
-                >
-                  View Plans & Upgrade
-                </Link>
-              )}
+              <p className="text-sm text-gray-600 mb-3">
+                {sitesUsed} domain{sitesUsed !== 1 ? 's' : ''} added
+              </p>
+              <Link
+                href="/plans"
+                className="inline-block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-semibold"
+              >
+                View Plans
+              </Link>
             </div>
           </div>
         </div>
@@ -590,34 +556,19 @@ export default function ProfilePage() {
               <p className="text-2xl font-bold text-gray-900">{sites.length}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-600 mb-1">Plan Limit</p>
+              <p className="text-sm text-gray-600 mb-1">Domains</p>
               <p className="text-2xl font-bold text-gray-900">
-                {siteLimit === Infinity ? "∞" : siteLimit}
+                {sitesUsed}
               </p>
             </div>
             <div>
-              <p className="text-sm text-gray-600 mb-1">Current Plan</p>
+              <p className="text-sm text-gray-600 mb-1">Total Domains</p>
               <p className="text-2xl font-bold text-indigo-600">
-                {currentPlan ? (currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)) : "No Plan"}
+                {sitesUsed}
               </p>
             </div>
           </div>
-          {sitesUsed >= siteLimit && siteLimit !== Infinity && (
-            <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="text-sm text-yellow-800">
-                ⚠️ You&apos;ve reached your plan limit.{" "}
-                {currentPlan !== "pro" && (
-                  <Link
-                    href="/plans"
-                    className="font-semibold underline text-yellow-800 hover:text-yellow-900"
-                  >
-                    View All Plans
-                  </Link>
-                )}
-                {" "}to add more domains.
-              </p>
-            </div>
-          )}
+          {/* Plans are now per-domain, so no account-level limit warning */}
         </div>
       </main>
     </div>

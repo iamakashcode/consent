@@ -32,53 +32,32 @@ export async function POST(req) {
       return Response.json({ error: "Invalid domain" }, { status: 400 });
     }
 
-    // Check user's plan limits
+    // Check if user exists
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { subscription: true },
     });
 
     if (!user) {
       return Response.json({ error: "User not found" }, { status: 404 });
     }
 
-    const plan = user.subscription?.plan;
-    
-    // Check if user has a plan
-    if (!plan) {
-      return Response.json(
-        {
-          error: "Please select a plan to add domains. Visit the plans page to choose a plan.",
-          requiresPlan: true,
+    // No plan limit check - users can add unlimited domains
+    // Each domain will need its own subscription
+
+    // Check if site already exists - handle missing columns gracefully
+    let existingSite;
+    try {
+      existingSite = await prisma.site.findUnique({
+        where: {
+          userId_domain: {
+            userId,
+            domain: cleanDomain,
+          },
         },
-        { status: 403 }
-      );
-    }
-    
-    const siteCount = await prisma.site.count({
-      where: { userId },
-    });
-
-    // Check limits based on plan
-    const limits = {
-      basic: 1,
-      starter: 5,
-      pro: Infinity,
-    };
-
-    const limit = limits[plan] || 1;
-    if (siteCount >= limit) {
-      return Response.json(
-        {
-          error: `You've reached your plan limit (${limit} site${limit > 1 ? "s" : ""}). Please upgrade your plan.`,
-        },
-        { status: 403 }
-      );
-    }
-
-      // Check if site already exists - handle missing columns gracefully
-      let existingSite;
-      try {
+      });
+    } catch (error) {
+      // If verification columns don't exist, fetch without selecting them
+      if (error.message && error.message.includes("isVerified")) {
         existingSite = await prisma.site.findUnique({
           where: {
             userId_domain: {
@@ -86,33 +65,22 @@ export async function POST(req) {
               domain: cleanDomain,
             },
           },
+          select: {
+            id: true,
+            domain: true,
+            siteId: true,
+            trackers: true,
+            bannerConfig: true,
+            createdAt: true,
+            updatedAt: true,
+          },
         });
-      } catch (error) {
-        // If verification columns don't exist, fetch without selecting them
-        if (error.message && error.message.includes("isVerified")) {
-          existingSite = await prisma.site.findUnique({
-            where: {
-              userId_domain: {
-                userId,
-                domain: cleanDomain,
-              },
-            },
-            select: {
-              id: true,
-              domain: true,
-              siteId: true,
-              trackers: true,
-              bannerConfig: true,
-              createdAt: true,
-              updatedAt: true,
-            },
-          });
-          if (existingSite) {
-            existingSite.isVerified = false;
-            existingSite.verificationToken = null;
-            existingSite.verifiedAt = null;
-          }
-        } else {
+        if (existingSite) {
+          existingSite.isVerified = false;
+          existingSite.verificationToken = null;
+          existingSite.verifiedAt = null;
+        }
+      } else {
           throw error;
         }
       }
@@ -259,6 +227,12 @@ export async function POST(req) {
       }
     }
 
+    // Check if site has a subscription
+    const siteWithSubscription = await prisma.site.findUnique({
+      where: { id: site.id },
+      include: { subscription: true },
+    });
+
     const baseUrl =
       process.env.NEXT_PUBLIC_BASE_URL ||
       (req.headers.get("origin") || `http://${req.headers.get("host")}`);
@@ -273,8 +247,10 @@ export async function POST(req) {
       trackers: Array.isArray(site.trackers) ? site.trackers : [],
       scriptUrl,
       siteId: site.siteId,
+      siteDbId: site.id, // Internal database ID for subscription creation
       isVerified: siteIsVerified,
       verificationToken: siteVerificationToken,
+      hasSubscription: !!siteWithSubscription?.subscription,
       message: siteIsVerified 
         ? "Domain is verified. The script is working correctly."
         : "Add the script to your website. Verification will happen automatically when the script loads.",

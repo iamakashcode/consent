@@ -2,13 +2,13 @@ import { prisma } from "./prisma";
 import { PLAN_TRIAL_DAYS } from "./razorpay";
 
 /**
- * Check if a subscription is active (including trial period)
+ * Check if a subscription is active for a site (including trial period)
  * Returns { isActive: boolean, reason?: string }
  */
-export async function isSubscriptionActive(userId) {
+export async function isSubscriptionActive(siteId) {
   try {
     const subscription = await prisma.subscription.findUnique({
-      where: { userId },
+      where: { siteId },
       select: {
         plan: true,
         status: true,
@@ -18,7 +18,7 @@ export async function isSubscriptionActive(userId) {
     });
 
     if (!subscription) {
-      return { isActive: false, reason: "No subscription found" };
+      return { isActive: false, reason: "No subscription found for this domain" };
     }
 
     // Check if status is active
@@ -61,19 +61,19 @@ export async function isSubscriptionActive(userId) {
 }
 
 /**
- * Get subscription with active status check
+ * Get subscription with active status check for a site
  */
-export async function getSubscriptionWithStatus(userId) {
+export async function getSubscriptionWithStatus(siteId) {
   try {
     const subscription = await prisma.subscription.findUnique({
-      where: { userId },
+      where: { siteId },
     });
 
     if (!subscription) {
       return { subscription: null, isActive: false };
     }
 
-    const statusCheck = await isSubscriptionActive(userId);
+    const statusCheck = await isSubscriptionActive(siteId);
     return {
       subscription,
       isActive: statusCheck.isActive,
@@ -82,6 +82,58 @@ export async function getSubscriptionWithStatus(userId) {
   } catch (error) {
     console.error("Error getting subscription:", error);
     return { subscription: null, isActive: false };
+  }
+}
+
+/**
+ * Check if site has exceeded page view limit for current period
+ * Returns { exceeded: boolean, currentViews: number, limit: number }
+ */
+export async function checkPageViewLimit(siteId) {
+  try {
+    const subscription = await prisma.subscription.findUnique({
+      where: { siteId },
+      select: {
+        plan: true,
+        currentPeriodStart: true,
+        currentPeriodEnd: true,
+      },
+    });
+
+    if (!subscription) {
+      return { exceeded: true, currentViews: 0, limit: 0, reason: "No subscription found" };
+    }
+
+    const { PLAN_PAGE_VIEW_LIMITS } = await import("./razorpay");
+    const limit = PLAN_PAGE_VIEW_LIMITS[subscription.plan] || 0;
+
+    if (limit === Infinity) {
+      return { exceeded: false, currentViews: 0, limit: Infinity };
+    }
+
+    // Count page views for current period
+    const periodStart = subscription.currentPeriodStart || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const periodEnd = subscription.currentPeriodEnd || new Date();
+
+    const currentViews = await prisma.pageView.count({
+      where: {
+        siteId,
+        viewedAt: {
+          gte: periodStart,
+          lte: periodEnd,
+        },
+      },
+    });
+
+    return {
+      exceeded: currentViews >= limit,
+      currentViews,
+      limit,
+      remaining: limit - currentViews,
+    };
+  } catch (error) {
+    console.error("Error checking page view limit:", error);
+    return { exceeded: false, currentViews: 0, limit: 0, reason: "Error checking limit" };
   }
 }
 

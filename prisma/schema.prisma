@@ -16,26 +16,26 @@ model User {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   sites        Site[]
-  subscription Subscription?
 
   @@map("users")
 }
 
 model Site {
-  id               String      @id @default(cuid())
+  id               String         @id @default(cuid())
   domain           String
-  siteId           String      @unique
+  siteId           String         @unique
   userId           String
-  trackers         Json        @default("[]")
-  bannerConfig     Json?       // Banner customization settings
-  isVerified       Boolean     @default(false)
+  trackers         Json           @default("[]")
+  bannerConfig     Json?          // Banner customization settings
+  isVerified       Boolean        @default(false)
   verificationToken String?
   verifiedAt       DateTime?
-  lastSeenAt       DateTime?   // Last time the script pinged the server (via verify-callback or track)
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastSeenAt       DateTime?      // Last time the script pinged the server (via verify-callback or track)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   pageViews        PageView[]
+  subscription     Subscription?  // One subscription per site
 
   @@unique([userId, domain])
   @@map("sites")
@@ -58,7 +58,7 @@ model PageView {
 
 model Subscription {
   id                 String    @id @default(cuid())
-  userId             String    @unique
+  siteId             String    @unique // One subscription per site/domain
   plan               String    @default("basic")
   status             String    @default("active")
   currentPeriodStart DateTime?
@@ -72,7 +72,7 @@ model Subscription {
   razorpayPlanId     String? // Razorpay plan ID
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
-  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site               Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@map("subscriptions")
 }

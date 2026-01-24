@@ -10,7 +10,8 @@ const plans = [
     period: "per month",
     description: "Perfect for getting started",
     features: [
-      "1 website",
+      "1 domain",
+      "100,000 page views/month",
       "Basic tracker detection",
       "Cookie consent banner",
       "Community support",
@@ -25,7 +26,8 @@ const plans = [
     period: "per month",
     description: "For growing businesses",
     features: [
-      "5 websites",
+      "1 domain",
+      "300,000 page views/month",
       "Advanced tracker detection",
       "Customizable banner",
       "Email support",
@@ -40,7 +42,8 @@ const plans = [
     period: "per month",
     description: "For agencies and enterprises",
     features: [
-      "Unlimited websites",
+      "1 domain",
+      "Unlimited page views",
       "All tracker types",
       "White-label banner",
       "Priority support",

@@ -12,7 +12,7 @@ export async function POST(req) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { plan } = await req.json();
+    const { plan, siteId } = await req.json();
 
     if (!plan || !["basic", "starter", "pro"].includes(plan)) {
       return Response.json(
@@ -21,78 +21,79 @@ export async function POST(req) {
       );
     }
 
-    // Check if user already has this plan or higher
-    // Always check database directly, not session (session might be stale)
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+    if (!siteId) {
+      return Response.json(
+        { error: "Site ID is required. Please select a domain first." },
+        { status: 400 }
+      );
+    }
+
+    // Verify site belongs to user
+    // siteId parameter can be either the public siteId (from site.siteId) or the database ID
+    // Try finding by public siteId first
+    let site = await prisma.site.findFirst({
+      where: {
+        siteId: siteId, // Public siteId field
+        userId: session.user.id,
+      },
       include: { subscription: true },
     });
-    
-    if (!user) {
+
+    // If not found by public siteId, try finding by database ID
+    if (!site) {
+      site = await prisma.site.findUnique({
+        where: { id: siteId }, // Try as database ID
+        include: { subscription: true },
+      });
+      
+      // Verify it belongs to the user
+      if (site && site.userId !== session.user.id) {
+        site = null;
+      }
+    }
+
+    if (!site) {
       return Response.json(
-        { error: "User not found" },
+        { error: "Site not found. Please add the domain first." },
         { status: 404 }
       );
     }
 
-    if (!user) {
+    if (site.userId !== session.user.id) {
       return Response.json(
-        { error: "User not found" },
-        { status: 404 }
+        { error: "Unauthorized: This site does not belong to you" },
+        { status: 403 }
       );
     }
 
-    const currentPlan = user.subscription?.plan;
+    // Use the database ID for subscription creation
+    const siteDbId = site.id;
+
+    // Check if site already has a subscription
+    const currentSubscription = site.subscription;
     const planHierarchy = { basic: 0, starter: 1, pro: 2 };
     
-    console.log("Plan check:", {
-      sessionPlan: session.user?.plan,
-      databasePlan: currentPlan,
+    console.log("Plan check for site:", {
+      siteId,
+      siteDbId,
+      domain: site.domain,
+      currentPlan: currentSubscription?.plan,
       requestedPlan: plan,
-      sessionUserId: session.user.id,
-      hasSubscription: !!user.subscription,
+      userId: session.user.id,
     });
     
-    // Special handling for basic plan: always allow if user has no plan or has basic plan
-    // This allows trial setup for new users and retry for existing basic users
-    if (plan === "basic") {
-      if (!currentPlan) {
-        // No plan - allow basic plan selection (will create trial)
-        console.log("User has no plan, allowing basic plan selection");
-      } else if (currentPlan === "basic") {
-        // Already has basic - allow (might be retrying trial setup or checking status)
-        console.log("User already has basic plan, allowing trial setup/retry");
-      } else {
-        // Has higher plan - block downgrade
+    // If site already has a subscription, check if it's an upgrade
+    if (currentSubscription) {
+      const currentPlanLevel = planHierarchy[currentSubscription.plan] || 0;
+      const requestedPlanLevel = planHierarchy[plan] || 0;
+      
+      if (currentPlanLevel >= requestedPlanLevel) {
         return Response.json(
-          { error: `You are already on ${currentPlan} plan. Cannot downgrade to basic.` },
+          { error: `This domain already has ${currentSubscription.plan} plan or higher. Cannot downgrade.` },
           { status: 400 }
         );
       }
-    } else {
-      // For starter/pro plans, check if user already has this plan or higher
-      if (currentPlan) {
-        if (planHierarchy[currentPlan] >= planHierarchy[plan]) {
-          // If session is out of sync, suggest refreshing
-          const sessionPlan = session.user?.plan;
-          if (sessionPlan !== currentPlan) {
-            return Response.json(
-              { 
-                error: `You are already on ${currentPlan} plan or higher. Your session shows ${sessionPlan || 'no plan'}. Please refresh the page.`,
-                currentPlan: currentPlan,
-                sessionPlan: sessionPlan,
-                needsRefresh: true
-              },
-              { status: 400 }
-            );
-          }
-          return Response.json(
-            { error: `You are already on ${currentPlan} plan or higher` },
-            { status: 400 }
-          );
-        }
-      }
-      // If no plan, allow them to select any plan
+      // Allow upgrade
     }
 
     const amount = PLAN_PRICING[plan];
@@ -103,9 +104,9 @@ export async function POST(req) {
     if (plan === "basic" && trialDays > 0) {
       const trialEndAt = calculateTrialEndDate(plan);
       
-      // Check if subscription already exists with active trial
+      // Check if subscription already exists for this site with active trial
       const existingSubscription = await prisma.subscription.findUnique({
-        where: { userId: session.user.id },
+        where: { siteId: siteDbId },
       });
       
       // If subscription exists with active trial, return existing info
@@ -119,7 +120,10 @@ export async function POST(req) {
           trialDays: trialDays,
           trialEndAt: existingSubscription.trialEndAt.toISOString(),
           subscriptionId: existingSubscription.razorpaySubscriptionId,
-          message: `Your ${trialDays}-day free trial is already active! Payment will be automatically deducted after the trial period.`,
+          siteId: site.siteId, // Return public siteId
+          siteDbId: siteDbId, // Internal ID
+          domain: site.domain,
+          message: `Your ${trialDays}-day free trial for ${site.domain} is already active! Payment will be automatically deducted after the trial period.`,
         });
       }
       
@@ -133,9 +137,9 @@ export async function POST(req) {
         // Fallback: create subscription in database without Razorpay subscription
         // User will need to set up payment later
         await prisma.subscription.upsert({
-          where: { userId: session.user.id },
+          where: { siteId: siteDbId },
           create: {
-            userId: session.user.id,
+            siteId: siteDbId,
             plan: "basic",
             status: "active",
             trialEndAt: trialEndAt,
@@ -156,10 +160,19 @@ export async function POST(req) {
           trial: true,
           trialDays: trialDays,
           trialEndAt: trialEndAt.toISOString(),
+          siteId: site.siteId, // Return public siteId
+          siteDbId: siteDbId, // Internal ID
+          domain: site.domain,
           requiresSetup: true,
-          message: `Your ${trialDays}-day free trial has started! Please set up payment method to enable automatic billing after trial.`,
+          message: `Your ${trialDays}-day free trial for ${site.domain} has started! Please set up payment method to enable automatic billing after trial.`,
         });
       }
+      
+      // Get user info for Razorpay subscription
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { name: true, email: true },
+      });
       
       // Create Razorpay subscription with trial
       let razorpaySubscription;
@@ -167,9 +180,9 @@ export async function POST(req) {
         razorpaySubscription = await createRazorpaySubscription(
           razorpayPlan.id,
           {
-            name: user.name || "User",
-            email: user.email,
-            contact: user.phone || undefined,
+            name: user?.name || "User",
+            email: user?.email || session.user.email,
+            contact: undefined,
           },
           trialDays
         );
@@ -179,9 +192,9 @@ export async function POST(req) {
         console.error("Failed to create Razorpay subscription:", error);
         // Fallback: create subscription in database
         await prisma.subscription.upsert({
-          where: { userId: session.user.id },
+          where: { siteId: siteDbId },
           create: {
-            userId: session.user.id,
+            siteId: siteDbId,
             plan: "basic",
             status: "active",
             trialEndAt: trialEndAt,
@@ -204,16 +217,19 @@ export async function POST(req) {
           trial: true,
           trialDays: trialDays,
           trialEndAt: trialEndAt.toISOString(),
+          siteId: site.siteId, // Return public siteId
+          siteDbId: siteDbId, // Internal ID
+          domain: site.domain,
           requiresSetup: true,
-          message: `Your ${trialDays}-day free trial has started! Please set up payment method to enable automatic billing after trial.`,
+          message: `Your ${trialDays}-day free trial for ${site.domain} has started! Please set up payment method to enable automatic billing after trial.`,
         });
       }
       
-      // Store subscription in database
+      // Store subscription in database for this site
       await prisma.subscription.upsert({
-        where: { userId: session.user.id },
+        where: { siteId: siteDbId },
         create: {
-          userId: session.user.id,
+          siteId: siteDbId,
           plan: "basic",
           status: "pending", // Will be activated after user adds payment method
           trialEndAt: trialEndAt,
@@ -252,7 +268,10 @@ export async function POST(req) {
               subscriptionId: razorpaySubscription.id,
               subscriptionAuthUrl: fetchedAuthUrl,
               requiresPaymentSetup: true,
-              message: `Please add a payment method to start your ${trialDays}-day free trial. Payment will be automatically deducted after the trial period.`,
+              siteId: site.siteId, // Return public siteId
+              siteDbId: siteDbId, // Internal ID
+              domain: site.domain,
+              message: `Please add a payment method to start your ${trialDays}-day free trial for ${site.domain}. Payment will be automatically deducted after the trial period.`,
             });
           }
         } catch (error) {
@@ -269,7 +288,10 @@ export async function POST(req) {
         subscriptionAuthUrl: authUrl,
         requiresPaymentSetup: true,
         redirectToRazorpay: true, // Force redirect
-        message: `Please add a payment method to start your ${trialDays}-day free trial. Payment will be automatically deducted after the trial period.`,
+        siteId: site.siteId, // Return public siteId
+        siteDbId: siteDbId, // Internal ID
+        domain: site.domain,
+        message: `Please add a payment method to start your ${trialDays}-day free trial for ${site.domain}. Payment will be automatically deducted after the trial period.`,
       });
     }
     
@@ -279,7 +301,13 @@ export async function POST(req) {
 
     // For Starter and Pro plans, create Razorpay SUBSCRIPTION (not one-time order)
     // This ensures recurring monthly payments
-    console.log(`Creating Razorpay subscription for ${plan} plan...`);
+    console.log(`Creating Razorpay subscription for ${plan} plan for site ${siteId}...`);
+    
+    // Get user info for Razorpay subscription
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { name: true, email: true },
+    });
     
     // Get or create Razorpay plan for this plan type
     let razorpayPlan;
@@ -299,9 +327,9 @@ export async function POST(req) {
       razorpaySubscription = await createRazorpaySubscription(
         razorpayPlan.id,
         {
-          name: user.name || "User",
-          email: user.email,
-          contact: user.phone || undefined,
+          name: user?.name || "User",
+          email: user?.email || session.user.email,
+          contact: undefined,
         },
         0 // No trial for starter/pro
       );
@@ -328,11 +356,11 @@ export async function POST(req) {
       }
     }
     
-    // Store subscription in database
+    // Store subscription in database for this site
     await prisma.subscription.upsert({
-      where: { userId: session.user.id },
+      where: { siteId: siteDbId },
       create: {
-        userId: session.user.id,
+        siteId: siteDbId,
         plan: plan,
         status: "pending", // Will be activated after payment method is added
         razorpayPlanId: razorpayPlan.id,
@@ -358,9 +386,12 @@ export async function POST(req) {
       requiresPaymentSetup: true,
       redirectToRazorpay: true,
       plan: plan,
+      siteId: site.siteId, // Return public siteId
+      siteDbId: siteDbId, // Internal ID
+      domain: site.domain,
       amount: amount,
       amountInRupees: amount / 100,
-      message: `Set up your ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan subscription. This is a recurring monthly subscription.`,
+      message: `Set up your ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan subscription for ${site.domain}. This is a recurring monthly subscription.`,
     });
   } catch (error) {
     console.error("Payment order creation error:", error);

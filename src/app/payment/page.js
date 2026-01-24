@@ -11,6 +11,7 @@ function PaymentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const plan = searchParams.get("plan");
+  const siteId = searchParams.get("siteId"); // siteId for domain-based plans
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -26,7 +27,7 @@ function PaymentContent() {
     if (session && plan && ["basic", "starter", "pro"].includes(plan) && !orderData && !loading) {
       createOrder();
     }
-  }, [session, plan]);
+  }, [session, plan, siteId]);
 
   const createOrder = async () => {
     try {
@@ -38,7 +39,7 @@ function PaymentContent() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan, siteId }), // Include siteId for domain-based plans
       });
 
       const data = await response.json();
@@ -217,6 +218,21 @@ function PaymentContent() {
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Invalid Plan</h1>
           <Link href="/plans" className="text-indigo-600 hover:text-indigo-700">
             Go to Plans
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // If siteId is required but not provided, redirect back to plans
+  if (!siteId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Domain Required</h1>
+          <p className="text-gray-600 mb-4">Please select a domain first to choose a plan.</p>
+          <Link href="/dashboard" className="text-indigo-600 hover:text-indigo-700">
+            Go to Dashboard
           </Link>
         </div>
       </div>

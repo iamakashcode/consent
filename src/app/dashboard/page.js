@@ -46,10 +46,13 @@ export default function DashboardPage() {
         console.log("[Dashboard] Subscription data:", data);
         setSubscription(data);
       } else {
-        console.error("[Dashboard] Failed to fetch subscription:", response.status);
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        console.error("[Dashboard] Failed to fetch subscription:", response.status, errorData);
+        setError(`Failed to load subscriptions: ${errorData.error || "Unknown error"}`);
       }
     } catch (err) {
       console.error("Failed to fetch subscription:", err);
+      setError(`Failed to load subscriptions: ${err.message || "Network error"}`);
     }
   };
 
@@ -132,6 +135,12 @@ export default function DashboardPage() {
 
       setResults(data);
       fetchSites(); // Refresh sites list
+      
+      // If domain was added and doesn't have a subscription, redirect to plans page
+      if (data.siteId && !data.hasSubscription) {
+        // Redirect to plans page with siteId to select plan for this domain
+        router.push(`/plans?siteId=${data.siteId}&domain=${encodeURIComponent(data.domain)}`);
+      }
     } catch (err) {
       setError(err.message || "An error occurred");
     } finally {

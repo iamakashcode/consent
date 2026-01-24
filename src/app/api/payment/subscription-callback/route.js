@@ -20,7 +20,7 @@ export async function GET(req) {
     // Find subscription in database
     const subscription = await prisma.subscription.findFirst({
       where: { razorpaySubscriptionId: subscriptionId },
-      include: { user: true },
+      include: { site: { include: { user: true } } },
     });
 
     if (!subscription) {
@@ -30,7 +30,7 @@ export async function GET(req) {
     // Update subscription status based on Razorpay status
     if (status === "authenticated" || status === "active") {
       await prisma.subscription.update({
-        where: { userId: subscription.userId },
+        where: { siteId: subscription.siteId },
         data: {
           status: "active",
         },

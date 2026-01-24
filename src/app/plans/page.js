@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
@@ -11,9 +11,10 @@ const PLAN_DETAILS = {
     price: "₹5",
     period: "per month",
     description: "Perfect for getting started",
-    sites: 1,
+    pageViews: 100000,
     features: [
-      "1 website",
+      "1 domain",
+      "100,000 page views/month",
       "Basic tracker detection",
       "Cookie consent banner",
       "Community support",
@@ -26,9 +27,10 @@ const PLAN_DETAILS = {
     price: "₹9",
     period: "per month",
     description: "For growing businesses",
-    sites: 5,
+    pageViews: 300000,
     features: [
-      "5 websites",
+      "1 domain",
+      "300,000 page views/month",
       "Advanced tracker detection",
       "Customizable banner",
       "Email support",
@@ -41,9 +43,10 @@ const PLAN_DETAILS = {
     price: "₹20",
     period: "per month",
     description: "For agencies and enterprises",
-    sites: Infinity,
+    pageViews: Infinity,
     features: [
-      "Unlimited websites",
+      "1 domain",
+      "Unlimited page views",
       "All tracker types",
       "White-label banner",
       "Priority support",
@@ -60,6 +63,9 @@ export default function PlansPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const siteId = searchParams.get("siteId");
+  const domain = searchParams.get("domain");
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -88,6 +94,14 @@ export default function PlansPage() {
   const currentPlanLevel = currentPlan ? (planHierarchy[currentPlan] || 0) : -1; // -1 means no plan
 
   const handlePlanSelect = async (selectedPlan) => {
+    // If siteId is provided, this is for a specific domain
+    if (siteId) {
+      // Redirect to payment page with plan and siteId
+      router.push(`/payment?plan=${selectedPlan}&siteId=${siteId}`);
+      return;
+    }
+
+    // Legacy flow: account-level plan (should not happen with domain-based plans)
     const selectedPlanLevel = planHierarchy[selectedPlan] || 0;
 
     // If selecting current plan, do nothing
@@ -116,7 +130,11 @@ export default function PlansPage() {
 
     // Navigate to payment page for the selected plan
     setLoading(true);
-    router.push(`/payment?plan=${selectedPlan}`);
+    if (siteId) {
+      router.push(`/payment?plan=${selectedPlan}&siteId=${siteId}`);
+    } else {
+      router.push(`/payment?plan=${selectedPlan}`);
+    }
   };
 
   return (
@@ -125,16 +143,27 @@ export default function PlansPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-12">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Choose Your Plan
+            {siteId ? `Choose Plan for ${domain || 'Your Domain'}` : "Choose Your Plan"}
           </h1>
           <p className="text-xl text-gray-600">
-            Select the plan that best fits your needs
+            {siteId 
+              ? "Select a plan for this domain. Each domain requires its own subscription."
+              : "Select the plan that best fits your needs"
+            }
           </p>
-          {currentPlan ? (
+          {siteId && (
+            <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4 inline-block">
+              <p className="text-sm text-blue-800">
+                <strong>Domain:</strong> {domain || 'Unknown'} • <strong>Plan Required:</strong> Each domain needs its own plan
+              </p>
+            </div>
+          )}
+          {!siteId && currentPlan && (
             <p className="text-sm text-gray-500 mt-2">
               Current Plan: <span className="font-semibold text-indigo-600">{PLAN_DETAILS[currentPlan]?.name || currentPlan}</span>
             </p>
-          ) : (
+          )}
+          {!siteId && !currentPlan && (
             <p className="text-sm text-gray-500 mt-2">
               <span className="font-semibold text-indigo-600">No plan selected</span> - Choose a plan to get started
             </p>
@@ -269,9 +298,9 @@ export default function PlansPage() {
               </thead>
               <tbody>
                 <tr className="border-b">
-                  <td className="py-3 px-4 text-gray-700">Websites</td>
-                  <td className="text-center py-3 px-4">1</td>
-                  <td className="text-center py-3 px-4">5</td>
+                  <td className="py-3 px-4 text-gray-700">Page Views/Month</td>
+                  <td className="text-center py-3 px-4">100,000</td>
+                  <td className="text-center py-3 px-4">300,000</td>
                   <td className="text-center py-3 px-4">Unlimited</td>
                 </tr>
                 <tr className="border-b">

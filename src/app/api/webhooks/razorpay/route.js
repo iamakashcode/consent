@@ -88,7 +88,7 @@ async function handlePaymentSuccess(event) {
   // Find subscription by order ID
   const subscription = await prisma.subscription.findFirst({
     where: { razorpayOrderId: orderId },
-    include: { user: true },
+    include: { site: { include: { user: true } } },
   });
 
   if (!subscription) {
@@ -102,7 +102,7 @@ async function handlePaymentSuccess(event) {
   periodEnd.setMonth(periodEnd.getMonth() + 1);
 
   await prisma.subscription.update({
-    where: { userId: subscription.userId },
+    where: { siteId: subscription.siteId },
     data: {
       status: "active",
       currentPeriodStart: now,
@@ -112,7 +112,7 @@ async function handlePaymentSuccess(event) {
     },
   });
 
-  console.log(`[Razorpay Webhook] Subscription activated for user ${subscription.userId}`);
+  console.log(`[Razorpay Webhook] Subscription activated for site ${subscription.siteId}`);
 }
 
 /**
@@ -135,14 +135,14 @@ async function handlePaymentFailed(event) {
 
   // Mark subscription as inactive/cancelled
   await prisma.subscription.update({
-    where: { userId: subscription.userId },
+    where: { siteId: subscription.siteId },
     data: {
       status: "cancelled",
       cancelAtPeriodEnd: false,
     },
   });
 
-  console.log(`[Razorpay Webhook] Subscription cancelled for user ${subscription.userId} due to payment failure`);
+  console.log(`[Razorpay Webhook] Subscription cancelled for site ${subscription.siteId} due to payment failure`);
   
   // TODO: Send email notification to user about payment failure
 }
@@ -172,7 +172,7 @@ async function handleSubscriptionCharged(event) {
   periodEnd.setMonth(periodEnd.getMonth() + 1);
 
   await prisma.subscription.update({
-    where: { userId: dbSubscription.userId },
+    where: { siteId: dbSubscription.siteId },
     data: {
       status: "active",
       currentPeriodStart: now,
@@ -181,7 +181,7 @@ async function handleSubscriptionCharged(event) {
     },
   });
 
-  console.log(`[Razorpay Webhook] Subscription period extended for user ${dbSubscription.userId}`);
+  console.log(`[Razorpay Webhook] Subscription period extended for site ${dbSubscription.siteId}`);
 }
 
 /**
@@ -198,7 +198,7 @@ async function handleSubscriptionActivated(event) {
 
   if (dbSubscription) {
     await prisma.subscription.update({
-      where: { userId: dbSubscription.userId },
+      where: { siteId: dbSubscription.siteId },
       data: {
         status: "active",
       },
@@ -220,7 +220,7 @@ async function handleSubscriptionCancelled(event) {
 
   if (dbSubscription) {
     await prisma.subscription.update({
-      where: { userId: dbSubscription.userId },
+      where: { siteId: dbSubscription.siteId },
       data: {
         status: "cancelled",
         cancelAtPeriodEnd: false,

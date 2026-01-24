@@ -136,14 +136,14 @@ export async function GET(req, { params }) {
       });
     }
 
-    // Check subscription status - block if inactive
-    const subscriptionStatus = await isSubscriptionActive(site.userId);
+    // Check subscription status for this site - block if inactive
+    const subscriptionStatus = await isSubscriptionActive(site.id);
     if (!subscriptionStatus.isActive) {
-      console.warn(`[Verify Callback] Subscription inactive for user ${site.userId}: ${subscriptionStatus.reason}`);
+      console.warn(`[Verify Callback] Subscription inactive for site ${site.id}: ${subscriptionStatus.reason}`);
       return new Response(JSON.stringify({ 
         connected: false,
         error: "Subscription inactive",
-        message: `Your subscription is inactive: ${subscriptionStatus.reason}. Please renew to continue.`,
+        message: `Subscription for this domain is inactive: ${subscriptionStatus.reason}. Please renew to continue.`,
       }), {
         status: 403,
         headers: {

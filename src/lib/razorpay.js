@@ -20,15 +20,23 @@ export const PLAN_TRIAL_DAYS = {
   pro: 0,
 };
 
+// Plan page view limits (per domain)
+export const PLAN_PAGE_VIEW_LIMITS = {
+  basic: 100000,    // 100,000 page views per month
+  starter: 300000,  // 300,000 page views per month
+  pro: Infinity,    // Unlimited page views
+};
+
 // Plan details
 export const PLAN_DETAILS = {
   basic: {
     name: "Basic",
     price: 5,
-    sites: 1,
+    pageViews: 100000,
     trialDays: 7,
     features: [
-      "1 website",
+      "1 domain",
+      "100,000 page views/month",
       "Basic tracker detection",
       "Cookie consent banner",
       "Community support",
@@ -38,10 +46,11 @@ export const PLAN_DETAILS = {
   starter: {
     name: "Starter",
     price: 9,
-    sites: 5,
+    pageViews: 300000,
     trialDays: 0,
     features: [
-      "5 websites",
+      "1 domain",
+      "300,000 page views/month",
       "Advanced tracker detection",
       "Customizable banner",
       "Email support",
@@ -51,10 +60,11 @@ export const PLAN_DETAILS = {
   pro: {
     name: "Pro",
     price: 20,
-    sites: Infinity,
+    pageViews: Infinity,
     trialDays: 0,
     features: [
-      "Unlimited websites",
+      "1 domain",
+      "Unlimited page views",
       "All tracker types",
       "White-label banner",
       "Priority support",

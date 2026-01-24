@@ -82,16 +82,36 @@ export async function GET(req, { params }) {
       domain = "*";
     }
 
-    // Check subscription status - block script if subscription is inactive
-    if (userId) {
-      const subscriptionStatus = await isSubscriptionActive(userId);
+    // Check subscription status for this site - block script if subscription is inactive
+    if (siteId) {
+      const subscriptionStatus = await isSubscriptionActive(siteId);
       if (!subscriptionStatus.isActive) {
-        console.warn(`[Script] Subscription inactive for user ${userId}: ${subscriptionStatus.reason}`);
+        console.warn(`[Script] Subscription inactive for site ${siteId}: ${subscriptionStatus.reason}`);
         // Return a blocked script that shows a message
         const blockedScript = `(function(){
-console.error('[Consent SDK] Access denied: Subscription inactive. ${subscriptionStatus.reason}');
+console.error('[Consent SDK] Access denied: Subscription inactive for this domain. ${subscriptionStatus.reason}');
 if(typeof window!=='undefined'&&window.console){
-window.console.error('[Consent SDK] Please renew your subscription to continue using the consent script.');
+window.console.error('[Consent SDK] Please renew your subscription for this domain to continue using the consent script.');
+}
+})();`;
+        return new Response(blockedScript, {
+          headers: {
+            "Content-Type": "application/javascript; charset=utf-8",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+      
+      // Check page view limit
+      const { checkPageViewLimit } = await import("@/lib/subscription");
+      const pageViewCheck = await checkPageViewLimit(siteId);
+      if (pageViewCheck.exceeded && pageViewCheck.limit !== Infinity) {
+        console.warn(`[Script] Page view limit exceeded for site ${siteId}: ${pageViewCheck.currentViews}/${pageViewCheck.limit}`);
+        const blockedScript = `(function(){
+console.error('[Consent SDK] Access denied: Page view limit exceeded. Current: ${pageViewCheck.currentViews}, Limit: ${pageViewCheck.limit}');
+if(typeof window!=='undefined'&&window.console){
+window.console.error('[Consent SDK] Please upgrade your plan to continue using the consent script.');
 }
 })();`;
         return new Response(blockedScript, {
