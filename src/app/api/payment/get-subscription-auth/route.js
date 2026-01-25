@@ -25,13 +25,30 @@ export async function GET(req) {
       const subscription = await razorpay.subscriptions.fetch(subscriptionId);
       
       // Get auth URL from subscription
-      const authUrl = subscription.authenticate_url || subscription.short_url;
+      let authUrl = subscription.authenticate_url || subscription.short_url;
       
       if (!authUrl) {
         return Response.json(
           { error: "Authentication URL not available for this subscription" },
           { status: 404 }
         );
+      }
+
+      // Append callback URL to auth URL (Razorpay might support this)
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+      const callbackUrl = `${baseUrl}/api/payment/callback?subscription_id=${subscriptionId}`;
+      const redirectUrl = `${baseUrl}/profile?payment=success`;
+      
+      try {
+        const urlWithCallback = new URL(authUrl);
+        // Try different parameter names that Razorpay might support
+        urlWithCallback.searchParams.set('callback_url', callbackUrl);
+        urlWithCallback.searchParams.set('redirect_url', redirectUrl);
+        authUrl = urlWithCallback.toString();
+      } catch (urlError) {
+        // If authUrl is not a valid URL, append as query string
+        const separator = authUrl.includes('?') ? '&' : '?';
+        authUrl = `${authUrl}${separator}callback_url=${encodeURIComponent(callbackUrl)}&redirect_url=${encodeURIComponent(redirectUrl)}`;
       }
 
       return Response.json({

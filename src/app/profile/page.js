@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { getRemainingTrialDays, isTrialActive, formatTrialEndDate } from "@/lib/trial-utils";
@@ -9,6 +9,7 @@ import { getRemainingTrialDays, isTrialActive, formatTrialEndDate } from "@/lib/
 export default function ProfilePage() {
   const { data: session, status, update } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState(null);
@@ -24,6 +25,57 @@ export default function ProfilePage() {
       router.push("/login");
     }
   }, [status, router]);
+
+  // Check for payment success redirect
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Check URL params first
+      const paymentSuccess = searchParams?.get("payment");
+      if (paymentSuccess === "success" && session) {
+        // Refresh subscription data to show updated status
+        update();
+        fetchSubscription();
+        fetchSites();
+        
+        // Show success message
+        setTimeout(() => {
+          alert("✅ Payment successful! Your subscription has been activated.");
+        }, 500);
+        
+        // Remove query parameter from URL
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, "", newUrl);
+        return;
+      }
+      
+      // Also check sessionStorage for Razorpay redirect (user came back from Razorpay)
+      const storedSubscriptionId = sessionStorage.getItem('razorpay_subscription_id');
+      const storedSiteId = sessionStorage.getItem('razorpay_site_id');
+      if (storedSubscriptionId && session) {
+        // Refresh subscription data to check if it's now active
+        const checkSubscription = async () => {
+          try {
+            await fetchSubscription();
+            await fetchSites();
+            await update(); // Refresh session
+            
+            // Clear sessionStorage
+            sessionStorage.removeItem('razorpay_subscription_id');
+            sessionStorage.removeItem('razorpay_site_id');
+            sessionStorage.removeItem('razorpay_redirect_url');
+            
+            // Show success message
+            setTimeout(() => {
+              alert("✅ Payment successful! Your subscription has been activated.");
+            }, 1000);
+          } catch (error) {
+            console.error("Error checking subscription status:", error);
+          }
+        };
+        checkSubscription();
+      }
+    }
+  }, [searchParams, session, update]);
 
   useEffect(() => {
     if (session && !hasRefreshed.current) {

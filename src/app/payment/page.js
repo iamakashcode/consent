@@ -103,6 +103,12 @@ function PaymentContent() {
         // If we have an auth URL, redirect immediately
         if (authUrl) {
           console.log("[Payment] Redirecting to Razorpay:", authUrl);
+          // Store subscription ID and siteId in sessionStorage for redirect handling
+          if (data.subscriptionId && data.siteId) {
+            sessionStorage.setItem('razorpay_subscription_id', data.subscriptionId);
+            sessionStorage.setItem('razorpay_site_id', data.siteId);
+            sessionStorage.setItem('razorpay_redirect_url', `/profile?payment=success&siteId=${data.siteId}`);
+          }
           window.location.href = authUrl;
           return;
         }

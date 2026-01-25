@@ -99,12 +99,16 @@ export async function createRazorpayOrder(amount, currency = "INR") {
  * @param {number} trialDays - Number of trial days (0 for no trial)
  * @returns {Promise<Object>} Razorpay subscription object
  */
-export async function createRazorpaySubscription(planId, customer, trialDays = 0) {
+export async function createRazorpaySubscription(planId, customer, trialDays = 0, redirectUrl = null) {
   try {
     // Don't set start_at - let Razorpay handle subscription lifecycle
     // When start_at is set to future, authenticate_url might not be available immediately
     // Razorpay will keep subscription in "created" state until payment method is added
     // Once payment method is added, subscription activates and billing starts
+    
+    // Get base URL for redirect
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const defaultRedirectUrl = `${baseUrl}/profile?payment=success`;
     
     const subscriptionData = {
       plan_id: planId,
@@ -114,8 +118,19 @@ export async function createRazorpaySubscription(planId, customer, trialDays = 0
       notes: {
         customer_name: customer.name,
         customer_email: customer.email,
+        redirect_url: redirectUrl || defaultRedirectUrl, // Store redirect URL in notes
+        return_url: redirectUrl || defaultRedirectUrl, // Alternative redirect URL
+        callback_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/payment/callback`, // Callback endpoint
       },
     };
+
+    // Add notify_info for redirect after payment (if supported)
+    // Razorpay subscriptions may support redirect through callback_url
+    if (redirectUrl || defaultRedirectUrl) {
+      subscriptionData.notify_info = {
+        notify_url: `${baseUrl}/api/webhooks/razorpay`, // Webhook URL
+      };
+    }
 
     // If trial period is needed, it will be handled in the webhook when subscription is activated
     // We don't set trial in the subscription creation because trial starts AFTER activation
@@ -125,6 +140,7 @@ export async function createRazorpaySubscription(planId, customer, trialDays = 0
       status: subscription.status,
       authenticate_url: subscription.authenticate_url ? 'present' : 'missing',
       short_url: subscription.short_url ? 'present' : 'missing',
+      redirect_url: redirectUrl || defaultRedirectUrl,
     });
     return subscription;
   } catch (error) {

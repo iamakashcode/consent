@@ -538,6 +538,11 @@ export async function POST(req) {
     // This is handled in the webhook handler
     let razorpaySubscription;
     try {
+        // Get base URL for redirect
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+          (req.headers.get("origin") || `http://${req.headers.get("host")}`);
+        const redirectUrl = `${baseUrl}/profile?payment=success&siteId=${site.siteId}`;
+        
         razorpaySubscription = await createRazorpaySubscription(
           razorpayPlan.id,
           {
@@ -545,7 +550,8 @@ export async function POST(req) {
             email: user?.email || session.user.email,
             contact: undefined,
           },
-          0 // Always 0 trial days - trial starts after activation
+          0, // Always 0 trial days - trial starts after activation
+          redirectUrl // Redirect URL after payment
         );
         
         console.log("Created Razorpay subscription:", razorpaySubscription.id);
@@ -1003,23 +1009,56 @@ export async function POST(req) {
       }
     }
     
-    // If we have auth URL, return it
+    // If we have auth URL, append callback URL to it
     if (authUrl) {
-      console.log("[Payment] Auth URL found:", authUrl);
-      return Response.json({
-        success: true,
-        trial: false,
-        trialDays: 0,
-        trialEndAt: null,
-        subscriptionId: razorpaySubscription.id,
-        subscriptionAuthUrl: authUrl,
-        requiresPaymentSetup: true,
-        redirectToRazorpay: true,
-        siteId: site.siteId,
-        siteDbId: siteDbId,
-        domain: site.domain,
-        message: `Please add a payment method to activate your subscription for ${site.domain}. Your 7-day free trial will start after activation.`,
-      });
+      // Get base URL for callback
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+        (req.headers.get("origin") || `http://${req.headers.get("host")}`);
+      const callbackUrl = `${baseUrl}/api/payment/callback?subscription_id=${razorpaySubscription.id}`;
+      
+      // Try to append callback URL to authenticate_url
+      // Razorpay might support callback_url or redirect_url parameter
+      try {
+        const urlWithCallback = new URL(authUrl);
+        // Try different parameter names that Razorpay might support
+        urlWithCallback.searchParams.set('callback_url', callbackUrl);
+        urlWithCallback.searchParams.set('redirect_url', `${baseUrl}/profile?payment=success&siteId=${site.siteId}`);
+        const finalAuthUrl = urlWithCallback.toString();
+        
+        console.log("[Payment] Auth URL with callback:", finalAuthUrl);
+        return Response.json({
+          success: true,
+          trial: false,
+          trialDays: 0,
+          trialEndAt: null,
+          subscriptionId: razorpaySubscription.id,
+          subscriptionAuthUrl: finalAuthUrl,
+          requiresPaymentSetup: true,
+          redirectToRazorpay: true,
+          siteId: site.siteId,
+          siteDbId: siteDbId,
+          domain: site.domain,
+          message: `Please add a payment method to activate your subscription for ${site.domain}. Your 7-day free trial will start after activation.`,
+        });
+      } catch (urlError) {
+        // If URL parsing fails, use original authUrl
+        console.warn("[Payment] Could not append callback URL:", urlError);
+        return Response.json({
+          success: true,
+          trial: false,
+          trialDays: 0,
+          trialEndAt: null,
+          subscriptionId: razorpaySubscription.id,
+          subscriptionAuthUrl: authUrl,
+          requiresPaymentSetup: true,
+          redirectToRazorpay: true,
+          callbackUrl: callbackUrl, // Return callback URL separately
+          siteId: site.siteId,
+          siteDbId: siteDbId,
+          domain: site.domain,
+          message: `Please add a payment method to activate your subscription for ${site.domain}. Your 7-day free trial will start after activation.`,
+        });
+      }
     }
     
     // If no auth URL, still return success but indicate it needs to be fetched
@@ -1064,6 +1103,11 @@ export async function POST(req) {
       // Create Razorpay subscription (recurring monthly)
       let razorpaySubscription;
       try {
+        // Get base URL for redirect
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+          (req.headers.get("origin") || `http://${req.headers.get("host")}`);
+        const redirectUrl = `${baseUrl}/profile?payment=success&siteId=${site.siteId}`;
+        
         razorpaySubscription = await createRazorpaySubscription(
           razorpayPlan.id,
           {
@@ -1071,7 +1115,8 @@ export async function POST(req) {
             email: user?.email || session.user.email,
             contact: undefined,
           },
-          0 // No trial for starter/pro
+          0, // No trial for starter/pro
+          redirectUrl // Redirect URL after payment
         );
         
         console.log("Created Razorpay subscription:", razorpaySubscription.id);
@@ -1093,6 +1138,21 @@ export async function POST(req) {
           authUrl = fetchedSub.authenticate_url || fetchedSub.short_url;
         } catch (error) {
           console.error("Error fetching subscription auth URL:", error);
+        }
+      }
+      
+      // Append callback URL to auth URL if available
+      if (authUrl) {
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+          (req.headers.get("origin") || `http://${req.headers.get("host")}`);
+        const callbackUrl = `${baseUrl}/api/payment/callback?subscription_id=${razorpaySubscription.id}`;
+        try {
+          const urlWithCallback = new URL(authUrl);
+          urlWithCallback.searchParams.set('callback_url', callbackUrl);
+          urlWithCallback.searchParams.set('redirect_url', `${baseUrl}/profile?payment=success&siteId=${site.siteId}`);
+          authUrl = urlWithCallback.toString();
+        } catch (urlError) {
+          console.warn("[Payment] Could not append callback URL:", urlError);
         }
       }
       
