@@ -958,45 +958,83 @@ export async function POST(req) {
 
     // Return subscription details for frontend to redirect to Razorpay subscription auth
     // Razorpay subscription has authenticate_url or short_url for payment method setup
-    const authUrl = razorpaySubscription.authenticate_url || razorpaySubscription.short_url;
+    console.log("[Payment] Razorpay subscription created:", {
+      id: razorpaySubscription.id,
+      status: razorpaySubscription.status,
+      authenticate_url: razorpaySubscription.authenticate_url,
+      short_url: razorpaySubscription.short_url,
+      start_at: razorpaySubscription.start_at,
+    });
     
+    let authUrl = razorpaySubscription.authenticate_url || razorpaySubscription.short_url;
+    
+    // If no auth URL, try fetching the subscription again (sometimes it's not in initial response)
     if (!authUrl) {
-      console.warn("No auth URL in subscription response, fetching from Razorpay...");
-      // Fetch subscription again to get auth URL
+      console.warn("[Payment] No auth URL in subscription response, fetching from Razorpay...");
       try {
+        // Wait a moment for Razorpay to process
+        await new Promise(resolve => setTimeout(resolve, 1000));
         const fetchedSub = await razorpay.subscriptions.fetch(razorpaySubscription.id);
-        const fetchedAuthUrl = fetchedSub.authenticate_url || fetchedSub.short_url;
-        if (fetchedAuthUrl) {
-          return Response.json({
-            success: true,
-            trial: false,
-            trialDays: 0,
-            trialEndAt: null,
-            subscriptionId: razorpaySubscription.id,
-            subscriptionAuthUrl: fetchedAuthUrl,
-            requiresPaymentSetup: true,
-            siteId: site.siteId, // Return public siteId
-            siteDbId: siteDbId, // Internal ID
-            domain: site.domain,
-            message: `Please add a payment method to activate your subscription for ${site.domain}. Your 7-day free trial will start after activation.`,
-          });
-        }
+        console.log("[Payment] Fetched subscription:", {
+          id: fetchedSub.id,
+          status: fetchedSub.status,
+          authenticate_url: fetchedSub.authenticate_url,
+          short_url: fetchedSub.short_url,
+        });
+        authUrl = fetchedSub.authenticate_url || fetchedSub.short_url;
       } catch (error) {
-        console.error("Error fetching subscription auth URL:", error);
+        console.error("[Payment] Error fetching subscription auth URL:", error);
       }
     }
     
+    // If still no auth URL, try using the subscription link format
+    if (!authUrl) {
+      console.warn("[Payment] Still no auth URL, trying subscription link format...");
+      // Razorpay subscription links are typically: https://rzp.io/i/<subscription_id>
+      // But for authentication, we might need to use the subscription's authenticate_url
+      // Let's try one more fetch with a longer delay
+      try {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const fetchedSub = await razorpay.subscriptions.fetch(razorpaySubscription.id);
+        authUrl = fetchedSub.authenticate_url || fetchedSub.short_url;
+        console.log("[Payment] Second fetch result:", { authUrl, status: fetchedSub.status });
+      } catch (error) {
+        console.error("[Payment] Error in second fetch:", error);
+      }
+    }
+    
+    // If we have auth URL, return it
+    if (authUrl) {
+      console.log("[Payment] Auth URL found:", authUrl);
+      return Response.json({
+        success: true,
+        trial: false,
+        trialDays: 0,
+        trialEndAt: null,
+        subscriptionId: razorpaySubscription.id,
+        subscriptionAuthUrl: authUrl,
+        requiresPaymentSetup: true,
+        redirectToRazorpay: true,
+        siteId: site.siteId,
+        siteDbId: siteDbId,
+        domain: site.domain,
+        message: `Please add a payment method to activate your subscription for ${site.domain}. Your 7-day free trial will start after activation.`,
+      });
+    }
+    
+    // If no auth URL, still return success but indicate it needs to be fetched
+    console.warn("[Payment] No auth URL available, returning subscription ID for client-side fetch");
     return Response.json({
       success: true,
       trial: false,
       trialDays: 0,
       trialEndAt: null,
       subscriptionId: razorpaySubscription.id,
-      subscriptionAuthUrl: authUrl,
+      subscriptionAuthUrl: null, // Will be fetched client-side
       requiresPaymentSetup: true,
-      redirectToRazorpay: true, // Force redirect
-      siteId: site.siteId, // Return public siteId
-      siteDbId: siteDbId, // Internal ID
+      redirectToRazorpay: true,
+      siteId: site.siteId,
+      siteDbId: siteDbId,
       domain: site.domain,
       message: `Please add a payment method to activate your subscription for ${site.domain}. Your 7-day free trial will start after activation.`,
     });

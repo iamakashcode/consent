@@ -76,11 +76,23 @@ function PaymentContent() {
         if (!authUrl && data.subscriptionId) {
           try {
             console.log("[Payment] Fetching auth URL for subscription:", data.subscriptionId);
-            const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
-            if (authResponse.ok) {
-              const authData = await authResponse.json();
-              console.log("[Payment] Auth URL response:", authData);
-              authUrl = authData.authUrl;
+            // Try multiple times with delays (Razorpay might need time to generate the URL)
+            for (let attempt = 0; attempt < 3; attempt++) {
+              if (attempt > 0) {
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // 1s, 2s delays
+              }
+              const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
+              if (authResponse.ok) {
+                const authData = await authResponse.json();
+                console.log(`[Payment] Auth URL response (attempt ${attempt + 1}):`, authData);
+                if (authData.authUrl) {
+                  authUrl = authData.authUrl;
+                  break;
+                }
+              } else {
+                const errorData = await authResponse.json();
+                console.warn(`[Payment] Auth URL fetch failed (attempt ${attempt + 1}):`, errorData);
+              }
             }
           } catch (err) {
             console.error("[Payment] Error fetching auth URL:", err);

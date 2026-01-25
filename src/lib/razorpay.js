@@ -101,27 +101,31 @@ export async function createRazorpayOrder(amount, currency = "INR") {
  */
 export async function createRazorpaySubscription(planId, customer, trialDays = 0) {
   try {
-    // Calculate start_at timestamp (after trial period)
-    const startAt = trialDays > 0 
-      ? Math.floor(Date.now() / 1000) + (trialDays * 24 * 60 * 60)
-      : Math.floor(Date.now() / 1000);
+    // Don't set start_at - let Razorpay handle subscription lifecycle
+    // When start_at is set to future, authenticate_url might not be available immediately
+    // Razorpay will keep subscription in "created" state until payment method is added
+    // Once payment method is added, subscription activates and billing starts
     
     const subscriptionData = {
       plan_id: planId,
       customer_notify: 1,
       total_count: 12, // 12 months of recurring payments
-      start_at: startAt,
+      // Don't set start_at - subscription will start when payment method is added
       notes: {
         customer_name: customer.name,
         customer_email: customer.email,
       },
     };
 
-    // If trial period, add offer_id for trial (or handle via plan settings)
-    // Note: Razorpay plans can have trial periods built-in
-    // For now, we'll use start_at to delay first charge
+    // If trial period is needed, it will be handled in the webhook when subscription is activated
+    // We don't set trial in the subscription creation because trial starts AFTER activation
     
     const subscription = await razorpay.subscriptions.create(subscriptionData);
+    console.log(`[Razorpay] Created subscription ${subscription.id}`, {
+      status: subscription.status,
+      authenticate_url: subscription.authenticate_url ? 'present' : 'missing',
+      short_url: subscription.short_url ? 'present' : 'missing',
+    });
     return subscription;
   } catch (error) {
     console.error("Razorpay subscription creation error:", error);
