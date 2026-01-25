@@ -39,9 +39,9 @@ export async function GET(req) {
           email: true,
           name: true,
           createdAt: true,
-          subscription: {
+          _count: {
             select: {
-              plan: true,
+              sites: true,
             },
           },
         },

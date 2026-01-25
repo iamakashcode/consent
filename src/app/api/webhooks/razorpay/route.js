@@ -186,6 +186,8 @@ async function handleSubscriptionCharged(event) {
 
 /**
  * Handle subscription activated
+ * This is when payment method is successfully added and subscription is activated
+ * For Basic plan, start 7-day free trial here (only if trial hasn't been used)
  */
 async function handleSubscriptionActivated(event) {
   const subscription = event.payload.subscription.entity;
@@ -196,14 +198,37 @@ async function handleSubscriptionActivated(event) {
     where: { razorpaySubscriptionId: subscription.id },
   });
 
-  if (dbSubscription) {
-    await prisma.subscription.update({
-      where: { siteId: dbSubscription.siteId },
-      data: {
-        status: "active",
-      },
-    });
+  if (!dbSubscription) {
+    console.warn(`[Razorpay Webhook] Subscription not found for Razorpay subscription ${subscription.id}`);
+    return;
   }
+
+  // Check if this is Basic plan and user hasn't used trial yet
+  const hasUsedTrial = dbSubscription.trialEndAt !== null;
+  const shouldStartTrial = dbSubscription.plan === "basic" && !hasUsedTrial;
+  
+  let trialEndAt = null;
+  let currentPeriodEnd = new Date();
+  currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1); // Default 1 month
+  
+  if (shouldStartTrial) {
+    // Start 7-day free trial
+    trialEndAt = calculateTrialEndDate("basic");
+    currentPeriodEnd = trialEndAt; // Period ends when trial ends
+    console.log(`[Razorpay Webhook] Starting 7-day free trial for Basic plan, trial ends: ${trialEndAt.toISOString()}`);
+  }
+
+  await prisma.subscription.update({
+    where: { siteId: dbSubscription.siteId },
+    data: {
+      status: "active",
+      trialEndAt: trialEndAt, // Set trial if applicable, otherwise null
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: currentPeriodEnd,
+    },
+  });
+
+  console.log(`[Razorpay Webhook] Subscription activated for site ${dbSubscription.siteId}${shouldStartTrial ? ' with 7-day free trial' : ''}`);
 }
 
 /**

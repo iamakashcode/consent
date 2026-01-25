@@ -228,10 +228,20 @@ export async function POST(req) {
     }
 
     // Check if site has a subscription
-    const siteWithSubscription = await prisma.site.findUnique({
-      where: { id: site.id },
-      include: { subscription: true },
-    });
+    // Handle potential schema issues gracefully
+    let hasSubscription = false;
+    try {
+      // Try to find subscription for this site
+      const subscription = await prisma.subscription.findUnique({
+        where: { siteId: site.id },
+      });
+      hasSubscription = !!subscription;
+    } catch (subError) {
+      console.error("[Crawl] Error checking subscription:", subError.message);
+      // If query fails (e.g., schema issue), assume no subscription
+      // User will be prompted to add one
+      hasSubscription = false;
+    }
 
     const baseUrl =
       process.env.NEXT_PUBLIC_BASE_URL ||
@@ -250,7 +260,7 @@ export async function POST(req) {
       siteDbId: site.id, // Internal database ID for subscription creation
       isVerified: siteIsVerified,
       verificationToken: siteVerificationToken,
-      hasSubscription: !!siteWithSubscription?.subscription,
+      hasSubscription: hasSubscription,
       message: siteIsVerified 
         ? "Domain is verified. The script is working correctly."
         : "Add the script to your website. Verification will happen automatically when the script loads.",

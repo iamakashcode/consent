@@ -14,21 +14,16 @@ function LoginContent() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   
-  // Check if user just registered and needs to select a plan
+  // Redirect after successful login
   useEffect(() => {
     if (session?.user) {
       const redirect = searchParams?.get("redirect");
       if (redirect) {
         router.push(redirect);
       } else {
-        // Check if user has a plan, if not redirect to plans
-        const plan = session.user?.plan;
-        if (!plan) {
-          // No plan selected, redirect to plans page
-          router.push("/plans");
-        } else {
-          router.push("/dashboard");
-        }
+        // Plans are now domain-based, so always go to dashboard
+        // User will be prompted to select plan when adding a domain
+        router.push("/dashboard");
       }
     }
   }, [session, router, searchParams]);
@@ -39,15 +34,22 @@ function LoginContent() {
     setLoading(true);
 
     try {
+      console.log("[Login] Attempting sign in for:", email);
       const result = await signIn("credentials", {
         email,
         password,
         redirect: false,
       });
 
+      console.log("[Login] Sign in result:", result);
+
       if (result?.error) {
-        setError("Invalid email or password");
-      } else {
+        // console.error("[Login] Sign in error:", result.error);
+        setError(result.error === "CredentialsSignin" 
+          ? "Invalid email or password" 
+          : `Login failed: ${result.error}`);
+      } else if (result?.ok) {
+        console.log("[Login] Sign in successful");
         // Check redirect parameter
         const redirect = searchParams?.get("redirect");
         if (redirect) {
@@ -56,9 +58,13 @@ function LoginContent() {
           router.push("/dashboard");
         }
         router.refresh();
+      } else {
+        console.warn("[Login] Unexpected result:", result);
+        setError("Login failed. Please try again.");
       }
     } catch (err) {
-      setError("An error occurred. Please try again.");
+      console.error("[Login] Exception during sign in:", err);
+      setError(`An error occurred: ${err.message || "Please try again."}`);
     } finally {
       setLoading(false);
     }

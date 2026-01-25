@@ -43,6 +43,8 @@ function PaymentContent() {
       });
 
       const data = await response.json();
+      
+      console.log("[Payment] API Response:", data);
 
       if (!response.ok) {
         // If session is out of sync, refresh the page
@@ -63,37 +65,48 @@ function PaymentContent() {
       }
 
       // If subscription setup is required (Basic trial or Starter/Pro subscription), redirect to Razorpay
-      if (data.requiresPaymentSetup && (data.subscriptionAuthUrl || data.redirectToRazorpay)) {
+      if (data.requiresPaymentSetup || data.subscriptionId) {
         // Update session first
         await update();
         
-        if (data.subscriptionAuthUrl) {
-          // Redirect to Razorpay subscription authentication page
-          console.log("Redirecting to Razorpay:", data.subscriptionAuthUrl);
-          window.location.href = data.subscriptionAuthUrl;
-          return;
-        }
+        // Try to get auth URL from response
+        let authUrl = data.subscriptionAuthUrl;
         
-        // If no auth URL but redirect is required, fetch it
-        if (data.subscriptionId) {
+        // If no auth URL but we have subscriptionId, try to fetch it
+        if (!authUrl && data.subscriptionId) {
           try {
+            console.log("[Payment] Fetching auth URL for subscription:", data.subscriptionId);
             const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
-            const authData = await authResponse.json();
-            if (authData.authUrl) {
-              console.log("Fetched auth URL, redirecting:", authData.authUrl);
-              window.location.href = authData.authUrl;
-              return;
+            if (authResponse.ok) {
+              const authData = await authResponse.json();
+              console.log("[Payment] Auth URL response:", authData);
+              authUrl = authData.authUrl;
             }
           } catch (err) {
-            console.error("Error fetching auth URL:", err);
-            setError("Failed to get payment setup link. Please try again.");
-            setLoading(false);
-            return;
+            console.error("[Payment] Error fetching auth URL:", err);
+            // Continue to show subscription setup UI instead of error
           }
         }
         
-        // If we reach here, couldn't get auth URL
-        setError("Failed to redirect to payment setup. Please try again.");
+        // If we have an auth URL, redirect immediately
+        if (authUrl) {
+          console.log("[Payment] Redirecting to Razorpay:", authUrl);
+          window.location.href = authUrl;
+          return;
+        }
+        
+        // If we reach here, couldn't get auth URL - show subscription setup UI instead
+        console.log("[Payment] No auth URL available, showing subscription setup UI");
+        setOrderData({
+          subscription: true,
+          requiresPaymentSetup: true,
+          subscriptionId: data.subscriptionId,
+          subscriptionAuthUrl: authUrl || null,
+          plan: plan,
+          domain: data.domain,
+          siteId: data.siteId,
+          ...data
+        });
         setLoading(false);
         return;
       }
@@ -113,8 +126,62 @@ function PaymentContent() {
         // Update session to reflect new plan
         await update();
         
-        // If we reach here, redirect failed - show error
-        setError("Failed to redirect to payment setup. Please try again.");
+        // Try to get auth URL if we have subscription ID
+        if (data.subscriptionId) {
+          try {
+            const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
+            if (authResponse.ok) {
+              const authData = await authResponse.json();
+              if (authData.authUrl) {
+                window.location.href = authData.authUrl;
+                return;
+              }
+            }
+          } catch (err) {
+            console.error("[Payment] Error fetching auth URL:", err);
+          }
+        }
+        
+        // If we reach here, redirect failed - show subscription setup UI
+        setOrderData({
+          subscription: true,
+          requiresPaymentSetup: true,
+          subscriptionId: data.subscriptionId,
+          plan: plan,
+          domain: data.domain,
+          siteId: data.siteId,
+          ...data
+        });
+        setLoading(false);
+        return;
+      }
+
+      // If we have success but no specific handling, check if it's a subscription
+      if (data.success && data.subscriptionId && !data.amount) {
+        // This is a subscription, try to get auth URL
+        try {
+          const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
+          if (authResponse.ok) {
+            const authData = await authResponse.json();
+            if (authData.authUrl) {
+              window.location.href = authData.authUrl;
+              return;
+            }
+          }
+        } catch (err) {
+          console.error("[Payment] Error fetching auth URL:", err);
+        }
+        
+        // Show subscription setup UI
+        setOrderData({
+          subscription: true,
+          requiresPaymentSetup: true,
+          subscriptionId: data.subscriptionId,
+          plan: plan,
+          domain: data.domain,
+          siteId: data.siteId,
+          ...data
+        });
         setLoading(false);
         return;
       }
@@ -391,7 +458,74 @@ function PaymentContent() {
                   By proceeding, you agree to our terms and conditions. This is a recurring monthly subscription.
                 </p>
               </div>
-            ) : orderData && (
+            ) : orderData && (orderData.requiresPaymentSetup || (orderData.subscription && !orderData.amount)) ? (
+              <div className="space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-start">
+                    <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-semibold text-blue-900 mb-1">
+                        Payment Setup Required
+                      </p>
+                      <p className="text-xs text-blue-700">
+                        Please add a payment method to activate your subscription. {plan === "basic" && "Your 7-day free trial will start after activation."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 rounded-lg p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-gray-600">Plan</span>
+                    <span className="font-semibold text-gray-900">
+                      {planNames[plan]}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-gray-600">Monthly Amount</span>
+                    <span className="text-2xl font-bold text-indigo-600">
+                      {planPrices[plan]}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Billing Period</span>
+                    <span className="font-semibold text-gray-900">Monthly (Recurring)</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={async () => {
+                    try {
+                      if (orderData.subscriptionAuthUrl) {
+                        window.location.href = orderData.subscriptionAuthUrl;
+                      } else if (orderData.subscriptionId) {
+                        const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${orderData.subscriptionId}`);
+                        const authData = await authResponse.json();
+                        if (authData.authUrl) {
+                          window.location.href = authData.authUrl;
+                        } else {
+                          setError("Failed to get payment setup link. Please try again.");
+                        }
+                      } else {
+                        setError("Payment setup link not available. Please try selecting the plan again.");
+                      }
+                    } catch (err) {
+                      console.error("Error setting up payment:", err);
+                      setError("Failed to set up payment. Please try again.");
+                    }
+                  }}
+                  className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+                >
+                  Add Payment Method & Activate
+                </button>
+
+                <p className="text-xs text-center text-gray-500">
+                  By proceeding, you agree to our terms and conditions. This is a recurring monthly subscription.
+                </p>
+              </div>
+            ) : orderData && orderData.amount ? (
               <div className="space-y-6">
                 <div className="bg-gray-50 rounded-lg p-6">
                   <div className="flex justify-between items-center mb-4">
@@ -426,6 +560,20 @@ function PaymentContent() {
                   By proceeding, you agree to our terms and conditions. This is a
                   test payment using Razorpay test keys.
                 </p>
+              </div>
+            ) : orderData && (
+              <div className="space-y-6">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+                  <p className="text-yellow-900 mb-4">
+                    Unable to process payment. Please try selecting the plan again.
+                  </p>
+                  <Link
+                    href={`/plans?siteId=${siteId}&domain=${encodeURIComponent(orderData.domain || "")}`}
+                    className="inline-block bg-indigo-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+                  >
+                    Go Back to Plans
+                  </Link>
+                </div>
               </div>
             )}
 

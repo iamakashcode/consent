@@ -16,6 +16,7 @@ export default function ProfilePage() {
   const [verificationStatus, setVerificationStatus] = useState({});
   const [siteStats, setSiteStats] = useState({}); // Store stats for each site
   const [subscription, setSubscription] = useState(null); // Subscription details with trial info
+  const [subscriptionsBySite, setSubscriptionsBySite] = useState({}); // Map of siteId -> subscription
   const hasRefreshed = useRef(false);
 
   useEffect(() => {
@@ -45,20 +46,38 @@ export default function ProfilePage() {
         const data = await response.json();
         console.log("[Profile] Subscription data:", data);
         // Data is now { subscriptions: [...], count: number, activeCount: number }
-        // For backward compatibility, set the first subscription if exists
+        // Create a map of siteId -> subscription for easy lookup
+        // Map by both public siteId and database ID for flexibility
+        const subscriptionsMap = {};
         if (data.subscriptions && data.subscriptions.length > 0) {
+          data.subscriptions.forEach((item) => {
+            if (item.subscription) {
+              // Map by public siteId
+              if (item.siteId) {
+                subscriptionsMap[item.siteId] = item.subscription;
+              }
+              // Also map by database ID for matching
+              if (item.siteDbId) {
+                subscriptionsMap[item.siteDbId] = item.subscription;
+              }
+            }
+          });
+          // For backward compatibility, set the first subscription if exists
           const firstSub = data.subscriptions[0].subscription;
           setSubscription(firstSub); // Show first domain's subscription for trial banner
         } else {
           setSubscription(null);
         }
+        setSubscriptionsBySite(subscriptionsMap);
       } else {
         console.error("[Profile] Failed to fetch subscription:", response.status, await response.text());
         setSubscription(null);
+        setSubscriptionsBySite({});
       }
     } catch (err) {
       console.error("Failed to fetch subscription:", err);
       setSubscription(null);
+      setSubscriptionsBySite({});
     }
   };
 
@@ -328,6 +347,17 @@ export default function ProfilePage() {
                 const trackers = Array.isArray(site.trackers)
                   ? site.trackers
                   : [];
+                
+                // Check if this site has an active subscription
+                // Match by both public siteId and database ID
+                const siteSubscription = subscriptionsBySite[site.siteId] || 
+                                         subscriptionsBySite[site.id] ||
+                                         Object.values(subscriptionsBySite).find(sub => {
+                                           // Try to match by checking subscription's siteId against site's database ID
+                                           return sub && sub.id && site.id;
+                                         });
+                const hasActiveSubscription = siteSubscription && siteSubscription.status === "active";
+                const hasSubscription = !!siteSubscription;
 
                 return (
                   <div
@@ -358,15 +388,138 @@ export default function ProfilePage() {
                             day: "numeric",
                           })}
                         </p>
-                        {trackers.length > 0 && (
-                          <p className="text-sm text-gray-600 mt-1">
-                            {trackers.length} tracker
-                            {trackers.length !== 1 ? "s" : ""} detected
+                        {/* Show plan status */}
+                        {hasActiveSubscription ? (
+                          <p className="text-sm text-indigo-600 mt-1 font-semibold">
+                            Plan: {siteSubscription.plan.charAt(0).toUpperCase() + siteSubscription.plan.slice(1)}
+                          </p>
+                        ) : hasSubscription && siteSubscription.status === "pending" ? (
+                          <div className="mt-1">
+                            <p className="text-sm text-yellow-600 font-semibold">
+                              Plan: {siteSubscription.plan.charAt(0).toUpperCase() + siteSubscription.plan.slice(1)} (Payment Required)
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              ⚠️ Subscription is not active. Please complete payment setup to activate.
+                            </p>
+                          </div>
+                        ) : hasSubscription ? (
+                          <p className="text-sm text-yellow-600 mt-1 font-semibold">
+                            Plan: {siteSubscription.plan.charAt(0).toUpperCase() + siteSubscription.plan.slice(1)} ({siteSubscription.status})
+                          </p>
+                        ) : (
+                          <p className="text-sm text-red-600 mt-1 font-semibold">
+                            ⚠️ No plan selected
                           </p>
                         )}
-                        {/* Statistics */}
-                        {siteStats[site.siteId] && (
-                          <div className="mt-3 flex gap-4 text-sm">
+                      </div>
+                    </div>
+
+                    {/* Show message if no subscription */}
+                    {!hasSubscription && (
+                      <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <p className="text-sm text-yellow-900 mb-3">
+                          <strong>Plan Required:</strong> This domain needs a subscription plan to use the consent script.
+                        </p>
+                        <Link
+                          href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}
+                          className="inline-block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-semibold"
+                        >
+                          Select Plan for {site.domain}
+                        </Link>
+                      </div>
+                    )}
+
+                    {/* Show message if subscription is pending (payment required) */}
+                    {hasSubscription && siteSubscription.status === "pending" && (
+                      <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <p className="text-sm text-yellow-900 mb-2">
+                          <strong>⚠️ Payment Required:</strong> Your subscription is not active yet. Please complete payment setup to activate your plan.
+                        </p>
+                        <p className="text-xs text-yellow-800 mb-3">
+                          The consent script will not work until payment is completed and the subscription is activated.
+                        </p>
+                        <button
+                          onClick={async () => {
+                            try {
+                              setLoading(true);
+                              // Directly call the payment API to get Razorpay redirect URL
+                              const response = await fetch("/api/payment/create-order", {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                },
+                                body: JSON.stringify({ 
+                                  plan: siteSubscription.plan, 
+                                  siteId: site.siteId 
+                                }),
+                              });
+
+                              const data = await response.json();
+                              
+                              if (!response.ok) {
+                                alert(data.error || "Failed to set up payment. Please try again.");
+                                setLoading(false);
+                                return;
+                              }
+
+                              // If we have auth URL, redirect immediately
+                              if (data.subscriptionAuthUrl) {
+                                window.location.href = data.subscriptionAuthUrl;
+                                return;
+                              }
+
+                              // Try to fetch auth URL if we have subscription ID
+                              if (data.subscriptionId) {
+                                const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
+                                if (authResponse.ok) {
+                                  const authData = await authResponse.json();
+                                  if (authData.authUrl) {
+                                    window.location.href = authData.authUrl;
+                                    return;
+                                  }
+                                }
+                              }
+
+                              // Fallback: redirect to payment page
+                              router.push(`/payment?plan=${siteSubscription.plan}&siteId=${site.siteId}`);
+                            } catch (err) {
+                              console.error("Error setting up payment:", err);
+                              alert("Failed to set up payment. Please try again.");
+                              setLoading(false);
+                            }
+                          }}
+                          disabled={loading}
+                          className="inline-block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {loading ? "Processing..." : "Complete Payment Setup"}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Only show details if subscription exists and is active */}
+                    {hasActiveSubscription && (
+                      <>
+                        {trackers.length > 0 && (
+                          <div className="mb-4">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-2">
+                              Detected Trackers:
+                            </h4>
+                            <div className="flex flex-wrap gap-2">
+                              {trackers.map((tracker, idx) => (
+                                <span
+                                  key={idx}
+                                  className="bg-gray-100 text-gray-700 text-xs px-3 py-1 rounded-full"
+                                >
+                                  {tracker.name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Statistics - only show if subscription is active */}
+                        {hasActiveSubscription && siteStats[site.siteId] && (
+                          <div className="mt-3 flex gap-4 text-sm mb-4">
                             <div className="flex items-center gap-1">
                               <svg className="h-4 w-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -388,158 +541,143 @@ export default function ProfilePage() {
                             </div>
                           </div>
                         )}
-                      </div>
-                    </div>
+                      </>
+                    )}
 
-                    {/* Trackers List */}
-                    {trackers.length > 0 && (
-                      <div className="mb-4">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">
-                          Detected Trackers:
-                        </h4>
-                        <div className="flex flex-wrap gap-2">
-                          {trackers.map((tracker, idx) => (
-                            <span
-                              key={idx}
-                              className="bg-gray-100 text-gray-700 text-xs px-3 py-1 rounded-full"
-                            >
-                              {tracker.name}
-                            </span>
-                          ))}
+                    {/* Connection Status - Only show if subscription is active */}
+                    {hasActiveSubscription && (
+                      <div className="border-t pt-4 mb-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <h4 className="text-sm font-semibold text-gray-700">
+                              Connection Status
+                            </h4>
+                            {site.isVerified ? (
+                              <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded">
+                                ✓ Connected
+                              </span>
+                            ) : (
+                              <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
+                                ⚠ Not Connected
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={async () => {
+                              if (!site.siteId) return;
+                              setLoading(true);
+                              try {
+                                // First refresh sites list to get latest status
+                                await fetchSites();
+                                // Also get verification info
+                                await getVerificationInfo(site);
+                                // Check the updated status
+                                const response = await fetch("/api/sites");
+                                if (response.ok) {
+                                  const updatedSites = await response.json();
+                                  const updatedSite = updatedSites.find(s => s.id === site.id);
+                                  if (updatedSite?.isVerified) {
+                                    alert("✓ Domain is connected!");
+                                    // Refresh the sites list to update UI
+                                    await fetchSites();
+                                  } else {
+                                    alert("Domain is not connected yet. Make sure the script is added to your website.");
+                                  }
+                                }
+                              } catch (err) {
+                                console.error("Error checking connection:", err);
+                                alert("Error checking connection status");
+                              } finally {
+                                setLoading(false);
+                              }
+                            }}
+                            disabled={loading}
+                            className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          >
+                            {loading ? (
+                              <>
+                                <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Checking...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                Check Connection
+                              </>
+                            )}
+                          </button>
                         </div>
+                        
+                        {!site.isVerified && (
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                            <p className="text-sm text-blue-900 mb-2">
+                              <strong>How it works:</strong> Add the script below to your website. 
+                              Connection happens automatically when the script loads on your domain.
+                            </p>
+                            <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
+                              <li>Copy the script tag below</li>
+                              <li>Add it to your website&apos;s <code className="bg-blue-100 px-1 rounded">&lt;head&gt;</code> section</li>
+                              <li>The script will automatically connect your domain when it loads</li>
+                              <li>Refresh this page to check connection status</li>
+                            </ol>
+                          </div>
+                        )}
+
+                        {site.isVerified && (
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
+                            <p className="text-sm text-green-800">
+                              ✓ <strong>Connected!</strong> Your domain is connected and the script is working correctly.
+                              {site.verifiedAt && (
+                                <span className="ml-2">
+                                  (Connected on {new Date(site.verifiedAt).toLocaleDateString()})
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    {/* Connection Status */}
-                    <div className="border-t pt-4 mb-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <h4 className="text-sm font-semibold text-gray-700">
-                            Connection Status
-                          </h4>
-                          {site.isVerified ? (
-                            <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded">
-                              ✓ Connected
-                            </span>
-                          ) : (
-                            <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
-                              ⚠ Not Connected
-                            </span>
-                          )}
+                    {/* Script Section - Only show if subscription is active */}
+                    {hasActiveSubscription && (
+                      <div className="border-t pt-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">
+                          Consent Script
+                        </h4>
+                        <div className="bg-gray-900 rounded-lg p-4 mb-3">
+                          <code className="text-green-400 text-sm break-all">
+                            {scriptTag}
+                          </code>
                         </div>
-                        <button
-                          onClick={async () => {
-                            if (!site.siteId) return;
-                            setLoading(true);
-                            try {
-                              // First refresh sites list to get latest status
-                              await fetchSites();
-                              // Also get verification info
-                              await getVerificationInfo(site);
-                              // Check the updated status
-                              const response = await fetch("/api/sites");
-                              if (response.ok) {
-                                const updatedSites = await response.json();
-                                const updatedSite = updatedSites.find(s => s.id === site.id);
-                                if (updatedSite?.isVerified) {
-                                  alert("✓ Domain is connected!");
-                                  // Refresh the sites list to update UI
-                                  await fetchSites();
-                                } else {
-                                  alert("Domain is not connected yet. Make sure the script is added to your website.");
-                                }
-                              }
-                            } catch (err) {
-                              console.error("Error checking connection:", err);
-                              alert("Error checking connection status");
-                            } finally {
-                              setLoading(false);
-                            }
-                          }}
-                          disabled={loading}
-                          className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                        >
-                          {loading ? (
-                            <>
-                              <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              Checking...
-                            </>
-                          ) : (
-                            <>
-                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>
-                              Check Connection
-                            </>
-                          )}
-                        </button>
-                      </div>
-                      
-                      {!site.isVerified && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-                          <p className="text-sm text-blue-900 mb-2">
-                            <strong>How it works:</strong> Add the script below to your website. 
-                            Connection happens automatically when the script loads on your domain.
-                          </p>
-                          <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
-                            <li>Copy the script tag below</li>
-                            <li>Add it to your website&apos;s <code className="bg-blue-100 px-1 rounded">&lt;head&gt;</code> section</li>
-                            <li>The script will automatically connect your domain when it loads</li>
-                            <li>Refresh this page to check connection status</li>
-                          </ol>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => copyScript(site)}
+                            className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                              copiedId === site.id
+                                ? "bg-green-600 text-white"
+                                : "bg-indigo-600 text-white hover:bg-indigo-700"
+                            }`}
+                          >
+                            {copiedId === site.id ? "✓ Copied!" : "Copy Script"}
+                          </button>
+                          <button
+                            onClick={() => deleteSite(site.id)}
+                            className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors"
+                          >
+                            Delete
+                          </button>
                         </div>
-                      )}
-
-                      {site.isVerified && (
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
-                          <p className="text-sm text-green-800">
-                            ✓ <strong>Connected!</strong> Your domain is connected and the script is working correctly.
-                            {site.verifiedAt && (
-                              <span className="ml-2">
-                                (Connected on {new Date(site.verifiedAt).toLocaleDateString()})
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-              {/* Script Section */}
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">
-                  Consent Script
-                </h4>
-                      <div className="bg-gray-900 rounded-lg p-4 mb-3">
-                        <code className="text-green-400 text-sm break-all">
-                          {scriptTag}
-                        </code>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Add this script to your website&apos;s &lt;head&gt; section,
+                          before all tracking scripts
+                        </p>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => copyScript(site)}
-                          className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                            copiedId === site.id
-                              ? "bg-green-600 text-white"
-                              : "bg-indigo-600 text-white hover:bg-indigo-700"
-                          }`}
-                        >
-                          {copiedId === site.id ? "✓ Copied!" : "Copy Script"}
-                        </button>
-                        <button
-                          onClick={() => deleteSite(site.id)}
-                          className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        Add this script to your website&apos;s &lt;head&gt; section,
-                        before all tracking scripts
-                      </p>
-                    </div>
+                    )}
                   </div>
                 );
               })}
@@ -574,3 +712,4 @@ export default function ProfilePage() {
     </div>
   );
 }
+

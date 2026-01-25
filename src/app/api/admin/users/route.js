@@ -37,12 +37,18 @@ export async function GET(req) {
           isAdmin: true,
           createdAt: true,
           updatedAt: true,
-          subscription: {
+          sites: {
             select: {
-              plan: true,
-              status: true,
-              currentPeriodStart: true,
-              currentPeriodEnd: true,
+              id: true,
+              domain: true,
+              subscription: {
+                select: {
+                  plan: true,
+                  status: true,
+                  currentPeriodStart: true,
+                  currentPeriodEnd: true,
+                },
+              },
             },
           },
           _count: {
@@ -103,20 +109,9 @@ export async function PUT(req) {
       },
     });
 
-    // Update subscription plan if provided
-    if (plan !== undefined) {
-      await prisma.subscription.upsert({
-        where: { userId },
-        create: {
-          userId,
-          plan,
-          status: "active",
-        },
-        update: {
-          plan,
-        },
-      });
-    }
+    // Note: Plans are now domain-based, not user-based
+    // Admin can update individual site subscriptions via sites API
+    // This endpoint no longer supports user-level plan updates
 
     return Response.json({ user, message: "User updated successfully" });
   } catch (error) {

@@ -18,10 +18,30 @@ export async function GET(req) {
     }
 
     // Find subscription in database
-    const subscription = await prisma.subscription.findFirst({
-      where: { razorpaySubscriptionId: subscriptionId },
-      include: { site: { include: { user: true } } },
-    });
+    let subscription = null;
+    try {
+      subscription = await prisma.subscription.findFirst({
+        where: { razorpaySubscriptionId: subscriptionId },
+        include: { site: { include: { user: true } } },
+      });
+    } catch (findError) {
+      console.error("[Subscription Callback] Error finding subscription:", findError.message);
+      // Try without relation
+      try {
+        const sub = await prisma.subscription.findFirst({
+          where: { razorpaySubscriptionId: subscriptionId },
+        });
+        if (sub) {
+          const site = await prisma.site.findUnique({
+            where: { id: sub.siteId },
+            include: { user: true },
+          });
+          subscription = sub ? { ...sub, site } : null;
+        }
+      } catch (fallbackError) {
+        console.error("[Subscription Callback] Fallback also failed:", fallbackError.message);
+      }
+    }
 
     if (!subscription) {
       return NextResponse.redirect(new URL("/payment?error=subscription_not_found", req.url));
@@ -29,12 +49,26 @@ export async function GET(req) {
 
     // Update subscription status based on Razorpay status
     if (status === "authenticated" || status === "active") {
-      await prisma.subscription.update({
-        where: { siteId: subscription.siteId },
-        data: {
-          status: "active",
-        },
-      });
+      try {
+        await prisma.subscription.update({
+          where: { siteId: subscription.siteId },
+          data: {
+            status: "active",
+          },
+        });
+      } catch (updateError) {
+        console.error("[Subscription Callback] Error updating subscription:", updateError.message);
+        // Try raw SQL as fallback
+        try {
+          await prisma.$executeRaw`
+            UPDATE subscriptions 
+            SET status = 'active', "updatedAt" = NOW()
+            WHERE "siteId" = ${subscription.siteId}
+          `;
+        } catch (rawError) {
+          console.error("[Subscription Callback] Raw SQL also failed:", rawError.message);
+        }
+      }
       
       return NextResponse.redirect(new URL("/profile?subscription=activated", req.url));
     }

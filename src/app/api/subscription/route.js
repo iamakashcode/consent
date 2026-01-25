@@ -38,7 +38,7 @@ export async function GET(req) {
       const sub = site.subscription;
       return {
         siteId: site.siteId, // Public siteId for frontend use
-        siteDbId: site.id, // Database ID
+        siteDbId: site.id, // Database ID (for matching)
         domain: site.domain,
         subscription: sub ? {
           id: sub.id,

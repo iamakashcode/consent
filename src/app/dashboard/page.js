@@ -24,6 +24,16 @@ export default function DashboardPage() {
     }
   }, [status, router]);
 
+  // Redirect to plans if no plan selected (moved to useEffect to avoid render error)
+  useEffect(() => {
+    if (session && status === "authenticated") {
+      const currentPlan = session.user?.plan;
+      // Note: Plans are now domain-based, so user.plan is always null
+      // This check is kept for backward compatibility but may not be needed
+      // Users can access dashboard even without a plan - they'll be prompted when adding domains
+    }
+  }, [session, status, router]);
+
   useEffect(() => {
     if (session && !hasRefreshed.current) {
       // Refresh session once on mount to ensure plan is up to date
@@ -137,9 +147,12 @@ export default function DashboardPage() {
       fetchSites(); // Refresh sites list
       
       // If domain was added and doesn't have a subscription, redirect to plans page
-      if (data.siteId && !data.hasSubscription) {
+      if (data.siteId && data.hasSubscription === false) {
         // Redirect to plans page with siteId to select plan for this domain
+        console.log("[Dashboard] Domain added without subscription, redirecting to plans:", data.siteId);
         router.push(`/plans?siteId=${data.siteId}&domain=${encodeURIComponent(data.domain)}`);
+      } else if (data.siteId && data.hasSubscription) {
+        console.log("[Dashboard] Domain added with existing subscription");
       }
     } catch (err) {
       setError(err.message || "An error occurred");
@@ -190,16 +203,9 @@ export default function DashboardPage() {
     return null;
   }
 
-  // If no plan selected, redirect to plans
-  const currentPlan = session.user?.plan;
-  if (!currentPlan) {
-    router.push("/plans");
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-lg">Redirecting to plans...</div>
-      </div>
-    );
-  }
+  // Note: Plans are now domain-based, not user-based
+  // Users can access dashboard even without a plan
+  // They'll be prompted to select a plan when adding domains
 
   return (
     <div className="min-h-screen bg-gray-50">

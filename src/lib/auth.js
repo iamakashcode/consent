@@ -62,6 +62,7 @@ export async function userExists(email) {
 }
 
 export async function getUserByEmail(email) {
+  // First, try with all fields including isAdmin
   try {
     const user = await prisma.user.findUnique({
       where: { email },
@@ -70,27 +71,30 @@ export async function getUserByEmail(email) {
         email: true,
         password: true,
         name: true,
-        isAdmin: true, // This field exists after migration
+        isAdmin: true,
         createdAt: true,
         updatedAt: true,
-        subscription: {
-          select: {
-            plan: true,
-            status: true,
-            currentPeriodStart: true,
-            currentPeriodEnd: true,
-          },
-        },
       },
     });
-    return user;
+    
+    if (user) {
+      return user;
+    }
+    
+    return null;
   } catch (error) {
-    console.error('[getUserByEmail] Database error:', error);
-    console.error('[getUserByEmail] Error code:', error.code);
-    console.error('[getUserByEmail] Error message:', error.message);
-    // If it's a column not found error, try without isAdmin
-    if (error.message?.includes('Unknown column') || error.message?.includes('column') || error.code === 'P2021') {
-      console.warn('[getUserByEmail] isAdmin column might not exist, trying without it');
+    console.error('[getUserByEmail] Error with isAdmin field:', error.message);
+    
+    // If isAdmin field doesn't exist, try without it
+    if (
+      error.message?.includes('Unknown column') || 
+      error.message?.includes('column') || 
+      error.message?.includes('isAdmin') ||
+      error.message?.includes('does not exist') ||
+      error.code === 'P2021' ||
+      error.code === 'P2009'
+    ) {
+      console.warn('[getUserByEmail] Retrying without isAdmin field');
       try {
         const user = await prisma.user.findUnique({
           where: { email },
@@ -101,24 +105,44 @@ export async function getUserByEmail(email) {
             name: true,
             createdAt: true,
             updatedAt: true,
-            subscription: {
-              select: {
-                plan: true,
-                status: true,
-                currentPeriodStart: true,
-                currentPeriodEnd: true,
-              },
-            },
           },
         });
         // Add isAdmin as false if not in database
         return user ? { ...user, isAdmin: false } : null;
       } catch (fallbackError) {
-        console.error('[getUserByEmail] Fallback also failed:', fallbackError);
-        throw fallbackError;
+        console.error('[getUserByEmail] Fallback query failed:', fallbackError.message);
+        // Last resort: try raw SQL
+        try {
+          const users = await prisma.$queryRaw`
+            SELECT id, email, password, name, "createdAt", "updatedAt"
+            FROM users
+            WHERE email = ${email}
+            LIMIT 1
+          `;
+          const user = users && users.length > 0 ? users[0] : null;
+          return user ? { ...user, isAdmin: false } : null;
+        } catch (rawError) {
+          console.error('[getUserByEmail] Raw SQL also failed:', rawError.message);
+          throw fallbackError;
+        }
       }
     }
-    throw error;
+    
+    // For other database errors, try raw SQL as fallback
+    console.warn('[getUserByEmail] Attempting raw SQL query as fallback');
+    try {
+      const users = await prisma.$queryRaw`
+        SELECT id, email, password, name, "createdAt", "updatedAt"
+        FROM users
+        WHERE email = ${email}
+        LIMIT 1
+      `;
+      const user = users && users.length > 0 ? users[0] : null;
+      return user ? { ...user, isAdmin: false } : null;
+    } catch (rawError) {
+      console.error('[getUserByEmail] All methods failed');
+      throw error; // Throw the original error
+    }
   }
 }
 
@@ -134,14 +158,7 @@ export async function getUserById(id) {
         isAdmin: true,
         createdAt: true,
         updatedAt: true,
-        subscription: {
-          select: {
-            plan: true,
-            status: true,
-            currentPeriodStart: true,
-            currentPeriodEnd: true,
-          },
-        },
+        // Note: Subscriptions are now domain-based (on Site), not user-based
       },
     });
     return user;
@@ -160,14 +177,6 @@ export async function getUserById(id) {
             name: true,
             createdAt: true,
             updatedAt: true,
-            subscription: {
-              select: {
-                plan: true,
-                status: true,
-                currentPeriodStart: true,
-                currentPeriodEnd: true,
-              },
-            },
           },
         });
         // Add isAdmin as false if not in database

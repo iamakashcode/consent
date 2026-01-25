@@ -96,8 +96,50 @@ export default function PlansPage() {
   const handlePlanSelect = async (selectedPlan) => {
     // If siteId is provided, this is for a specific domain
     if (siteId) {
-      // Redirect to payment page with plan and siteId
-      router.push(`/payment?plan=${selectedPlan}&siteId=${siteId}`);
+      setLoading(true);
+      try {
+        // Directly call payment API to get Razorpay redirect URL
+        const response = await fetch("/api/payment/create-order", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ plan: selectedPlan, siteId: siteId }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          alert(data.error || "Failed to set up payment. Please try again.");
+          setLoading(false);
+          return;
+        }
+
+        // If we have auth URL, redirect immediately to Razorpay
+        if (data.subscriptionAuthUrl) {
+          window.location.href = data.subscriptionAuthUrl;
+          return;
+        }
+
+        // Try to fetch auth URL if we have subscription ID
+        if (data.subscriptionId) {
+          const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
+          if (authResponse.ok) {
+            const authData = await authResponse.json();
+            if (authData.authUrl) {
+              window.location.href = authData.authUrl;
+              return;
+            }
+          }
+        }
+
+        // Fallback: redirect to payment page
+        router.push(`/payment?plan=${selectedPlan}&siteId=${siteId}`);
+      } catch (err) {
+        console.error("Error selecting plan:", err);
+        alert("Failed to set up payment. Please try again.");
+        setLoading(false);
+      }
       return;
     }
 

@@ -63,7 +63,11 @@ export default function AdminDashboard() {
       const response = await fetch(`/api/admin/sites?page=${sitePage}&limit=20`);
       if (response.ok) {
         const data = await response.json();
+        console.log("[Admin] Fetched sites data:", data); // Debug log
         setSites(data);
+      } else {
+        const errorData = await response.json();
+        console.error("[Admin] Failed to fetch sites:", errorData);
       }
     } catch (err) {
       console.error("Failed to fetch sites:", err);
@@ -80,10 +84,9 @@ export default function AdminDashboard() {
 
       if (response.ok) {
         const data = await response.json();
-        const planChanged = updates.plan !== undefined;
-        const message = planChanged
-          ? `User updated successfully! Plan changed to ${updates.plan}. The user will need to refresh their page or log out and log back in to see the changes.`
-          : "User updated successfully!";
+        // Note: Plans are now domain-based, not user-based
+        // Admin can update individual site subscriptions via sites API
+        const message = "User updated successfully! (Note: Plans are now domain-based)";
         alert(message);
         fetchUsers();
         fetchStats();
@@ -243,7 +246,7 @@ export default function AdminDashboard() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.name || "-"}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <span className="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
-                            {user.subscription?.plan || "basic"}
+                            {user._count?.sites > 0 ? `${user._count.sites} domain(s)` : "No domains"}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -313,15 +316,15 @@ export default function AdminDashboard() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.email}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.name || "-"}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <select
-                          value={user.subscription?.plan || "basic"}
-                          onChange={(e) => handleUpdateUser(user.id, { plan: e.target.value })}
-                          className="text-xs border border-gray-300 rounded px-2 py-1"
-                        >
-                          <option value="basic">Basic</option>
-                          <option value="starter">Starter</option>
-                          <option value="pro">Pro</option>
-                        </select>
+                        <div className="text-xs text-gray-600">
+                          {user.sites?.length > 0 
+                            ? user.sites.map((site, idx) => (
+                                <div key={site.id} className="mb-1">
+                                  {site.domain}: <span className="font-semibold">{site.subscription?.plan || "No plan"}</span>
+                                </div>
+                              ))
+                            : "No domains"}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user._count.sites}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -390,33 +393,41 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {sites.sites?.map((site) => (
-                    <tr key={site.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{site.domain}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {site.user.name || site.user.email}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
-                          {site.user.subscription?.plan || "basic"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {Array.isArray(site.trackers) ? site.trackers.length : 0}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(site.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => handleDeleteSite(site.id)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          Delete
-                        </button>
+                  {sites?.sites && sites.sites.length > 0 ? (
+                    sites.sites.map((site) => (
+                      <tr key={site.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{site.domain}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {site.user?.name || site.user?.email || "Unknown"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
+                            {site.subscription?.plan ? `${site.subscription.plan.charAt(0).toUpperCase() + site.subscription.plan.slice(1)}` : "No plan"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {Array.isArray(site.trackers) ? site.trackers.length : 0}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(site.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <button
+                            onClick={() => handleDeleteSite(site.id)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
+                        {loading ? "Loading sites..." : "No sites found"}
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>

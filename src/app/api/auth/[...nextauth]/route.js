@@ -18,7 +18,19 @@ export const authOptions = {
           }
 
           console.log('[NextAuth] Attempting login for:', credentials.email);
-          const user = await getUserByEmail(credentials.email);
+          
+          let user;
+          try {
+            user = await getUserByEmail(credentials.email);
+          } catch (dbError) {
+            console.error('[NextAuth] Database error fetching user:', dbError);
+            console.error('[NextAuth] Error details:', {
+              message: dbError.message,
+              code: dbError.code,
+              name: dbError.name,
+            });
+            return null;
+          }
           
           if (!user) {
             console.log('[NextAuth] User not found:', credentials.email);
@@ -27,11 +39,18 @@ export const authOptions = {
 
           if (!user.password) {
             console.error('[NextAuth] User has no password field:', credentials.email);
+            console.error('[NextAuth] User object:', { id: user.id, email: user.email, hasPassword: !!user.password });
             return null;
           }
 
           console.log('[NextAuth] Verifying password for:', credentials.email);
-          const isValid = await verifyPassword(credentials.password, user.password);
+          let isValid;
+          try {
+            isValid = await verifyPassword(credentials.password, user.password);
+          } catch (verifyError) {
+            console.error('[NextAuth] Password verification error:', verifyError);
+            return null;
+          }
 
           if (!isValid) {
             console.log('[NextAuth] Invalid password for:', credentials.email);
@@ -43,12 +62,14 @@ export const authOptions = {
             id: user.id,
             email: user.email,
             name: user.name,
-            plan: user.subscription?.plan || null, // null means no plan selected
+            plan: null, // Plans are now domain-based, not user-based
             isAdmin: user.isAdmin || false,
           };
         } catch (error) {
           console.error('[NextAuth] Authorize error:', error);
           console.error('[NextAuth] Error stack:', error.stack);
+          console.error('[NextAuth] Error name:', error.name);
+          console.error('[NextAuth] Error code:', error.code);
           return null;
         }
       },
@@ -74,14 +95,13 @@ export const authOptions = {
                   token.plan = user.plan;
                   token.isAdmin = user.isAdmin || false;
                 }
-                // Refresh plan and admin status from database if session is being updated
+                // Refresh admin status from database if session is being updated
+                // Note: Plans are now domain-based, so user.plan is always null
                 if (trigger === "update" && token.id) {
                   try {
                     const updatedUser = await getUserById(token.id);
                     if (updatedUser) {
-                      if (updatedUser.subscription) {
-                        token.plan = updatedUser.subscription.plan;
-                      }
+                      token.plan = null; // Plans are domain-based, not user-based
                       token.isAdmin = updatedUser.isAdmin || false;
                     }
                   } catch (updateError) {

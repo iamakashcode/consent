@@ -37,11 +37,12 @@ export async function GET(req) {
               id: true,
               email: true,
               name: true,
-              subscription: {
-                select: {
-                  plan: true,
-                },
-              },
+            },
+          },
+          subscription: {
+            select: {
+              plan: true,
+              status: true,
             },
           },
         },
