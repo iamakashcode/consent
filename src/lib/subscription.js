@@ -4,11 +4,33 @@ import { PLAN_TRIAL_DAYS } from "./razorpay";
 /**
  * Check if a subscription is active for a site (including trial period)
  * Returns { isActive: boolean, reason?: string }
+ * @param {string} siteId - Can be either public siteId or database ID
  */
 export async function isSubscriptionActive(siteId) {
   try {
+    // First, try to find the site to get the database ID
+    // siteId can be either the public siteId or the database ID
+    let siteDbId = siteId;
+    
+    // Try to find site by public siteId first
+    const site = await prisma.site.findFirst({
+      where: {
+        OR: [
+          { siteId: siteId }, // Public siteId
+          { id: siteId },     // Database ID
+        ],
+      },
+      select: { id: true, siteId: true },
+    });
+
+    if (site) {
+      // Use the database ID for subscription lookup
+      siteDbId = site.id;
+    }
+
+    // Now look up subscription using database ID
     const subscription = await prisma.subscription.findUnique({
-      where: { siteId },
+      where: { siteId: siteDbId },
       select: {
         plan: true,
         status: true,
@@ -62,11 +84,29 @@ export async function isSubscriptionActive(siteId) {
 
 /**
  * Get subscription with active status check for a site
+ * @param {string} siteId - Can be either public siteId or database ID
  */
 export async function getSubscriptionWithStatus(siteId) {
   try {
+    // First, try to find the site to get the database ID
+    let siteDbId = siteId;
+    
+    const site = await prisma.site.findFirst({
+      where: {
+        OR: [
+          { siteId: siteId }, // Public siteId
+          { id: siteId },     // Database ID
+        ],
+      },
+      select: { id: true, siteId: true },
+    });
+
+    if (site) {
+      siteDbId = site.id;
+    }
+
     const subscription = await prisma.subscription.findUnique({
-      where: { siteId },
+      where: { siteId: siteDbId },
     });
 
     if (!subscription) {
@@ -88,11 +128,33 @@ export async function getSubscriptionWithStatus(siteId) {
 /**
  * Check if site has exceeded page view limit for current period
  * Returns { exceeded: boolean, currentViews: number, limit: number }
+ * @param {string} siteId - Can be either public siteId or database ID
  */
 export async function checkPageViewLimit(siteId) {
   try {
+    // First, try to find the site to get the database ID
+    // siteId can be either the public siteId or the database ID
+    let siteDbId = siteId;
+    
+    // Try to find site by public siteId first
+    const site = await prisma.site.findFirst({
+      where: {
+        OR: [
+          { siteId: siteId }, // Public siteId
+          { id: siteId },     // Database ID
+        ],
+      },
+      select: { id: true, siteId: true },
+    });
+
+    if (site) {
+      // Use the database ID for subscription lookup
+      siteDbId = site.id;
+    }
+
+    // Now look up subscription using database ID
     const subscription = await prisma.subscription.findUnique({
-      where: { siteId },
+      where: { siteId: siteDbId },
       select: {
         plan: true,
         currentPeriodStart: true,
@@ -115,9 +177,10 @@ export async function checkPageViewLimit(siteId) {
     const periodStart = subscription.currentPeriodStart || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const periodEnd = subscription.currentPeriodEnd || new Date();
 
+    // Use database ID for page view count
     const currentViews = await prisma.pageView.count({
       where: {
-        siteId,
+        siteId: siteDbId,
         viewedAt: {
           gte: periodStart,
           lte: periodEnd,
