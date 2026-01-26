@@ -20,6 +20,26 @@ function PaymentContent() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
+      return;
+    }
+
+    // Check if user returned from Razorpay payment
+    if (status === "authenticated" && typeof window !== 'undefined') {
+      const storedSubscriptionId = sessionStorage.getItem('razorpay_subscription_id');
+      const storedRedirectUrl = sessionStorage.getItem('razorpay_redirect_url');
+      
+      // If user has payment info in sessionStorage, redirect to profile page
+      if (storedSubscriptionId && storedRedirectUrl) {
+        // Clear sessionStorage
+        sessionStorage.removeItem('razorpay_subscription_id');
+        sessionStorage.removeItem('razorpay_site_id');
+        sessionStorage.removeItem('razorpay_redirect_url');
+        sessionStorage.removeItem('razorpay_return_url');
+        
+        // Redirect to profile page for auto-sync
+        router.push(storedRedirectUrl);
+        return;
+      }
     }
   }, [status, router]);
 
@@ -100,16 +120,23 @@ function PaymentContent() {
           }
         }
         
-        // If we have an auth URL, redirect immediately
+        // If we have an auth URL, open Razorpay in new tab
         if (authUrl) {
-          console.log("[Payment] Redirecting to Razorpay:", authUrl);
+          console.log("[Payment] Opening Razorpay in new tab:", authUrl);
           // Store subscription ID and siteId in sessionStorage for redirect handling
           if (data.subscriptionId && data.siteId) {
             sessionStorage.setItem('razorpay_subscription_id', data.subscriptionId);
             sessionStorage.setItem('razorpay_site_id', data.siteId);
+            // Store return URL for manual navigation if Razorpay doesn't redirect
+            const returnUrl = data.returnUrl || `/payment/return?subscription_id=${data.subscriptionId}&siteId=${data.siteId}`;
+            sessionStorage.setItem('razorpay_return_url', returnUrl);
             sessionStorage.setItem('razorpay_redirect_url', `/profile?payment=success&siteId=${data.siteId}`);
           }
-          window.location.href = authUrl;
+          // Open Razorpay in new tab
+          window.open(authUrl, '_blank');
+          setLoading(false); // Reset loading state
+          // Show message to user
+          alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
           return;
         }
         
@@ -151,7 +178,9 @@ function PaymentContent() {
             if (authResponse.ok) {
               const authData = await authResponse.json();
               if (authData.authUrl) {
-                window.location.href = authData.authUrl;
+                window.open(authData.authUrl, '_blank');
+                setLoading(false); // Reset loading state
+                alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
                 return;
               }
             }
@@ -182,7 +211,9 @@ function PaymentContent() {
           if (authResponse.ok) {
             const authData = await authResponse.json();
             if (authData.authUrl) {
-              window.location.href = authData.authUrl;
+              window.open(authData.authUrl, '_blank');
+              setLoading(false); // Reset loading state
+              alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
               return;
             }
           }
@@ -385,9 +416,12 @@ function PaymentContent() {
                           .then(res => res.json())
                           .then(data => {
                             if (data.authUrl) {
-                              window.location.href = data.authUrl;
+                              window.open(data.authUrl, '_blank');
+                              setLoading(false); // Reset loading state
+                              alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
                             } else {
                               setError("Failed to get payment setup link. Please contact support.");
+                              setLoading(false);
                             }
                           })
                           .catch(err => {
@@ -472,6 +506,12 @@ function PaymentContent() {
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
                 </div>
 
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
+                  <p className="text-xs text-blue-800">
+                    <strong>Note:</strong> After completing payment on Razorpay, if you're not automatically redirected, you can manually return to your profile page. Your subscription will be activated automatically.
+                  </p>
+                </div>
+
                 <p className="text-xs text-center text-gray-500">
                   By proceeding, you agree to our terms and conditions. This is a recurring monthly subscription.
                 </p>
@@ -489,6 +529,9 @@ function PaymentContent() {
                       </p>
                       <p className="text-xs text-blue-700">
                         Please add a payment method to activate your subscription. {plan === "basic" && "Your 7-day free trial will start after activation."}
+                      </p>
+                      <p className="text-xs text-blue-600 mt-2">
+                        💡 <strong>After completing payment on Razorpay:</strong> Your subscription will be automatically synced when you return to your profile page. If you're not redirected automatically, simply navigate back to your profile page - the status will update automatically.
                       </p>
                     </div>
                   </div>
@@ -517,14 +560,19 @@ function PaymentContent() {
                   onClick={async () => {
                     try {
                       if (orderData.subscriptionAuthUrl) {
-                        window.location.href = orderData.subscriptionAuthUrl;
+                        window.open(orderData.subscriptionAuthUrl, '_blank');
+                        setLoading(false); // Reset loading state
+                        alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
                       } else if (orderData.subscriptionId) {
                         const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${orderData.subscriptionId}`);
                         const authData = await authResponse.json();
                         if (authData.authUrl) {
-                          window.location.href = authData.authUrl;
+                          window.open(authData.authUrl, '_blank');
+                          setLoading(false); // Reset loading state
+                          alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
                         } else {
                           setError("Failed to get payment setup link. Please try again.");
+                          setLoading(false);
                         }
                       } else {
                         setError("Payment setup link not available. Please try selecting the plan again.");

@@ -15,7 +15,66 @@ export async function GET(req) {
     }
 
     const userId = session.user.id;
-    console.log("[Subscription API] Fetching subscriptions for user:", userId);
+    const { searchParams } = new URL(req.url);
+    const subscriptionId = searchParams.get("subscriptionId");
+    
+    console.log("[Subscription API] Fetching subscriptions for user:", userId, subscriptionId ? `(filtering by subscriptionId: ${subscriptionId})` : "");
+
+    // If subscriptionId is provided, find subscription by Razorpay subscription ID
+    if (subscriptionId) {
+      try {
+        const subscription = await prisma.subscription.findFirst({
+          where: {
+            razorpaySubscriptionId: subscriptionId,
+            site: {
+              userId: userId, // Ensure subscription belongs to this user
+            },
+          },
+          include: {
+            site: {
+              select: {
+                siteId: true,
+                id: true,
+                domain: true,
+              },
+            },
+          },
+        });
+
+        if (!subscription) {
+          return Response.json({
+            subscriptions: [],
+            count: 0,
+            activeCount: 0,
+          });
+        }
+
+        return Response.json({
+          subscriptions: [{
+            siteId: subscription.site.siteId,
+            siteDbId: subscription.site.id,
+            domain: subscription.site.domain,
+            subscription: {
+              id: subscription.id,
+              plan: subscription.plan || "basic",
+              status: subscription.status || "pending",
+              currentPeriodStart: subscription.currentPeriodStart,
+              currentPeriodEnd: subscription.currentPeriodEnd,
+              trialEndAt: subscription.trialEndAt,
+              cancelAtPeriodEnd: subscription.cancelAtPeriodEnd || false,
+              razorpayPaymentId: subscription.razorpayPaymentId,
+              razorpaySubscriptionId: subscription.razorpaySubscriptionId,
+              razorpayPlanId: subscription.razorpayPlanId,
+            },
+          }],
+          count: 1,
+          activeCount: subscription.status === "active" ? 1 : 0,
+        });
+      } catch (error) {
+        console.error("[Subscription API] Error fetching subscription by ID:", error);
+        return Response.json({ error: "Failed to fetch subscription" }, { status: 500 });
+      }
+    }
 
     // Get all sites for user with their subscriptions
     // Use try-catch around the Prisma query to catch any database errors

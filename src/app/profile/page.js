@@ -19,6 +19,8 @@ function ProfileContent() {
   const [subscription, setSubscription] = useState(null); // Subscription details with trial info
   const [subscriptionsBySite, setSubscriptionsBySite] = useState({}); // Map of siteId -> subscription
   const hasRefreshed = useRef(false);
+  const hasAutoSynced = useRef(false); // Track if we've already auto-synced on this page load
+  const isAutoSyncing = useRef(false); // Track if auto-sync is currently running to prevent concurrent calls
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -31,16 +33,92 @@ function ProfileContent() {
     if (typeof window !== 'undefined') {
       // Check URL params first
       const paymentSuccess = searchParams?.get("payment");
+      const siteIdParam = searchParams?.get("siteId");
       if (paymentSuccess === "success" && session) {
-        // Refresh subscription data to show updated status
-        update();
-        fetchSubscription();
-        fetchSites();
-        
-        // Show success message
-        setTimeout(() => {
-          alert("✅ Payment successful! Your subscription has been activated.");
-        }, 500);
+        // Auto-sync subscription status from Razorpay (only if not already syncing)
+        if (!isAutoSyncing.current) {
+          const syncAndRefresh = async () => {
+            try {
+              isAutoSyncing.current = true;
+              
+              // First fetch current subscriptions
+              await fetchSubscription();
+              
+              // Get all subscriptions that might need syncing
+              const allSubs = Object.values(subscriptionsBySite);
+              const subsToSync = siteIdParam 
+                ? allSubs.filter(sub => {
+                    // Match by siteId if provided
+                    const site = sites.find(s => s.siteId === siteIdParam || s.id === siteIdParam);
+                    return site && sub && (sub.razorpaySubscriptionId || sub.status === "pending");
+                  })
+                : allSubs.filter(sub => sub && (sub.razorpaySubscriptionId || sub.status === "pending"));
+
+              // Sync each subscription
+              let syncedAny = false;
+              for (const sub of subsToSync) {
+                if (sub && sub.razorpaySubscriptionId) {
+                  try {
+                    const response = await fetch("/api/payment/sync-subscription", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        subscriptionId: sub.razorpaySubscriptionId,
+                        siteId: siteIdParam,
+                      }),
+                    });
+
+                    if (response.ok) {
+                      const data = await response.json();
+                      if (data.success && data.subscription.status === "active") {
+                        syncedAny = true;
+                        console.log("[Profile] Synced subscription to active:", sub.razorpaySubscriptionId);
+                      }
+                    }
+                  } catch (error) {
+                    console.error("[Profile] Error syncing subscription:", error);
+                  }
+                }
+              }
+
+              // Refresh all data after syncing
+              await update();
+              // Prevent auto-sync from running again during these fetches
+              const wasAutoSyncing = isAutoSyncing.current;
+              await fetchSubscription();
+              await fetchSites();
+              isAutoSyncing.current = wasAutoSyncing;
+              
+              // Show success message
+              if (syncedAny) {
+                setTimeout(() => {
+                  alert("✅ Payment successful! Your subscription has been activated.");
+                }, 500);
+              } else {
+                setTimeout(() => {
+                  alert("✅ Payment received! Your subscription status is being updated.");
+                }, 500);
+              }
+            } catch (error) {
+              console.error("[Profile] Error in sync and refresh:", error);
+              // Still show success message
+              setTimeout(() => {
+                alert("✅ Payment successful! Refreshing subscription status...");
+              }, 500);
+              await update();
+              const wasAutoSyncing = isAutoSyncing.current;
+              await fetchSubscription();
+              await fetchSites();
+              isAutoSyncing.current = wasAutoSyncing;
+            } finally {
+              isAutoSyncing.current = false;
+            }
+          };
+
+          syncAndRefresh();
+        }
         
         // Remove query parameter from URL
         const newUrl = window.location.pathname;
@@ -52,24 +130,106 @@ function ProfileContent() {
       const storedSubscriptionId = sessionStorage.getItem('razorpay_subscription_id');
       const storedSiteId = sessionStorage.getItem('razorpay_site_id');
       if (storedSubscriptionId && session) {
-        // Refresh subscription data to check if it's now active
+        // User returned from Razorpay - auto-sync subscription status
         const checkSubscription = async () => {
           try {
-            await fetchSubscription();
-            await fetchSites();
-            await update(); // Refresh session
+            console.log("[Profile] User returned from Razorpay, auto-syncing subscription:", storedSubscriptionId);
             
-            // Clear sessionStorage
+            // Prevent concurrent sync calls
+            if (isAutoSyncing.current) {
+              console.log("[Profile] Auto-sync already running, skipping sessionStorage sync");
+              // Still clear sessionStorage
+              sessionStorage.removeItem('razorpay_subscription_id');
+              sessionStorage.removeItem('razorpay_site_id');
+              sessionStorage.removeItem('razorpay_redirect_url');
+              sessionStorage.removeItem('razorpay_return_url');
+              return;
+            }
+
+            isAutoSyncing.current = true;
+
+            // First sync from Razorpay
+            const syncResponse = await fetch("/api/payment/sync-subscription", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                subscriptionId: storedSubscriptionId,
+                siteId: storedSiteId,
+              }),
+            });
+
+            if (syncResponse.ok) {
+              const syncData = await syncResponse.json();
+              console.log("[Profile] Auto-sync result:", syncData);
+              
+              if (syncData.success && syncData.subscription.status === "active") {
+                // Refresh all data
+                await update();
+                // Prevent auto-sync from running again during these fetches
+                const wasAutoSyncing = isAutoSyncing.current;
+                await fetchSubscription();
+                await fetchSites();
+                isAutoSyncing.current = wasAutoSyncing;
+                
+                // Clear sessionStorage
+                sessionStorage.removeItem('razorpay_subscription_id');
+                sessionStorage.removeItem('razorpay_site_id');
+                sessionStorage.removeItem('razorpay_redirect_url');
+                sessionStorage.removeItem('razorpay_return_url');
+                
+                // Show success message
+                setTimeout(() => {
+                  alert("✅ Payment successful! Your subscription has been activated.");
+                }, 500);
+                
+                // Redirect to profile with success (if we have siteId)
+                if (storedSiteId) {
+                  const newUrl = `/profile?payment=success&siteId=${storedSiteId}`;
+                  window.history.replaceState({}, "", newUrl);
+                }
+              } else {
+                // Subscription might still be pending, but we tried
+                await update();
+                const wasAutoSyncing = isAutoSyncing.current;
+                await fetchSubscription();
+                await fetchSites();
+                isAutoSyncing.current = wasAutoSyncing;
+                
+                // Clear sessionStorage
+                sessionStorage.removeItem('razorpay_subscription_id');
+                sessionStorage.removeItem('razorpay_site_id');
+                sessionStorage.removeItem('razorpay_redirect_url');
+                sessionStorage.removeItem('razorpay_return_url');
+                
+                setTimeout(() => {
+                  alert("Payment received! Your subscription status is being updated. If it doesn't update automatically, please click 'Sync Status'.");
+                }, 500);
+              }
+            } else {
+              // Sync failed, but still refresh data
+              await update();
+              const wasAutoSyncing = isAutoSyncing.current;
+              await fetchSubscription();
+              await fetchSites();
+              isAutoSyncing.current = wasAutoSyncing;
+              
+              // Clear sessionStorage
+              sessionStorage.removeItem('razorpay_subscription_id');
+              sessionStorage.removeItem('razorpay_site_id');
+              sessionStorage.removeItem('razorpay_redirect_url');
+              sessionStorage.removeItem('razorpay_return_url');
+            }
+
+            isAutoSyncing.current = false;
+          } catch (error) {
+            console.error("Error checking subscription status:", error);
+            // Still clear sessionStorage
             sessionStorage.removeItem('razorpay_subscription_id');
             sessionStorage.removeItem('razorpay_site_id');
             sessionStorage.removeItem('razorpay_redirect_url');
-            
-            // Show success message
-            setTimeout(() => {
-              alert("✅ Payment successful! Your subscription has been activated.");
-            }, 1000);
-          } catch (error) {
-            console.error("Error checking subscription status:", error);
+            sessionStorage.removeItem('razorpay_return_url');
           }
         };
         checkSubscription();
@@ -84,12 +244,109 @@ function ProfileContent() {
       hasRefreshed.current = true;
       update();
       fetchSites();
-      fetchSubscription();
+      fetchSubscription().then(() => {
+        // After fetching subscriptions, auto-sync any pending subscriptions (only once)
+        // Use a small delay to ensure subscriptionsBySite state is updated
+        setTimeout(() => {
+          if (!hasAutoSynced.current && !isAutoSyncing.current) {
+            autoSyncPendingSubscriptions();
+          }
+        }, 1500);
+      });
     } else if (session) {
       fetchSites();
-      fetchSubscription();
+      fetchSubscription().then(() => {
+        // Only auto-sync if we haven't already and not currently syncing
+        // Skip auto-sync on subsequent renders to prevent loops
+        if (!hasRefreshed.current) {
+          setTimeout(() => {
+            if (!hasAutoSynced.current && !isAutoSyncing.current) {
+              autoSyncPendingSubscriptions();
+            }
+          }, 1500);
+        }
+      });
     }
   }, [session]);
+
+  // Auto-sync pending subscriptions from Razorpay
+  const autoSyncPendingSubscriptions = async () => {
+    // Prevent concurrent auto-sync calls
+    if (isAutoSyncing.current || hasAutoSynced.current) {
+      console.log("[Profile] Auto-sync already running or completed, skipping");
+      return;
+    }
+
+    // Mark as syncing
+    isAutoSyncing.current = true;
+    hasAutoSynced.current = true;
+
+    try {
+      // Wait a bit for subscriptionsBySite to be populated
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Get all pending subscriptions
+      const pendingSubs = Object.values(subscriptionsBySite).filter(
+        (sub) => sub && sub.status === "pending" && sub.razorpaySubscriptionId
+      );
+
+      if (pendingSubs.length === 0) {
+        isAutoSyncing.current = false;
+        return;
+      }
+
+      console.log("[Profile] Auto-syncing pending subscriptions:", pendingSubs.length);
+
+      // Sync each pending subscription (only sync once per page load)
+      let syncedCount = 0;
+      for (const sub of pendingSubs) {
+        try {
+          const response = await fetch("/api/payment/sync-subscription", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              subscriptionId: sub.razorpaySubscriptionId,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.subscription.status === "active") {
+              syncedCount++;
+              console.log("[Profile] Auto-synced subscription to active:", sub.razorpaySubscriptionId);
+            }
+          }
+        } catch (error) {
+          console.error("[Profile] Error auto-syncing subscription:", error);
+          // Continue with other subscriptions
+        }
+      }
+
+      // If any subscriptions were synced, refresh data and show message
+      if (syncedCount > 0) {
+        // Refresh data without triggering auto-sync again
+        await update();
+        // Use a flag to prevent auto-sync from running again
+        const wasAutoSyncing = isAutoSyncing.current;
+        await fetchSubscription();
+        await fetchSites();
+        // Restore the flag
+        isAutoSyncing.current = wasAutoSyncing;
+        
+        // Show success message
+        setTimeout(() => {
+          alert(`✅ ${syncedCount} subscription${syncedCount > 1 ? 's' : ''} activated! Your plan${syncedCount > 1 ? 's are' : ' is'} now active.`);
+        }, 500);
+      }
+    } catch (error) {
+      console.error("[Profile] Error in auto-sync:", error);
+    } finally {
+      // Mark as done syncing
+      isAutoSyncing.current = false;
+    }
+  };
 
   const fetchSubscription = async () => {
     try {
@@ -490,33 +747,35 @@ function ProfileContent() {
                         <p className="text-xs text-yellow-800 mb-3">
                           The consent script will not work until payment is completed and the subscription is activated.
                         </p>
-                        <button
-                          onClick={async () => {
-                            try {
-                              setLoading(true);
-                              // Directly call the payment API to get Razorpay redirect URL
-                              const response = await fetch("/api/payment/create-order", {
-                                method: "POST",
-                                headers: {
-                                  "Content-Type": "application/json",
-                                },
-                                body: JSON.stringify({ 
-                                  plan: siteSubscription.plan, 
-                                  siteId: site.siteId 
-                                }),
-                              });
+                        <div className="flex gap-2">
+                          <button
+                            onClick={async () => {
+                              try {
+                                setLoading(true);
+                                // Directly call the payment API to get Razorpay redirect URL
+                                const response = await fetch("/api/payment/create-order", {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify({ 
+                                    plan: siteSubscription.plan, 
+                                    siteId: site.siteId 
+                                  }),
+                                });
 
-                              const data = await response.json();
-                              
-                              if (!response.ok) {
-                                alert(data.error || "Failed to set up payment. Please try again.");
-                                setLoading(false);
-                                return;
-                              }
+                                const data = await response.json();
+                                
+                                if (!response.ok) {
+                                  alert(data.error || "Failed to set up payment. Please try again.");
+                                  setLoading(false);
+                                  return;
+                                }
 
-                              // If we have auth URL, redirect immediately
+                              // If we have auth URL, open Razorpay in new tab
                               if (data.subscriptionAuthUrl) {
-                                window.location.href = data.subscriptionAuthUrl;
+                                window.open(data.subscriptionAuthUrl, '_blank');
+                                alert("Razorpay payment page opened in a new tab. After completing payment, return to this page and your subscription will be automatically synced.");
                                 return;
                               }
 
@@ -526,25 +785,76 @@ function ProfileContent() {
                                 if (authResponse.ok) {
                                   const authData = await authResponse.json();
                                   if (authData.authUrl) {
-                                    window.location.href = authData.authUrl;
+                                    window.open(authData.authUrl, '_blank');
+                                    alert("Razorpay payment page opened in a new tab. After completing payment, return to this page and your subscription will be automatically synced.");
                                     return;
                                   }
                                 }
                               }
 
-                              // Fallback: redirect to payment page
-                              router.push(`/payment?plan=${siteSubscription.plan}&siteId=${site.siteId}`);
-                            } catch (err) {
-                              console.error("Error setting up payment:", err);
-                              alert("Failed to set up payment. Please try again.");
-                              setLoading(false);
-                            }
-                          }}
-                          disabled={loading}
-                          className="inline-block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {loading ? "Processing..." : "Complete Payment Setup"}
-                        </button>
+                                // Fallback: redirect to payment page
+                                router.push(`/payment?plan=${siteSubscription.plan}&siteId=${site.siteId}`);
+                              } catch (err) {
+                                console.error("Error setting up payment:", err);
+                                alert("Failed to set up payment. Please try again.");
+                                setLoading(false);
+                              }
+                            }}
+                            disabled={loading}
+                            className="inline-block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {loading ? "Processing..." : "Complete Payment Setup"}
+                          </button>
+                          {siteSubscription.razorpaySubscriptionId && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  setLoading(true);
+                                  // Sync subscription status from Razorpay
+                                  const response = await fetch("/api/payment/sync-subscription", {
+                                    method: "POST",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                    },
+                                    body: JSON.stringify({ 
+                                      subscriptionId: siteSubscription.razorpaySubscriptionId,
+                                      siteId: site.siteId
+                                    }),
+                                  });
+
+                                  const data = await response.json();
+                                  
+                                  if (response.ok && data.success) {
+                                    if (data.subscription.status === "active") {
+                                      alert("✅ Subscription is now active! Refreshing page...");
+                                      await update();
+                                      await fetchSubscription();
+                                      await fetchSites();
+                                    } else {
+                                      alert(`Subscription status: ${data.subscription.status}. If you just completed payment, please wait a moment and try again.`);
+                                    }
+                                  } else {
+                                    alert(data.error || "Failed to sync subscription status. Please try again.");
+                                  }
+                                } catch (err) {
+                                  console.error("Error syncing subscription:", err);
+                                  alert("Failed to sync subscription status. Please try again.");
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }}
+                              disabled={loading}
+                              className="inline-block bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {loading ? "Syncing..." : "🔄 Sync Status"}
+                            </button>
+                          )}
+                        </div>
+                        {siteSubscription.razorpaySubscriptionId && (
+                          <p className="text-xs text-yellow-700 mt-2">
+                            💡 If you just completed payment on Razorpay, click "Sync Status" to update your subscription status.
+                          </p>
+                        )}
                       </div>
                     )}
 

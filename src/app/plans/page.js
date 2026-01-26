@@ -70,6 +70,30 @@ export default function PlansPage() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
+      return;
+    }
+
+    // Check if user returned from Razorpay payment
+    if (status === "authenticated" && typeof window !== 'undefined') {
+      const storedSubscriptionId = sessionStorage.getItem('razorpay_subscription_id');
+      const storedSiteId = sessionStorage.getItem('razorpay_site_id');
+      const storedRedirectUrl = sessionStorage.getItem('razorpay_redirect_url');
+      
+      // If user has payment info in sessionStorage, redirect to profile page
+      if (storedSubscriptionId && storedRedirectUrl) {
+        // Reset loading state first
+        setLoading(false);
+        
+        // Clear sessionStorage
+        sessionStorage.removeItem('razorpay_subscription_id');
+        sessionStorage.removeItem('razorpay_site_id');
+        sessionStorage.removeItem('razorpay_redirect_url');
+        sessionStorage.removeItem('razorpay_return_url');
+        
+        // Redirect to profile page for auto-sync
+        router.push(storedRedirectUrl);
+        return;
+      }
     }
   }, [status, router]);
 
@@ -115,9 +139,17 @@ export default function PlansPage() {
           return;
         }
 
-        // If we have auth URL, redirect immediately to Razorpay
+        // If we have auth URL, open Razorpay in new tab
         if (data.subscriptionAuthUrl) {
-          window.location.href = data.subscriptionAuthUrl;
+          // Store subscription ID and siteId in sessionStorage
+          if (data.subscriptionId && data.siteId) {
+            sessionStorage.setItem('razorpay_subscription_id', data.subscriptionId);
+            sessionStorage.setItem('razorpay_site_id', data.siteId);
+            sessionStorage.setItem('razorpay_redirect_url', `/profile?payment=success&siteId=${data.siteId}`);
+          }
+          window.open(data.subscriptionAuthUrl, '_blank');
+          setLoading(false); // Reset loading state
+          alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
           return;
         }
 
@@ -127,13 +159,22 @@ export default function PlansPage() {
           if (authResponse.ok) {
             const authData = await authResponse.json();
             if (authData.authUrl) {
-              window.location.href = authData.authUrl;
+              // Store subscription ID and siteId in sessionStorage
+              if (data.subscriptionId && data.siteId) {
+                sessionStorage.setItem('razorpay_subscription_id', data.subscriptionId);
+                sessionStorage.setItem('razorpay_site_id', data.siteId);
+                sessionStorage.setItem('razorpay_redirect_url', `/profile?payment=success&siteId=${data.siteId}`);
+              }
+              window.open(authData.authUrl, '_blank');
+              setLoading(false); // Reset loading state
+              alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
               return;
             }
           }
         }
 
         // Fallback: redirect to payment page
+        setLoading(false); // Reset loading state before redirect
         router.push(`/payment?plan=${selectedPlan}&siteId=${siteId}`);
       } catch (err) {
         console.error("Error selecting plan:", err);

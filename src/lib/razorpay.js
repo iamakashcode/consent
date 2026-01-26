@@ -108,7 +108,8 @@ export async function createRazorpaySubscription(planId, customer, trialDays = 0
     
     // Get base URL for redirect
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    const defaultRedirectUrl = `${baseUrl}/profile?payment=success`;
+    const defaultRedirectUrl = `${baseUrl}/payment/return`; // Use dedicated return page
+    const finalRedirectUrl = redirectUrl || defaultRedirectUrl;
     
     const subscriptionData = {
       plan_id: planId,
@@ -118,9 +119,9 @@ export async function createRazorpaySubscription(planId, customer, trialDays = 0
       notes: {
         customer_name: customer.name,
         customer_email: customer.email,
-        redirect_url: redirectUrl || defaultRedirectUrl, // Store redirect URL in notes
-        return_url: redirectUrl || defaultRedirectUrl, // Alternative redirect URL
-        callback_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/payment/callback`, // Callback endpoint
+        redirect_url: finalRedirectUrl, // Store redirect URL in notes
+        return_url: finalRedirectUrl, // Alternative redirect URL
+        callback_url: `${baseUrl}/api/payment/callback`, // Callback endpoint
       },
     };
 
