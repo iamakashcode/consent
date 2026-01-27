@@ -2,8 +2,15 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import DashboardLayout from "@/components/DashboardLayout";
+
+const CheckIcon = () => (
+  <svg className="w-5 h-5 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+  </svg>
+);
 
 const PLAN_DETAILS = {
   basic: {
@@ -35,6 +42,7 @@ const PLAN_DETAILS = {
       "Customizable banner",
       "Email support",
       "Analytics dashboard",
+      "7-day free trial",
     ],
     popular: true,
   },
@@ -52,369 +60,262 @@ const PLAN_DETAILS = {
       "Priority support",
       "Advanced analytics",
       "API access",
+      "7-day free trial",
     ],
     popular: false,
   },
 };
 
-const planHierarchy = { basic: 0, starter: 1, pro: 2 };
-
-export default function PlansPage() {
+function PlansContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
-  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-  const siteId = searchParams.get("siteId");
-  const domain = searchParams.get("domain");
+  const [selectedPlan, setSelectedPlan] = useState(null);
+
+  const siteId = searchParams?.get("siteId") || null;
+  const domain = searchParams?.get("domain") || null;
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.push("/login");
-      return;
+      const callbackUrl = siteId
+        ? `/plans?siteId=${siteId}&domain=${encodeURIComponent(domain || "")}`
+        : "/plans";
+      router.push(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
     }
-
-    // Check if user returned from Razorpay payment
-    if (status === "authenticated" && typeof window !== 'undefined') {
-      const storedSubscriptionId = sessionStorage.getItem('razorpay_subscription_id');
-      const storedSiteId = sessionStorage.getItem('razorpay_site_id');
-      const storedRedirectUrl = sessionStorage.getItem('razorpay_redirect_url');
-      
-      // If user has payment info in sessionStorage, redirect to profile page
-      if (storedSubscriptionId && storedRedirectUrl) {
-        // Reset loading state first
-        setLoading(false);
-        
-        // Clear sessionStorage
-        sessionStorage.removeItem('razorpay_subscription_id');
-        sessionStorage.removeItem('razorpay_site_id');
-        sessionStorage.removeItem('razorpay_redirect_url');
-        sessionStorage.removeItem('razorpay_return_url');
-        
-        // Redirect to profile page for auto-sync
-        router.push(storedRedirectUrl);
-        return;
-      }
-    }
-  }, [status, router]);
+  }, [status, router, siteId, domain]);
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-lg">Loading...</div>
-      </div>
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+        </div>
+      </DashboardLayout>
     );
   }
 
-  if (!session) {
-    return null;
-  }
+  if (!session) return null;
 
-  // Get current plan (null if no plan selected)
-  let currentPlan = session.user?.plan;
-  // Map legacy "free" plan to "basic"
-  if (currentPlan === "free") {
-    currentPlan = "basic";
-  }
-  const currentPlanLevel = currentPlan ? (planHierarchy[currentPlan] || 0) : -1; // -1 means no plan
+  const handlePlanSelect = async (planKey) => {
+    if (!siteId) {
+      alert("Please add a domain first before selecting a plan.");
+      router.push("/dashboard");
+      return;
+    }
 
-  const handlePlanSelect = async (selectedPlan) => {
-    // If siteId is provided, this is for a specific domain
-    if (siteId) {
-      setLoading(true);
-      try {
-        // Directly call payment API to get Razorpay redirect URL
-        const response = await fetch("/api/payment/create-order", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ plan: selectedPlan, siteId: siteId }),
-        });
+    setLoading(true);
+    setSelectedPlan(planKey);
 
-        const data = await response.json();
+    try {
+      const response = await fetch("/api/payment/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: planKey, siteId }),
+      });
 
-        if (!response.ok) {
-          alert(data.error || "Failed to set up payment. Please try again.");
-          setLoading(false);
-          return;
-        }
+      const data = await response.json();
 
-        // If we have auth URL, open Razorpay in new tab
-        if (data.subscriptionAuthUrl) {
-          // Store subscription ID and siteId in sessionStorage
-          if (data.subscriptionId && data.siteId) {
-            sessionStorage.setItem('razorpay_subscription_id', data.subscriptionId);
-            sessionStorage.setItem('razorpay_site_id', data.siteId);
-            sessionStorage.setItem('razorpay_redirect_url', `/profile?payment=success&siteId=${data.siteId}`);
-          }
-          window.open(data.subscriptionAuthUrl, '_blank');
-          setLoading(false); // Reset loading state
-          alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
-          return;
-        }
+      if (!response.ok) {
+        alert(data.error || "Failed to set up payment. Please try again.");
+        setLoading(false);
+        setSelectedPlan(null);
+        return;
+      }
 
-        // Try to fetch auth URL if we have subscription ID
-        if (data.subscriptionId) {
-          const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
+      if (data.subscriptionAuthUrl) {
+        sessionStorage.setItem("razorpay_subscription_id", data.subscriptionId);
+        sessionStorage.setItem("razorpay_site_id", siteId);
+        sessionStorage.setItem("razorpay_redirect_url", `/dashboard/usage?payment=success&siteId=${siteId}`);
+
+        window.open(data.subscriptionAuthUrl, "_blank");
+        setLoading(false);
+        setSelectedPlan(null);
+
+        alert(
+          "Payment page opened in a new tab.\n\nAfter completing payment, close that tab and return here.\nYour subscription will activate automatically."
+        );
+        return;
+      }
+
+      if (data.subscriptionId) {
+        try {
+          const authResponse = await fetch(
+            `/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`
+          );
           if (authResponse.ok) {
             const authData = await authResponse.json();
             if (authData.authUrl) {
-              // Store subscription ID and siteId in sessionStorage
-              if (data.subscriptionId && data.siteId) {
-                sessionStorage.setItem('razorpay_subscription_id', data.subscriptionId);
-                sessionStorage.setItem('razorpay_site_id', data.siteId);
-                sessionStorage.setItem('razorpay_redirect_url', `/profile?payment=success&siteId=${data.siteId}`);
-              }
-              window.open(authData.authUrl, '_blank');
-              setLoading(false); // Reset loading state
-              alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
+              sessionStorage.setItem("razorpay_subscription_id", data.subscriptionId);
+              sessionStorage.setItem("razorpay_site_id", siteId);
+              window.open(authData.authUrl, "_blank");
+              setLoading(false);
+              setSelectedPlan(null);
+              alert("Payment page opened. Return here after completing payment.");
               return;
             }
           }
+        } catch (e) {
+          console.error("Error fetching auth URL:", e);
         }
-
-        // Fallback: redirect to payment page
-        setLoading(false); // Reset loading state before redirect
-        router.push(`/payment?plan=${selectedPlan}&siteId=${siteId}`);
-      } catch (err) {
-        console.error("Error selecting plan:", err);
-        alert("Failed to set up payment. Please try again.");
-        setLoading(false);
       }
-      return;
-    }
 
-    // Legacy flow: account-level plan (should not happen with domain-based plans)
-    const selectedPlanLevel = planHierarchy[selectedPlan] || 0;
-
-    // If selecting current plan, do nothing
-    if (selectedPlan === currentPlan) {
-      return;
-    }
-
-    // If selecting lower plan, show message (downgrade not supported in this flow)
-    if (selectedPlanLevel < currentPlanLevel) {
-      alert(
-        `You are currently on ${currentPlan} plan. To downgrade, please contact support.`
-      );
-      return;
-    }
-
-    // Allow selecting basic plan if user has no plan
-    if (selectedPlan === "basic") {
-      if (!currentPlan) {
-        // User can select basic plan - it will start trial
-        // Continue to payment flow
-      } else if (currentPlan === "basic") {
-        // User already has basic plan, do nothing
-        return;
-      }
-    }
-
-    // Navigate to payment page for the selected plan
-    setLoading(true);
-    if (siteId) {
-      router.push(`/payment?plan=${selectedPlan}&siteId=${siteId}`);
-    } else {
-      router.push(`/payment?plan=${selectedPlan}`);
+      setLoading(false);
+      setSelectedPlan(null);
+      router.push(`/payment?plan=${planKey}&siteId=${siteId}`);
+    } catch (err) {
+      console.error("Error selecting plan:", err);
+      alert("Failed to set up payment. Please try again.");
+      setLoading(false);
+      setSelectedPlan(null);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-12">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            {siteId ? `Choose Plan for ${domain || 'Your Domain'}` : "Choose Your Plan"}
-          </h1>
-          <p className="text-xl text-gray-600">
-            {siteId 
-              ? "Select a plan for this domain. Each domain requires its own subscription."
-              : "Select the plan that best fits your needs"
-            }
-          </p>
-          {siteId && (
-            <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4 inline-block">
-              <p className="text-sm text-blue-800">
-                <strong>Domain:</strong> {domain || 'Unknown'} • <strong>Plan Required:</strong> Each domain needs its own plan
-              </p>
-            </div>
-          )}
-          {!siteId && currentPlan && (
-            <p className="text-sm text-gray-500 mt-2">
-              Current Plan: <span className="font-semibold text-indigo-600">{PLAN_DETAILS[currentPlan]?.name || currentPlan}</span>
-            </p>
-          )}
-          {!siteId && !currentPlan && (
-            <p className="text-sm text-gray-500 mt-2">
-              <span className="font-semibold text-indigo-600">No plan selected</span> - Choose a plan to get started
-            </p>
-          )}
-        </div>
-
-        {loading && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading...</p>
-            </div>
+    <DashboardLayout>
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">
+          {siteId ? `Choose Plan for ${domain || "Your Domain"}` : "Choose Your Plan"}
+        </h1>
+        <p className="text-gray-500 mt-1">
+          {siteId
+            ? "Select a plan to activate consent tracking for this domain."
+            : "Each domain requires its own subscription plan."}
+        </p>
+        {siteId && domain && (
+          <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+            <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            </svg>
+            <span className="text-sm font-medium text-indigo-700">{domain}</span>
           </div>
         )}
+        {!siteId && (
+          <div className="mt-4">
+            <Link
+              href="/dashboard"
+              className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+            >
+              ← Add a domain first
+            </Link>
+          </div>
+        )}
+      </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
-          {Object.entries(PLAN_DETAILS).map(([planKey, plan]) => {
-            const isCurrentPlan = planKey === currentPlan;
-            const isUpgrade = currentPlan ? (planHierarchy[planKey] > currentPlanLevel) : true; // If no plan, all are "upgrades"
-            const isDowngrade = currentPlan ? (planHierarchy[planKey] < currentPlanLevel) : false;
-
-            return (
-              <div
-                key={planKey}
-                className={`bg-white rounded-2xl shadow-lg p-8 relative ${
-                  plan.popular
-                    ? "ring-2 ring-indigo-500 scale-105"
-                    : "border border-gray-200"
-                } ${isCurrentPlan ? "ring-2 ring-green-500" : ""}`}
-              >
-                {isCurrentPlan && (
-                  <div className="absolute top-4 right-4 bg-green-500 text-white text-xs font-semibold px-3 py-1 rounded-full">
-                    Current Plan
-                  </div>
-                )}
-
-                {plan.popular && !isCurrentPlan && (
-                  <div className="bg-indigo-500 text-white text-sm font-semibold px-3 py-1 rounded-full inline-block mb-4">
-                    Most Popular
-                  </div>
-                )}
-
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                  {plan.name}
-                </h3>
-                <p className="text-gray-600 mb-6">{plan.description}</p>
-
-                <div className="mb-6">
-                  <span className="text-4xl font-bold text-gray-900">
-                    {plan.price}
-                  </span>
-                  <span className="text-gray-600 ml-2">{plan.period}</span>
-                </div>
-
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((feature, idx) => (
-                    <li key={idx} className="flex items-start">
-                      <svg
-                        className="w-5 h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                      <span className="text-gray-700">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                {isCurrentPlan ? (
-                  <button
-                    disabled
-                    className="w-full bg-gray-200 text-gray-600 py-3 px-6 rounded-lg font-semibold cursor-not-allowed"
-                  >
-                    Current Plan
-                  </button>
-                ) : isDowngrade ? (
-                  <button
-                    onClick={() =>
-                      alert(
-                        "To downgrade your plan, please contact support at support@example.com"
-                      )
-                    }
-                    className="w-full bg-gray-100 text-gray-600 py-3 px-6 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
-                  >
-                    Contact to Downgrade
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handlePlanSelect(planKey)}
-                    className={`w-full py-3 px-6 rounded-lg font-semibold transition-colors ${
-                      plan.popular
-                        ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                        : "bg-gray-100 text-gray-900 hover:bg-gray-200"
-                    }`}
-                  >
-                    {planKey === "basic" ? "Select Basic" : `Upgrade to ${plan.name}`}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-12 bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">
-            Plan Comparison
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-900">
-                    Feature
-                  </th>
-                  <th className="text-center py-3 px-4 font-semibold text-gray-900">
-                    Basic
-                  </th>
-                  <th className="text-center py-3 px-4 font-semibold text-gray-900">
-                    Starter
-                  </th>
-                  <th className="text-center py-3 px-4 font-semibold text-gray-900">
-                    Pro
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b">
-                  <td className="py-3 px-4 text-gray-700">Page Views/Month</td>
-                  <td className="text-center py-3 px-4">100,000</td>
-                  <td className="text-center py-3 px-4">300,000</td>
-                  <td className="text-center py-3 px-4">Unlimited</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="py-3 px-4 text-gray-700">Tracker Detection</td>
-                  <td className="text-center py-3 px-4">Basic</td>
-                  <td className="text-center py-3 px-4">Advanced</td>
-                  <td className="text-center py-3 px-4">All Types</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="py-3 px-4 text-gray-700">Banner Customization</td>
-                  <td className="text-center py-3 px-4">Standard</td>
-                  <td className="text-center py-3 px-4">Customizable</td>
-                  <td className="text-center py-3 px-4">White-label</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="py-3 px-4 text-gray-700">Support</td>
-                  <td className="text-center py-3 px-4">Community</td>
-                  <td className="text-center py-3 px-4">Email</td>
-                  <td className="text-center py-3 px-4">Priority</td>
-                </tr>
-                <tr>
-                  <td className="py-3 px-4 text-gray-700">Analytics</td>
-                  <td className="text-center py-3 px-4">-</td>
-                  <td className="text-center py-3 px-4">✓</td>
-                  <td className="text-center py-3 px-4">Advanced</td>
-                </tr>
-              </tbody>
-            </table>
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-8 text-center">
+            <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-gray-900 font-medium">Setting up payment...</p>
+            <p className="text-sm text-gray-500 mt-1">Please wait</p>
           </div>
         </div>
-      </main>
-    </div>
+      )}
+
+      {/* Plans Grid */}
+      <div className="grid md:grid-cols-3 gap-6 mb-8">
+        {Object.entries(PLAN_DETAILS).map(([planKey, plan]) => (
+          <div
+            key={planKey}
+            className={`relative bg-white rounded-xl p-6 border-2 transition-all ${
+              plan.popular ? "border-indigo-500 shadow-lg" : "border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            {plan.popular && (
+              <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                <span className="bg-indigo-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
+                  Most Popular
+                </span>
+              </div>
+            )}
+
+            <h3 className="text-xl font-semibold text-gray-900 mb-1">{plan.name}</h3>
+            <p className="text-sm text-gray-500 mb-4">{plan.description}</p>
+
+            <div className="mb-6">
+              <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
+              <span className="text-gray-500 ml-1">{plan.period}</span>
+            </div>
+
+            <ul className="space-y-3 mb-6">
+              {plan.features.map((feature, idx) => (
+                <li key={idx} className="flex items-start gap-3 text-sm">
+                  <CheckIcon />
+                  <span className="text-gray-600">{feature}</span>
+                </li>
+              ))}
+            </ul>
+
+            <button
+              onClick={() => handlePlanSelect(planKey)}
+              disabled={loading || !siteId}
+              className={`w-full py-3 text-sm font-medium rounded-lg transition-colors ${
+                !siteId
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : loading && selectedPlan === planKey
+                  ? "bg-gray-100 text-gray-500"
+                  : plan.popular
+                  ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                  : "bg-gray-100 text-gray-900 hover:bg-gray-200"
+              }`}
+            >
+              {!siteId
+                ? "Add Domain First"
+                : loading && selectedPlan === planKey
+                ? "Processing..."
+                : `Select ${plan.name}`}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* FAQ Section */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-6">Frequently Asked Questions</h2>
+        <div className="grid md:grid-cols-2 gap-6">
+          {[
+            {
+              q: "How does the trial work?",
+              a: "All plans include a 7-day free trial. Your trial starts when you add a payment method. You won't be charged until the trial ends.",
+            },
+            {
+              q: "Can I cancel anytime?",
+              a: "Yes! Cancel during the trial and you won't be charged. Cancel after and you'll have access until the end of your billing period.",
+            },
+            {
+              q: "One subscription per domain?",
+              a: "Yes, each domain needs its own subscription. This allows you to choose different plans based on each domain's traffic needs.",
+            },
+            {
+              q: "What happens if I exceed page views?",
+              a: "Your consent banner will continue working, but you'll see a warning in your dashboard. Upgrade to continue tracking accurately.",
+            },
+          ].map((faq, idx) => (
+            <div key={idx} className="p-4 bg-gray-50 rounded-lg">
+              <h3 className="font-medium text-gray-900 mb-2">{faq.q}</h3>
+              <p className="text-sm text-gray-600">{faq.a}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}
+
+export default function PlansPage() {
+  return (
+    <Suspense
+      fallback={
+        <DashboardLayout>
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+          </div>
+        </DashboardLayout>
+      }
+    >
+      <PlansContent />
+    </Suspense>
   );
 }

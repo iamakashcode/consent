@@ -1,18 +1,21 @@
 import "./globals.css";
 import { Providers } from "./providers";
-import Navigation from "@/components/Navigation";
 
 export const metadata = {
-  title: "Cookie Consent Manager",
-  description: "Detect tracking codes and manage cookie consent for your website",
+  title: "ConsentFlow - Cookie Consent Made Simple",
+  description: "Auto-detect trackers, block until consent, and stay compliant with GDPR, CCPA, and ePrivacy regulations.",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+      </head>
+      <body className="antialiased">
         <Providers>
-          <Navigation />
           {children}
         </Providers>
       </body>

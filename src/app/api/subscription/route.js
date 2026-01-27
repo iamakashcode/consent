@@ -1,140 +1,197 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
+import { getUserSubscriptions, isDomainActive } from "@/lib/subscription";
+import { cancelRazorpaySubscription } from "@/lib/razorpay";
 
 /**
- * GET - Fetch subscriptions for all user's sites (domain-based plans)
- * Returns array of subscriptions, one per domain
+ * GET /api/subscription
+ * Get all subscriptions for the current user (across all their domains)
  */
 export async function GET(req) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || !session.user || !session.user.id) {
+    if (!session?.user?.id) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = session.user.id;
     const { searchParams } = new URL(req.url);
-    const subscriptionId = searchParams.get("subscriptionId");
-    
-    console.log("[Subscription API] Fetching subscriptions for user:", userId, subscriptionId ? `(filtering by subscriptionId: ${subscriptionId})` : "");
+    const siteId = searchParams.get("siteId");
 
-    // If subscriptionId is provided, find subscription by Razorpay subscription ID
-    if (subscriptionId) {
-      try {
-        const subscription = await prisma.subscription.findFirst({
-          where: {
-            razorpaySubscriptionId: subscriptionId,
-            site: {
-              userId: userId, // Ensure subscription belongs to this user
-            },
-          },
-          include: {
-            site: {
-              select: {
-                siteId: true,
-                id: true,
-                domain: true,
-              },
-            },
-          },
-        });
-
-        if (!subscription) {
-          return Response.json({
-            subscriptions: [],
-            count: 0,
-            activeCount: 0,
-          });
-        }
-
-        return Response.json({
-          subscriptions: [{
-            siteId: subscription.site.siteId,
-            siteDbId: subscription.site.id,
-            domain: subscription.site.domain,
-            subscription: {
-              id: subscription.id,
-              plan: subscription.plan || "basic",
-              status: subscription.status || "pending",
-              currentPeriodStart: subscription.currentPeriodStart,
-              currentPeriodEnd: subscription.currentPeriodEnd,
-              trialEndAt: subscription.trialEndAt,
-              cancelAtPeriodEnd: subscription.cancelAtPeriodEnd || false,
-              razorpayPaymentId: subscription.razorpayPaymentId,
-              razorpaySubscriptionId: subscription.razorpaySubscriptionId,
-              razorpayPlanId: subscription.razorpayPlanId,
-            },
-          }],
-          count: 1,
-          activeCount: subscription.status === "active" ? 1 : 0,
-        });
-      } catch (error) {
-        console.error("[Subscription API] Error fetching subscription by ID:", error);
-        return Response.json({ error: "Failed to fetch subscription" }, { status: 500 });
-      }
-    }
-
-    // Get all sites for user with their subscriptions
-    // Use try-catch around the Prisma query to catch any database errors
-    let sites;
-    try {
-      sites = await prisma.site.findMany({
-        where: { userId },
-        include: {
-          subscription: true, // Include full subscription object
+    // If specific siteId requested, return that subscription only
+    if (siteId) {
+      const site = await prisma.site.findFirst({
+        where: {
+          OR: [
+            { siteId: siteId },
+            { id: siteId },
+          ],
+          userId: session.user.id,
         },
+        include: { subscription: true },
       });
-      console.log("[Subscription API] Found sites:", sites.length);
-    } catch (dbError) {
-      console.error("[Subscription API] Database error:", dbError);
-      throw new Error(`Database query failed: ${dbError.message}`);
+
+      if (!site) {
+        return Response.json({ error: "Site not found" }, { status: 404 });
+      }
+
+      const status = await isDomainActive(site.id);
+
+      return Response.json({
+        siteId: site.siteId,
+        siteDbId: site.id,
+        domain: site.domain,
+        subscription: site.subscription,
+        trialEndAt: site.trialEndAt,
+        trialStartedAt: site.trialStartedAt,
+        isActive: status.isActive,
+        reason: status.reason,
+        trialDaysLeft: status.trialDaysLeft,
+      });
     }
 
-    // Return subscriptions grouped by site
-    const subscriptions = sites.map(site => {
-      const sub = site.subscription;
-      return {
-        siteId: site.siteId, // Public siteId for frontend use
-        siteDbId: site.id, // Database ID (for matching)
-        domain: site.domain,
-        subscription: sub ? {
-          id: sub.id,
-          plan: sub.plan || "basic",
-          status: sub.status || "pending",
-          currentPeriodStart: sub.currentPeriodStart,
-          currentPeriodEnd: sub.currentPeriodEnd,
-          trialEndAt: sub.trialEndAt,
-          cancelAtPeriodEnd: sub.cancelAtPeriodEnd || false,
-          razorpayPaymentId: sub.razorpayPaymentId,
-          razorpaySubscriptionId: sub.razorpaySubscriptionId,
-          razorpayPlanId: sub.razorpayPlanId,
-        } : null,
-      };
-    });
+    // Return all subscriptions for user
+    const result = await getUserSubscriptions(session.user.id);
 
-    console.log("[Subscription API] Returning subscriptions:", subscriptions.length);
+    return Response.json(result);
 
-    return Response.json({
-      subscriptions, // Array of site subscriptions
-      count: subscriptions.length,
-      activeCount: subscriptions.filter(s => s.subscription?.status === "active").length,
-    });
   } catch (error) {
-    console.error("Error fetching subscriptions:", error);
-    console.error("Error stack:", error.stack);
-    console.error("Error details:", {
-      message: error.message,
-      name: error.name,
-      code: error.code,
-    });
+    console.error("[Subscription API] GET error:", error);
     return Response.json(
-      { 
-        error: error.message || "Failed to fetch subscriptions",
-        details: process.env.NODE_ENV === "development" ? error.stack : undefined,
-      },
+      { error: "Failed to fetch subscriptions" },
       { status: 500 }
     );
   }
+}
+
+/**
+ * POST /api/subscription
+ * Cancel a subscription
+ */
+export async function POST(req) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.id) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { action, siteId, cancelAtPeriodEnd = true } = await req.json();
+
+    if (!siteId) {
+      return Response.json({ error: "Site ID is required" }, { status: 400 });
+    }
+
+    // Find site and verify ownership
+    const site = await prisma.site.findFirst({
+      where: {
+        OR: [
+          { siteId: siteId },
+          { id: siteId },
+        ],
+        userId: session.user.id,
+      },
+      include: { subscription: true },
+    });
+
+    if (!site) {
+      return Response.json({ error: "Site not found" }, { status: 404 });
+    }
+
+    if (!site.subscription) {
+      return Response.json({ error: "No subscription found for this domain" }, { status: 404 });
+    }
+
+    switch (action) {
+      case "cancel":
+        return await handleCancel(site, cancelAtPeriodEnd);
+      
+      case "reactivate":
+        return await handleReactivate(site);
+      
+      default:
+        return Response.json({ error: "Invalid action" }, { status: 400 });
+    }
+
+  } catch (error) {
+    console.error("[Subscription API] POST error:", error);
+    return Response.json(
+      { error: "Failed to process request" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Handle subscription cancellation
+ */
+async function handleCancel(site, cancelAtPeriodEnd) {
+  const subscription = site.subscription;
+
+  // Cancel in Razorpay if we have a subscription ID
+  if (subscription.razorpaySubscriptionId) {
+    try {
+      await cancelRazorpaySubscription(subscription.razorpaySubscriptionId, cancelAtPeriodEnd);
+    } catch (error) {
+      console.error("[Subscription] Error cancelling in Razorpay:", error);
+      // Continue with local cancellation even if Razorpay fails
+    }
+  }
+
+  // Update database
+  if (cancelAtPeriodEnd) {
+    await prisma.subscription.update({
+      where: { siteId: site.id },
+      data: { cancelAtPeriodEnd: true },
+    });
+
+    return Response.json({
+      success: true,
+      message: `Subscription will be cancelled at the end of the current period (${new Date(subscription.currentPeriodEnd).toLocaleDateString()}).`,
+      cancelAtPeriodEnd: true,
+      currentPeriodEnd: subscription.currentPeriodEnd,
+    });
+  } else {
+    await prisma.subscription.update({
+      where: { siteId: site.id },
+      data: {
+        status: "cancelled",
+        cancelAtPeriodEnd: false,
+      },
+    });
+
+    return Response.json({
+      success: true,
+      message: "Subscription cancelled immediately.",
+      status: "cancelled",
+    });
+  }
+}
+
+/**
+ * Handle subscription reactivation (undo pending cancellation)
+ */
+async function handleReactivate(site) {
+  const subscription = site.subscription;
+
+  if (!subscription.cancelAtPeriodEnd) {
+    return Response.json(
+      { error: "Subscription is not pending cancellation" },
+      { status: 400 }
+    );
+  }
+
+  // Note: Razorpay doesn't support un-cancelling, so we just update locally
+  // The webhook will handle reactivation if user makes a new payment
+
+  await prisma.subscription.update({
+    where: { siteId: site.id },
+    data: { cancelAtPeriodEnd: false },
+  });
+
+  return Response.json({
+    success: true,
+    message: "Subscription reactivated. It will continue to renew automatically.",
+  });
 }

@@ -4,17 +4,47 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import DashboardLayout from "@/components/DashboardLayout";
 
-export default function AdminDashboard() {
+// Icons
+const UsersIcon = () => (
+  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+  </svg>
+);
+
+const GlobeIcon = () => (
+  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+  </svg>
+);
+
+const CreditCardIcon = () => (
+  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+  </svg>
+);
+
+const ChartIcon = () => (
+  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+  </svg>
+);
+
+const ArrowUpIcon = () => (
+  <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+  </svg>
+);
+
+function AdminContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ users: 0, sites: 0, subscriptions: 0, pageViews: 0 });
   const [users, setUsers] = useState([]);
   const [sites, setSites] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("overview");
-  const [userPage, setUserPage] = useState(1);
-  const [sitePage, setSitePage] = useState(1);
+  const [activeTab, setActiveTab] = useState("users");
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -26,437 +56,310 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (session?.user?.isAdmin) {
-      fetchStats();
-      if (activeTab === "users") fetchUsers();
-      if (activeTab === "sites") fetchSites();
+      fetchData();
     }
-  }, [session, activeTab, userPage, sitePage]);
+  }, [session]);
 
-  const fetchStats = async () => {
+  const fetchData = async () => {
     try {
-      const response = await fetch("/api/admin/stats");
-      if (response.ok) {
-        const data = await response.json();
+      const [statsRes, usersRes, sitesRes] = await Promise.all([
+        fetch("/api/admin/stats"),
+        fetch("/api/admin/users"),
+        fetch("/api/admin/sites"),
+      ]);
+
+      if (statsRes.ok) {
+        const data = await statsRes.json();
         setStats(data);
       }
+
+      if (usersRes.ok) {
+        const data = await usersRes.json();
+        setUsers(data.users || []);
+      }
+
+      if (sitesRes.ok) {
+        const data = await sitesRes.json();
+        setSites(data.sites || []);
+      }
     } catch (err) {
-      console.error("Failed to fetch stats:", err);
+      console.error("Error fetching admin data:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      const response = await fetch(`/api/admin/users?page=${userPage}&limit=20`);
-      if (response.ok) {
-        const data = await response.json();
-        setUsers(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch users:", err);
-    }
-  };
-
-  const fetchSites = async () => {
-    try {
-      const response = await fetch(`/api/admin/sites?page=${sitePage}&limit=20`);
-      if (response.ok) {
-        const data = await response.json();
-        console.log("[Admin] Fetched sites data:", data); // Debug log
-        setSites(data);
-      } else {
-        const errorData = await response.json();
-        console.error("[Admin] Failed to fetch sites:", errorData);
-      }
-    } catch (err) {
-      console.error("Failed to fetch sites:", err);
-    }
-  };
-
-  const handleUpdateUser = async (userId, updates) => {
-    try {
-      const response = await fetch("/api/admin/users", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, ...updates }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Note: Plans are now domain-based, not user-based
-        // Admin can update individual site subscriptions via sites API
-        const message = "User updated successfully! (Note: Plans are now domain-based)";
-        alert(message);
-        fetchUsers();
-        fetchStats();
-      } else {
-        const data = await response.json();
-        alert(data.error || "Failed to update user");
-      }
-    } catch (err) {
-      console.error("Failed to update user:", err);
-      alert("An error occurred");
-    }
-  };
-
-  const handleDeleteUser = async (userId) => {
-    if (!confirm("Are you sure you want to delete this user? This will also delete all their sites.")) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/admin/users?userId=${userId}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        alert("User deleted successfully!");
-        fetchUsers();
-        fetchStats();
-      } else {
-        const data = await response.json();
-        alert(data.error || "Failed to delete user");
-      }
-    } catch (err) {
-      console.error("Failed to delete user:", err);
-      alert("An error occurred");
-    }
-  };
-
-  const handleDeleteSite = async (siteId) => {
-    if (!confirm("Are you sure you want to delete this site?")) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/admin/sites?siteId=${siteId}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        alert("Site deleted successfully!");
-        fetchSites();
-        fetchStats();
-      } else {
-        const data = await response.json();
-        alert(data.error || "Failed to delete site");
-      }
-    } catch (err) {
-      console.error("Failed to delete site:", err);
-      alert("An error occurred");
-    }
-  };
-
   if (status === "loading" || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-lg">Loading...</div>
-      </div>
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+        </div>
+      </DashboardLayout>
     );
   }
 
-  if (!session?.user?.isAdmin) {
-    return null;
-  }
+  if (!session?.user?.isAdmin) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-12">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
-          <p className="text-gray-600">Manage users, sites, and subscriptions</p>
+    <DashboardLayout>
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <span className="px-2 py-1 text-xs font-semibold bg-red-100 text-red-700 rounded">Admin</span>
+          <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+        </div>
+        <p className="text-gray-500">Manage users, domains, and monitor platform metrics</p>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium text-gray-500">Total Users</span>
+            <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+              <UsersIcon />
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-gray-900">{stats.users}</p>
+          <div className="flex items-center gap-1 mt-1">
+            <ArrowUpIcon />
+            <span className="text-sm text-green-600">+12 this week</span>
+          </div>
         </div>
 
-        {/* Tabs */}
-        <div className="border-b border-gray-200 mb-6">
-          <nav className="-mb-px flex space-x-8">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium text-gray-500">Total Domains</span>
+            <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center text-purple-600">
+              <GlobeIcon />
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-gray-900">{stats.sites}</p>
+          <div className="flex items-center gap-1 mt-1">
+            <ArrowUpIcon />
+            <span className="text-sm text-green-600">+8 this week</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium text-gray-500">Active Subscriptions</span>
+            <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center text-green-600">
+              <CreditCardIcon />
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-gray-900">{stats.subscriptions}</p>
+          <p className="text-sm text-gray-500 mt-1">Monthly recurring</p>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium text-gray-500">Total Page Views</span>
+            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
+              <ChartIcon />
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-gray-900">{(stats.pageViews || 0).toLocaleString()}</p>
+          <div className="flex items-center gap-1 mt-1">
+            <ArrowUpIcon />
+            <span className="text-sm text-green-600">+24% this month</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="border-b border-gray-200">
+          <nav className="flex gap-4 px-6" aria-label="Tabs">
             {[
-              { id: "overview", label: "Overview" },
-              { id: "users", label: "Users" },
-              { id: "sites", label: "Sites" },
+              { id: "users", label: "Users", count: users.length },
+              { id: "domains", label: "Domains", count: sites.length },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                className={`py-4 px-2 border-b-2 text-sm font-medium transition-colors ${
                   activeTab === tab.id
-                    ? "border-indigo-500 text-indigo-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    ? "border-indigo-600 text-indigo-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
                 {tab.label}
+                <span
+                  className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+                    activeTab === tab.id ? "bg-indigo-100 text-indigo-600" : "bg-gray-100 text-gray-500"
+                  }`}
+                >
+                  {tab.count}
+                </span>
               </button>
             ))}
           </nav>
         </div>
 
-        {/* Overview Tab */}
-        {activeTab === "overview" && stats && (
-          <div className="space-y-6">
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="text-sm font-medium text-gray-500">Total Users</div>
-                <div className="mt-2 text-3xl font-bold text-gray-900">{stats.overview.totalUsers}</div>
-                <div className="mt-1 text-sm text-gray-600">
-                  +{stats.overview.usersLast30Days} in last 30 days
-                </div>
-              </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="text-sm font-medium text-gray-500">Total Sites</div>
-                <div className="mt-2 text-3xl font-bold text-gray-900">{stats.overview.totalSites}</div>
-                <div className="mt-1 text-sm text-gray-600">
-                  +{stats.overview.sitesLast30Days} in last 30 days
-                </div>
-              </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="text-sm font-medium text-gray-500">Subscriptions</div>
-                <div className="mt-2 text-3xl font-bold text-gray-900">{stats.overview.totalSubscriptions}</div>
-              </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="text-sm font-medium text-gray-500">Active Plans</div>
-                <div className="mt-2 text-sm space-y-1">
-                  <div>Basic: {stats.planDistribution.basic || 0}</div>
-                  <div>Starter: {stats.planDistribution.starter || 0}</div>
-                  <div>Pro: {stats.planDistribution.pro || 0}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Recent Users */}
-            <div className="bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Recent Users</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Joined</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {stats.recentUsers.map((user) => (
-                      <tr key={user.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.email}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.name || "-"}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
-                            {user._count?.sites > 0 ? `${user._count.sites} domain(s)` : "No domains"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(user.createdAt).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Recent Sites */}
-            <div className="bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Recent Sites</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Domain</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {stats.recentSites.map((site) => (
-                      <tr key={site.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{site.domain}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {site.user.name || site.user.email}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(site.createdAt).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Users Tab */}
+        {/* Users Table */}
         {activeTab === "users" && (
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">All Users</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sites</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Admin</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {users.users?.map((user) => (
-                    <tr key={user.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.email}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.name || "-"}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <div className="text-xs text-gray-600">
-                          {user.sites?.length > 0 
-                            ? user.sites.map((site, idx) => (
-                                <div key={site.id} className="mb-1">
-                                  {site.domain}: <span className="font-semibold">{site.subscription?.plan || "No plan"}</span>
-                                </div>
-                              ))
-                            : "No domains"}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    User
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Email
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Domains
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Role
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Joined
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {users.map((user) => (
+                  <tr key={user.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+                          <span className="text-white font-medium text-sm">
+                            {user.name?.charAt(0)?.toUpperCase() || user.email?.charAt(0)?.toUpperCase()}
+                          </span>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user._count.sites}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <input
-                          type="checkbox"
-                          checked={user.isAdmin || false}
-                          onChange={(e) => handleUpdateUser(user.id, { isAdmin: e.target.checked })}
-                          className="rounded border-gray-300"
-                        />
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {users.pagination && (
-              <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
-                <div className="text-sm text-gray-500">
-                  Page {users.pagination.page} of {users.pagination.totalPages}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setUserPage(Math.max(1, userPage - 1))}
-                    disabled={userPage === 1}
-                    className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onClick={() => setUserPage(userPage + 1)}
-                    disabled={userPage >= users.pagination.totalPages}
-                    className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
+                        <span className="font-medium text-gray-900">{user.name || "—"}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {user.email}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {user._count?.sites || 0}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {user.isAdmin ? (
+                        <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded">
+                          Admin
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
+                          User
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(user.createdAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+                {users.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                      No users found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         )}
 
-        {/* Sites Tab */}
-        {activeTab === "sites" && (
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">All Sites</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Domain</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trackers</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+        {/* Domains Table */}
+        {activeTab === "domains" && (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Domain
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Owner
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Plan
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Page Views
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Created
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sites.map((site) => (
+                  <tr key={site.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{site.domain}</span>
+                        {site.isVerified && (
+                          <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {site.user?.email || "—"}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {site.subscription?.plan ? (
+                        <span className="px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded capitalize">
+                          {site.subscription.plan}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
+                          None
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {site.subscription?.status === "active" || site.subscription?.status === "trial" ? (
+                        <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded capitalize">
+                          {site.subscription.status}
+                        </span>
+                      ) : site.subscription?.status ? (
+                        <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-700 rounded capitalize">
+                          {site.subscription.status}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded">
+                          No Sub
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {(site._count?.pageViews || 0).toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(site.createdAt).toLocaleDateString()}
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {sites?.sites && sites.sites.length > 0 ? (
-                    sites.sites.map((site) => (
-                      <tr key={site.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{site.domain}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {site.user?.name || site.user?.email || "Unknown"}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
-                            {site.subscription?.plan ? `${site.subscription.plan.charAt(0).toUpperCase() + site.subscription.plan.slice(1)}` : "No plan"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {Array.isArray(site.trackers) ? site.trackers.length : 0}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(site.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <button
-                            onClick={() => handleDeleteSite(site.id)}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
-                        {loading ? "Loading sites..." : "No sites found"}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            {sites.pagination && (
-              <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
-                <div className="text-sm text-gray-500">
-                  Page {sites.pagination.page} of {sites.pagination.totalPages}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSitePage(Math.max(1, sitePage - 1))}
-                    disabled={sitePage === 1}
-                    className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onClick={() => setSitePage(sitePage + 1)}
-                    disabled={sitePage >= sites.pagination.totalPages}
-                    className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
+                ))}
+                {sites.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                      No domains found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
+}
+
+export default function AdminPage() {
+  return <AdminContent />;
 }

@@ -3,18 +3,20 @@ import { prisma } from "@/lib/prisma";
 import { generateSiteId } from "@/lib/store";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
-import { hasVerificationColumns } from "@/lib/db-utils";
 
+/**
+ * Crawl a domain and detect trackers
+ * Domain-first: User can add unlimited domains, each needs its own subscription
+ */
 export async function POST(req) {
   try {
     const session = await getServerSession(authOptions);
-    
-    if (!session || !session.user || !session.user.id) {
+
+    if (!session?.user?.id) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
-    
-    const userId = session.user.id;
 
+    const userId = session.user.id;
     const { domain } = await req.json();
 
     if (!domain) {
@@ -32,96 +34,45 @@ export async function POST(req) {
       return Response.json({ error: "Invalid domain" }, { status: 400 });
     }
 
-    // Check if user exists
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user) {
-      return Response.json({ error: "User not found" }, { status: 404 });
+    // Validate domain format
+    const domainRegex = /^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$/;
+    if (!domainRegex.test(cleanDomain)) {
+      return Response.json(
+        { error: "Invalid domain format. Please enter a valid domain (e.g., example.com)" },
+        { status: 400 }
+      );
     }
 
-    // No plan limit check - users can add unlimited domains
-    // Each domain will need its own subscription
-
-    // Check if site already exists - handle missing columns gracefully
-    let existingSite;
-    try {
-      existingSite = await prisma.site.findUnique({
-        where: {
-          userId_domain: {
-            userId,
-            domain: cleanDomain,
-          },
-        },
-      });
-    } catch (error) {
-      // If verification columns don't exist, fetch without selecting them
-      if (error.message && error.message.includes("isVerified")) {
-        existingSite = await prisma.site.findUnique({
-          where: {
-            userId_domain: {
-              userId,
-              domain: cleanDomain,
-            },
-          },
-          select: {
-            id: true,
-            domain: true,
-            siteId: true,
-            trackers: true,
-            bannerConfig: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        });
-        if (existingSite) {
-          existingSite.isVerified = false;
-          existingSite.verificationToken = null;
-          existingSite.verifiedAt = null;
-        }
-      } else {
-          throw error;
-        }
-      }
+    // Check if site already exists for this user
+    let existingSite = await prisma.site.findFirst({
+      where: {
+        userId: userId,
+        domain: cleanDomain,
+      },
+      include: { subscription: true },
+    });
 
     let site;
     let siteId;
+    let isNewSite = false;
 
     if (existingSite) {
-      // Update existing site
+      // Site already exists
       site = existingSite;
       siteId = existingSite.siteId;
-      
-      // Generate verification token if missing (only if column exists)
-      if (!existingSite.verificationToken && existingSite.verificationToken !== undefined) {
-        try {
-          const verificationToken = `cm_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-          await prisma.site.update({
-            where: { id: existingSite.id },
-            data: { verificationToken },
-          });
-          site.verificationToken = verificationToken;
-        } catch (error) {
-          // Column doesn't exist, skip update
-          if (error.message && error.message.includes("verificationToken")) {
-            console.warn("verificationToken column doesn't exist, skipping update");
-          } else {
-            throw error;
-          }
-        }
-      }
     } else {
-      // Fetch the website
+      // Crawl the website for trackers
       let html;
       try {
         const url = `https://${cleanDomain}`;
         const response = await fetch(url, {
           headers: {
             "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           },
           redirect: "follow",
+          signal: AbortSignal.timeout(15000), // 15 second timeout
         });
 
         if (!response.ok) {
@@ -130,9 +81,10 @@ export async function POST(req) {
 
         html = await response.text();
       } catch (error) {
+        console.error(`[Crawl] Failed to fetch ${cleanDomain}:`, error);
         return Response.json(
           {
-            error: `Failed to fetch website: ${error.message}. Make sure the domain is accessible.`,
+            error: `Failed to fetch website: ${error.message}. Make sure the domain is accessible via HTTPS.`,
           },
           { status: 500 }
         );
@@ -147,126 +99,82 @@ export async function POST(req) {
       // Generate verification token
       const verificationToken = `cm_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
 
-      // Create or update site in database
-      // Check if verification columns exist first
-      const verificationColumns = await hasVerificationColumns();
-      
-      if (verificationColumns.allExist) {
-        // All columns exist, use them
-        site = await prisma.site.upsert({
-          where: {
-            userId_domain: {
-              userId,
-              domain: cleanDomain,
-            },
-          },
-          create: {
+      // Create site
+      try {
+        site = await prisma.site.create({
+          data: {
             domain: cleanDomain,
             siteId: siteId,
-            userId,
+            userId: userId,
             trackers: trackers,
             verificationToken: verificationToken,
-            isVerified: false, // Will be verified after user adds meta tag
-          },
-          update: {
-            trackers: trackers,
-            updatedAt: new Date(),
-            // Don't reset verification if already verified
+            isVerified: false,
           },
         });
-      } else {
-        // Columns don't exist, use raw SQL to avoid Prisma schema validation
-        console.warn("Verification columns missing, using raw SQL to create site");
-        
-        // First check if site exists
-        const existingSiteRaw = await prisma.$queryRaw`
-          SELECT * FROM "sites" 
-          WHERE "userId" = ${userId} AND "domain" = ${cleanDomain}
-          LIMIT 1
-        `;
-        
-        const trackersJson = JSON.stringify(trackers);
-        
-        if (existingSiteRaw && existingSiteRaw.length > 0) {
-          // Update existing site
-          const result = await prisma.$queryRaw`
-            UPDATE "sites"
-            SET 
-              "trackers" = ${trackersJson}::jsonb,
-              "updatedAt" = NOW()
-            WHERE "userId" = ${userId} AND "domain" = ${cleanDomain}
-            RETURNING *
-          `;
-          site = result[0];
+        isNewSite = true;
+      } catch (createError) {
+        // Handle race condition if site was created by another request
+        if (createError.code === "P2002") {
+          existingSite = await prisma.site.findFirst({
+            where: {
+              userId: userId,
+              domain: cleanDomain,
+            },
+            include: { subscription: true },
+          });
+          if (existingSite) {
+            site = existingSite;
+            siteId = existingSite.siteId;
+          } else {
+            throw createError;
+          }
         } else {
-          // Create new site
-          const result = await prisma.$queryRaw`
-            INSERT INTO "sites" ("id", "domain", "siteId", "userId", "trackers", "createdAt", "updatedAt")
-            VALUES (
-              gen_random_uuid()::text,
-              ${cleanDomain},
-              ${siteId},
-              ${userId},
-              ${trackersJson}::jsonb,
-              NOW(),
-              NOW()
-            )
-            RETURNING *
-          `;
-          site = result[0];
-        }
-        
-        // Add default verification values to the object (not in DB)
-        if (site) {
-          site.isVerified = false;
-          site.verificationToken = verificationToken;
-          site.verifiedAt = null;
-        } else {
-          throw new Error("Failed to create or update site");
+          throw createError;
         }
       }
     }
 
-    // Check if site has a subscription
-    // Handle potential schema issues gracefully
-    let hasSubscription = false;
-    try {
-      // Try to find subscription for this site
-      const subscription = await prisma.subscription.findUnique({
-        where: { siteId: site.id },
-      });
-      hasSubscription = !!subscription;
-    } catch (subError) {
-      console.error("[Crawl] Error checking subscription:", subError.message);
-      // If query fails (e.g., schema issue), assume no subscription
-      // User will be prompted to add one
-      hasSubscription = false;
-    }
+    // Build response
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ||
+      req.headers.get("origin") ||
+      `http://${req.headers.get("host")}`;
 
-    const baseUrl =
-      process.env.NEXT_PUBLIC_BASE_URL ||
-      (req.headers.get("origin") || `http://${req.headers.get("host")}`);
     const scriptUrl = `${baseUrl}/api/script/${site.siteId}?domain=${encodeURIComponent(cleanDomain)}`;
 
-    // Get verification token (from DB or fallback)
-    const siteVerificationToken = site.verificationToken || verificationToken;
-    const siteIsVerified = site.isVerified || false;
+    // Check if site has a subscription
+    const hasSubscription = !!site.subscription;
+    const subscriptionStatus = site.subscription?.status?.toLowerCase();
+    const isSubscriptionActive = subscriptionStatus === "active" || subscriptionStatus === "trial";
+
+    // Determine if user needs to select a plan
+    const needsPlan = !hasSubscription || 
+                      subscriptionStatus === "pending" || 
+                      subscriptionStatus === "cancelled" ||
+                      subscriptionStatus === "expired" ||
+                      subscriptionStatus === "payment_failed";
 
     return Response.json({
       domain: cleanDomain,
       trackers: Array.isArray(site.trackers) ? site.trackers : [],
       scriptUrl,
       siteId: site.siteId,
-      siteDbId: site.id, // Internal database ID for subscription creation
-      isVerified: siteIsVerified,
-      verificationToken: siteVerificationToken,
+      siteDbId: site.id,
+      isVerified: site.isVerified || false,
+      verificationToken: site.verificationToken,
       hasSubscription: hasSubscription,
-      message: siteIsVerified 
-        ? "Domain is verified. The script is working correctly."
-        : "Add the script to your website. Verification will happen automatically when the script loads.",
+      subscriptionStatus: subscriptionStatus || null,
+      isSubscriptionActive: isSubscriptionActive,
+      needsPlan: needsPlan,
+      isNewSite: isNewSite,
+      message: isNewSite
+        ? "Domain added successfully! Select a plan to activate tracking."
+        : hasSubscription && isSubscriptionActive
+          ? "Domain exists and subscription is active."
+          : "Domain exists. Select a plan to activate tracking.",
     });
+
   } catch (error) {
-    console.error("Crawl error:", error);
+    console.error("[Crawl] Error:", error);
     return Response.json(
       { error: error.message || "Internal server error" },
       { status: 500 }

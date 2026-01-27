@@ -1,25 +1,14 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 
 export default function Navigation() {
-  const { data: session, status, update } = useSession();
+  const { data: session, status } = useSession();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const lastPathname = useRef(pathname);
-
-  // Refresh session when pathname changes (user navigates) to ensure plan is up to date
-  // This helps when admin changes the plan
-  useEffect(() => {
-    if (session && status === "authenticated" && lastPathname.current !== pathname) {
-      // Only refresh when pathname actually changes (user navigates)
-      lastPathname.current = pathname;
-      update();
-    }
-  }, [pathname, session, status]);
 
   // Don't show navigation on login/signup pages
   if (pathname === "/login" || pathname === "/signup") {
@@ -27,9 +16,7 @@ export default function Navigation() {
   }
 
   const isActive = (path) => {
-    if (path === "/") {
-      return pathname === "/";
-    }
+    if (path === "/") return pathname === "/";
     return pathname?.startsWith(path);
   };
 
@@ -50,13 +37,11 @@ export default function Navigation() {
     <nav className="bg-white shadow-sm border-b sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
-          {/* Logo/Brand */}
+          {/* Logo */}
           <div className="flex items-center">
             <Link href={session ? "/dashboard" : "/"} className="flex items-center space-x-2">
               <div className="text-2xl">🍪</div>
-              <span className="text-xl font-bold text-gray-900">
-                Cookie Consent Manager
-              </span>
+              <span className="text-xl font-bold text-gray-900">Consent Manager</span>
             </Link>
           </div>
 
@@ -66,7 +51,7 @@ export default function Navigation() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
                   isActive(link.href)
                     ? "bg-indigo-100 text-indigo-700"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
@@ -78,7 +63,7 @@ export default function Navigation() {
             ))}
           </div>
 
-          {/* User Menu / Auth Buttons */}
+          {/* User Menu */}
           <div className="hidden md:flex items-center space-x-4">
             {session ? (
               <>
@@ -87,13 +72,8 @@ export default function Navigation() {
                     <p className="text-sm font-medium text-gray-900">
                       {session.user?.name || session.user?.email}
                     </p>
-                    <p className="text-xs text-gray-500">
-                      {session.user?.plan
-                        ? `${session.user.plan.charAt(0).toUpperCase() + session.user.plan.slice(1)} Plan`
-                        : ""}
-                    </p>
                   </div>
-                  <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                  <div className="h-8 w-8 bg-indigo-100 flex items-center justify-center">
                     <span className="text-indigo-600 font-semibold text-sm">
                       {session.user?.name?.charAt(0)?.toUpperCase() ||
                         session.user?.email?.charAt(0)?.toUpperCase() ||
@@ -101,12 +81,12 @@ export default function Navigation() {
                     </span>
                   </div>
                 </div>
-                <Link
-                  href="/api/auth/signout"
+                <button
+                  onClick={() => signOut({ callbackUrl: "/" })}
                   className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
                 >
                   Sign Out
-                </Link>
+                </button>
               </>
             ) : (
               <>
@@ -118,7 +98,7 @@ export default function Navigation() {
                 </Link>
                 <Link
                   href="/signup"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-semibold"
+                  className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 transition-colors text-sm font-semibold"
                 >
                   Get Started
                 </Link>
@@ -130,17 +110,9 @@ export default function Navigation() {
           <div className="md:hidden">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50"
             >
-              <svg
-                className="h-6 w-6"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
+              <svg className="h-6 w-6" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
                 {mobileMenuOpen ? (
                   <path d="M6 18L18 6M6 6l12 12" />
                 ) : (
@@ -159,7 +131,7 @@ export default function Navigation() {
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`block px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`block px-4 py-2 text-sm font-medium transition-colors ${
                   isActive(link.href)
                     ? "bg-indigo-100 text-indigo-700"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
@@ -176,19 +148,16 @@ export default function Navigation() {
                     <p className="text-sm font-medium text-gray-900">
                       {session.user?.name || session.user?.email}
                     </p>
-                    <p className="text-xs text-gray-500">
-                      {session.user?.plan
-                        ? `${session.user.plan.charAt(0).toUpperCase() + session.user.plan.slice(1)} Plan`
-                        : ""}
-                    </p>
                   </div>
-                  <Link
-                    href="/api/auth/signout"
-                    onClick={() => setMobileMenuOpen(false)}
+                  <button
+                    onClick={() => {
+                      signOut({ callbackUrl: "/" });
+                      setMobileMenuOpen(false);
+                    }}
                     className="block px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
                   >
                     Sign Out
-                  </Link>
+                  </button>
                 </>
               ) : (
                 <>
@@ -202,7 +171,7 @@ export default function Navigation() {
                   <Link
                     href="/signup"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="block px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-semibold text-center mt-2"
+                    className="block px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-semibold text-center mt-2"
                   >
                     Get Started
                   </Link>

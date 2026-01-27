@@ -1,67 +1,87 @@
 import { prisma } from "@/lib/prisma";
-import { razorpay } from "@/lib/razorpay";
-import { calculateTrialEndDate } from "@/lib/subscription";
-import { PLAN_PRICING } from "@/lib/razorpay";
-import crypto from "crypto";
+import { verifyWebhookSignature } from "@/lib/razorpay";
+import { 
+  startDomainTrial, 
+  activateSubscription, 
+  markPaymentFailed, 
+  cancelSubscription,
+  extendSubscriptionPeriod 
+} from "@/lib/subscription";
 
 /**
  * Razorpay Webhook Handler
- * Handles subscription events: payment.success, payment.failed, subscription.charged, etc.
  * 
  * Configure this URL in Razorpay Dashboard:
  * https://yourdomain.com/api/webhooks/razorpay
+ * 
+ * Events handled:
+ * - subscription.activated: Payment method added, start trial
+ * - subscription.charged: Successful payment (after trial or recurring)
+ * - payment.failed: Payment failed
+ * - subscription.cancelled: Subscription cancelled
+ * - subscription.completed: Subscription ended
  */
 export async function POST(req) {
   try {
     const body = await req.text();
     const signature = req.headers.get("x-razorpay-signature");
-    
-    if (!signature) {
-      return Response.json({ error: "Missing signature" }, { status: 400 });
-    }
 
     // Verify webhook signature
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    if (!webhookSecret) {
-      console.warn("⚠️ RAZORPAY_WEBHOOK_SECRET not set, skipping signature verification");
-    } else {
-      const expectedSignature = crypto
-        .createHmac("sha256", webhookSecret)
-        .update(body)
-        .digest("hex");
-      
-      if (signature !== expectedSignature) {
-        console.error("Invalid webhook signature");
-        return Response.json({ error: "Invalid signature" }, { status: 401 });
-      }
+    if (!verifyWebhookSignature(body, signature)) {
+      console.error("[Razorpay Webhook] Invalid signature");
+      return Response.json({ error: "Invalid signature" }, { status: 401 });
     }
 
     const event = JSON.parse(body);
-    console.log("[Razorpay Webhook] Received event:", event.event);
+    console.log("[Razorpay Webhook] Event received:", event.event);
 
-    // Handle different event types
     switch (event.event) {
-      case "payment.captured":
-      case "payment.authorized":
-        await handlePaymentSuccess(event);
+      case "subscription.authenticated":
+        // User has authenticated/added payment method but subscription not yet activated
+        await handleSubscriptionAuthenticated(event);
         break;
-      
-      case "payment.failed":
-        await handlePaymentFailed(event);
-        break;
-      
-      case "subscription.charged":
-        await handleSubscriptionCharged(event);
-        break;
-      
+
       case "subscription.activated":
+        // Payment method added and subscription activated - START TRIAL HERE
         await handleSubscriptionActivated(event);
         break;
-      
+
+      case "subscription.charged":
+        // Successful payment (after trial ends or recurring monthly)
+        await handleSubscriptionCharged(event);
+        break;
+
+      case "payment.captured":
+      case "payment.authorized":
+        // Payment successful
+        await handlePaymentSuccess(event);
+        break;
+
+      case "payment.failed":
+        // Payment failed
+        await handlePaymentFailed(event);
+        break;
+
+      case "subscription.pending":
+        // Subscription is pending (retry phase)
+        await handleSubscriptionPending(event);
+        break;
+
+      case "subscription.halted":
+        // All payment retries failed
+        await handleSubscriptionHalted(event);
+        break;
+
       case "subscription.cancelled":
+        // Subscription cancelled
         await handleSubscriptionCancelled(event);
         break;
-      
+
+      case "subscription.completed":
+        // Subscription ended (all billing cycles completed)
+        await handleSubscriptionCompleted(event);
+        break;
+
       default:
         console.log(`[Razorpay Webhook] Unhandled event: ${event.event}`);
     }
@@ -77,42 +97,123 @@ export async function POST(req) {
 }
 
 /**
- * Handle successful payment
+ * Handle subscription authenticated (payment method added but not yet active)
+ */
+async function handleSubscriptionAuthenticated(event) {
+  const subscription = event.payload.subscription.entity;
+  console.log(`[Webhook] Subscription authenticated: ${subscription.id}`);
+  
+  // Usually followed by subscription.activated, no action needed here
+}
+
+/**
+ * Handle subscription activated
+ * This is when the payment method is successfully added
+ * START THE 7-DAY TRIAL HERE
+ */
+async function handleSubscriptionActivated(event) {
+  const razorpaySubscription = event.payload.subscription.entity;
+  const razorpaySubId = razorpaySubscription.id;
+
+  console.log(`[Webhook] Subscription activated: ${razorpaySubId}`);
+
+  // Find subscription in our database
+  const dbSubscription = await prisma.subscription.findFirst({
+    where: { razorpaySubscriptionId: razorpaySubId },
+    include: { site: true },
+  });
+
+  if (!dbSubscription) {
+    console.warn(`[Webhook] Subscription not found in DB: ${razorpaySubId}`);
+    return;
+  }
+
+  // Start 7-day trial for this domain
+  const plan = dbSubscription.plan || "basic";
+  
+  try {
+    await startDomainTrial(dbSubscription.siteId, plan);
+    console.log(`[Webhook] Started 7-day trial for site ${dbSubscription.siteId}, domain: ${dbSubscription.site?.domain}`);
+  } catch (error) {
+    console.error(`[Webhook] Error starting trial:`, error);
+  }
+}
+
+/**
+ * Handle subscription charged (successful payment)
+ * Called after trial ends (first real payment) or monthly recurring
+ */
+async function handleSubscriptionCharged(event) {
+  const razorpaySubscription = event.payload.subscription.entity;
+  const payment = event.payload.payment?.entity;
+  const razorpaySubId = razorpaySubscription.id;
+
+  console.log(`[Webhook] Subscription charged: ${razorpaySubId}, payment: ${payment?.id}`);
+
+  // Find subscription in our database
+  const dbSubscription = await prisma.subscription.findFirst({
+    where: { razorpaySubscriptionId: razorpaySubId },
+  });
+
+  if (!dbSubscription) {
+    console.warn(`[Webhook] Subscription not found: ${razorpaySubId}`);
+    return;
+  }
+
+  // Extend subscription period (activates if was in trial)
+  try {
+    await extendSubscriptionPeriod(dbSubscription.siteId);
+    
+    // Update payment ID
+    if (payment?.id) {
+      await prisma.subscription.update({
+        where: { siteId: dbSubscription.siteId },
+        data: { razorpayPaymentId: payment.id },
+      });
+    }
+
+    console.log(`[Webhook] Subscription period extended for site ${dbSubscription.siteId}`);
+  } catch (error) {
+    console.error(`[Webhook] Error extending subscription:`, error);
+  }
+}
+
+/**
+ * Handle successful payment (for one-time orders)
  */
 async function handlePaymentSuccess(event) {
   const payment = event.payload.payment.entity;
   const orderId = payment.order_id;
-  
-  console.log(`[Razorpay Webhook] Payment successful: ${payment.id} for order ${orderId}`);
-  
+
+  console.log(`[Webhook] Payment success: ${payment.id} for order ${orderId}`);
+
   // Find subscription by order ID
   const subscription = await prisma.subscription.findFirst({
     where: { razorpayOrderId: orderId },
-    include: { site: { include: { user: true } } },
   });
 
   if (!subscription) {
-    console.warn(`[Razorpay Webhook] Subscription not found for order ${orderId}`);
+    // Might be a subscription payment, not a one-time order
+    console.log(`[Webhook] No subscription found for order ${orderId}`);
     return;
   }
 
-  // Update subscription
-  const now = new Date();
-  const periodEnd = new Date();
-  periodEnd.setMonth(periodEnd.getMonth() + 1);
+  // Activate subscription
+  try {
+    await activateSubscription(subscription.siteId);
+    
+    await prisma.subscription.update({
+      where: { siteId: subscription.siteId },
+      data: {
+        razorpayPaymentId: payment.id,
+        razorpaySignature: payment.notes?.signature || null,
+      },
+    });
 
-  await prisma.subscription.update({
-    where: { siteId: subscription.siteId },
-    data: {
-      status: "active",
-      currentPeriodStart: now,
-      currentPeriodEnd: periodEnd,
-      razorpayPaymentId: payment.id,
-      razorpaySignature: payment.notes?.signature || null,
-    },
-  });
-
-  console.log(`[Razorpay Webhook] Subscription activated for site ${subscription.siteId}`);
+    console.log(`[Webhook] Subscription activated for site ${subscription.siteId}`);
+  } catch (error) {
+    console.error(`[Webhook] Error activating subscription:`, error);
+  }
 }
 
 /**
@@ -122,134 +223,118 @@ async function handlePaymentFailed(event) {
   const payment = event.payload.payment.entity;
   const orderId = payment.order_id;
   
-  console.log(`[Razorpay Webhook] Payment failed: ${payment.id} for order ${orderId}`);
+  // Try to find by subscription ID from notes
+  const razorpaySubId = payment.notes?.subscription_id;
+
+  console.log(`[Webhook] Payment failed: ${payment.id}`);
+
+  let subscription;
   
-  // Find subscription by order ID
-  const subscription = await prisma.subscription.findFirst({
-    where: { razorpayOrderId: orderId },
-  });
+  if (razorpaySubId) {
+    subscription = await prisma.subscription.findFirst({
+      where: { razorpaySubscriptionId: razorpaySubId },
+    });
+  } else if (orderId) {
+    subscription = await prisma.subscription.findFirst({
+      where: { razorpayOrderId: orderId },
+    });
+  }
 
   if (!subscription) {
+    console.warn(`[Webhook] Subscription not found for failed payment`);
     return;
   }
 
-  // Mark subscription as inactive/cancelled
-  await prisma.subscription.update({
-    where: { siteId: subscription.siteId },
-    data: {
-      status: "cancelled",
-      cancelAtPeriodEnd: false,
-    },
-  });
-
-  console.log(`[Razorpay Webhook] Subscription cancelled for site ${subscription.siteId} due to payment failure`);
-  
-  // TODO: Send email notification to user about payment failure
+  // Mark as payment failed
+  try {
+    await markPaymentFailed(subscription.siteId);
+    console.log(`[Webhook] Marked payment failed for site ${subscription.siteId}`);
+  } catch (error) {
+    console.error(`[Webhook] Error marking payment failed:`, error);
+  }
 }
 
 /**
- * Handle subscription charged (recurring payment)
+ * Handle subscription pending (payment retry phase)
  */
-async function handleSubscriptionCharged(event) {
-  const subscription = event.payload.subscription.entity;
-  const payment = event.payload.payment.entity;
+async function handleSubscriptionPending(event) {
+  const razorpaySubscription = event.payload.subscription.entity;
+  console.log(`[Webhook] Subscription pending (retry): ${razorpaySubscription.id}`);
   
-  console.log(`[Razorpay Webhook] Subscription charged: ${subscription.id}, payment: ${payment.id}`);
-  
-  // Find subscription by Razorpay subscription ID
-  const dbSubscription = await prisma.subscription.findFirst({
-    where: { razorpaySubscriptionId: subscription.id },
-  });
-
-  if (!dbSubscription) {
-    console.warn(`[Razorpay Webhook] Subscription not found for Razorpay subscription ${subscription.id}`);
-    return;
-  }
-
-  // Update subscription period
-  const now = new Date();
-  const periodEnd = new Date();
-  periodEnd.setMonth(periodEnd.getMonth() + 1);
-
-  await prisma.subscription.update({
-    where: { siteId: dbSubscription.siteId },
-    data: {
-      status: "active",
-      currentPeriodStart: now,
-      currentPeriodEnd: periodEnd,
-      razorpayPaymentId: payment.id,
-    },
-  });
-
-  console.log(`[Razorpay Webhook] Subscription period extended for site ${dbSubscription.siteId}`);
+  // Don't change status yet - Razorpay will retry
 }
 
 /**
- * Handle subscription activated
- * This is when payment method is successfully added and subscription is activated
- * For Basic plan, start 7-day free trial here (only if trial hasn't been used)
+ * Handle subscription halted (all retries failed)
  */
-async function handleSubscriptionActivated(event) {
-  const subscription = event.payload.subscription.entity;
-  
-  console.log(`[Razorpay Webhook] Subscription activated: ${subscription.id}`);
-  
+async function handleSubscriptionHalted(event) {
+  const razorpaySubscription = event.payload.subscription.entity;
+  const razorpaySubId = razorpaySubscription.id;
+
+  console.log(`[Webhook] Subscription halted: ${razorpaySubId}`);
+
   const dbSubscription = await prisma.subscription.findFirst({
-    where: { razorpaySubscriptionId: subscription.id },
+    where: { razorpaySubscriptionId: razorpaySubId },
   });
 
-  if (!dbSubscription) {
-    console.warn(`[Razorpay Webhook] Subscription not found for Razorpay subscription ${subscription.id}`);
-    return;
+  if (!dbSubscription) return;
+
+  // Mark as payment failed - domain will be disabled
+  try {
+    await markPaymentFailed(dbSubscription.siteId);
+    console.log(`[Webhook] Marked subscription halted for site ${dbSubscription.siteId}`);
+  } catch (error) {
+    console.error(`[Webhook] Error marking halted:`, error);
   }
-
-  // Check if this is Basic plan and user hasn't used trial yet
-  const hasUsedTrial = dbSubscription.trialEndAt !== null;
-  const shouldStartTrial = dbSubscription.plan === "basic" && !hasUsedTrial;
-  
-  let trialEndAt = null;
-  let currentPeriodEnd = new Date();
-  currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1); // Default 1 month
-  
-  if (shouldStartTrial) {
-    // Start 7-day free trial
-    trialEndAt = calculateTrialEndDate("basic");
-    currentPeriodEnd = trialEndAt; // Period ends when trial ends
-    console.log(`[Razorpay Webhook] Starting 7-day free trial for Basic plan, trial ends: ${trialEndAt.toISOString()}`);
-  }
-
-  await prisma.subscription.update({
-    where: { siteId: dbSubscription.siteId },
-    data: {
-      status: "active",
-      trialEndAt: trialEndAt, // Set trial if applicable, otherwise null
-      currentPeriodStart: new Date(),
-      currentPeriodEnd: currentPeriodEnd,
-    },
-  });
-
-  console.log(`[Razorpay Webhook] Subscription activated for site ${dbSubscription.siteId}${shouldStartTrial ? ' with 7-day free trial' : ''}`);
 }
 
 /**
  * Handle subscription cancelled
  */
 async function handleSubscriptionCancelled(event) {
-  const subscription = event.payload.subscription.entity;
-  
-  console.log(`[Razorpay Webhook] Subscription cancelled: ${subscription.id}`);
-  
+  const razorpaySubscription = event.payload.subscription.entity;
+  const razorpaySubId = razorpaySubscription.id;
+
+  console.log(`[Webhook] Subscription cancelled: ${razorpaySubId}`);
+
   const dbSubscription = await prisma.subscription.findFirst({
-    where: { razorpaySubscriptionId: subscription.id },
+    where: { razorpaySubscriptionId: razorpaySubId },
   });
 
-  if (dbSubscription) {
+  if (!dbSubscription) return;
+
+  // Cancel subscription (access until period end)
+  try {
+    await cancelSubscription(dbSubscription.siteId, true);
+    console.log(`[Webhook] Cancelled subscription for site ${dbSubscription.siteId}`);
+  } catch (error) {
+    console.error(`[Webhook] Error cancelling:`, error);
+  }
+}
+
+/**
+ * Handle subscription completed (all cycles done)
+ */
+async function handleSubscriptionCompleted(event) {
+  const razorpaySubscription = event.payload.subscription.entity;
+  const razorpaySubId = razorpaySubscription.id;
+
+  console.log(`[Webhook] Subscription completed: ${razorpaySubId}`);
+
+  const dbSubscription = await prisma.subscription.findFirst({
+    where: { razorpaySubscriptionId: razorpaySubId },
+  });
+
+  if (!dbSubscription) return;
+
+  // Mark as expired
+  try {
     await prisma.subscription.update({
       where: { siteId: dbSubscription.siteId },
-      data: {
-        status: "cancelled",
-        cancelAtPeriodEnd: false,
-      },
+      data: { status: "expired" },
     });
+    console.log(`[Webhook] Marked subscription expired for site ${dbSubscription.siteId}`);
+  } catch (error) {
+    console.error(`[Webhook] Error marking expired:`, error);
   }
 }

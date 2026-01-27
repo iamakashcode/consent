@@ -50,6 +50,7 @@ export async function GET(req, { params }) {
     // Get domain from query parameter or headers
     const { searchParams } = new URL(req.url);
     const domainParam = searchParams.get("domain");
+    const isPreview = searchParams.get("preview") === "1";
     console.log(`[Verify Callback] Domain param from query: ${domainParam}`);
     
     // Extract domain from query param, referer, or origin header
@@ -127,6 +128,24 @@ export async function GET(req, { params }) {
         error: "Site not found" 
       }), {
         status: 404,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
+    }
+
+    // Allow preview without subscription checks
+    if (isPreview) {
+      return new Response(JSON.stringify({
+        connected: true,
+        preview: true,
+        message: "Preview mode - verification skipped",
+        domain: site.domain,
+      }), {
+        status: 200,
         headers: {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",

@@ -17,11 +17,11 @@ export async function GET(req) {
 
     const where = search
       ? {
-          OR: [
-            { email: { contains: search, mode: "insensitive" } },
-            { name: { contains: search, mode: "insensitive" } },
-          ],
-        }
+        OR: [
+          { email: { contains: search, mode: "insensitive" } },
+          { name: { contains: search, mode: "insensitive" } },
+        ],
+      }
       : {};
 
     const [users, total] = await Promise.all([

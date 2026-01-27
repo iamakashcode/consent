@@ -1,33 +1,33 @@
 import Razorpay from "razorpay";
 
-// Initialize Razorpay with test keys
+// Initialize Razorpay
 export const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_1DP5mmOlF5G5ag",
-  key_secret: process.env.RAZORPAY_KEY_SECRET || "test_secret_key",
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
 // Plan pricing (in paise - 1 INR = 100 paise)
 export const PLAN_PRICING = {
-  basic: 500, // ₹5 = 500 paise
+  basic: 500,   // ₹5 = 500 paise
   starter: 900, // ₹9 = 900 paise
-  pro: 2000, // ₹20 = 2000 paise
+  pro: 2000,    // ₹20 = 2000 paise
 };
 
-// Trial period in days (only for basic plan)
+// Trial period in days - ALL plans get 7-day free trial
 export const PLAN_TRIAL_DAYS = {
   basic: 7,
-  starter: 0,
-  pro: 0,
+  starter: 7,
+  pro: 7,
 };
 
-// Plan page view limits (per domain)
+// Plan page view limits (per domain per month)
 export const PLAN_PAGE_VIEW_LIMITS = {
   basic: 100000,    // 100,000 page views per month
   starter: 300000,  // 300,000 page views per month
   pro: Infinity,    // Unlimited page views
 };
 
-// Plan details
+// Plan details for display
 export const PLAN_DETAILS = {
   basic: {
     name: "Basic",
@@ -47,7 +47,7 @@ export const PLAN_DETAILS = {
     name: "Starter",
     price: 9,
     pageViews: 300000,
-    trialDays: 0,
+    trialDays: 7,
     features: [
       "1 domain",
       "300,000 page views/month",
@@ -55,13 +55,14 @@ export const PLAN_DETAILS = {
       "Customizable banner",
       "Email support",
       "Analytics dashboard",
+      "7-day free trial",
     ],
   },
   pro: {
     name: "Pro",
     price: 20,
     pageViews: Infinity,
-    trialDays: 0,
+    trialDays: 7,
     features: [
       "1 domain",
       "Unlimited page views",
@@ -70,15 +71,17 @@ export const PLAN_DETAILS = {
       "Priority support",
       "Advanced analytics",
       "API access",
+      "7-day free trial",
     ],
   },
 };
 
+/**
+ * Create a Razorpay order (for one-time payments)
+ */
 export async function createRazorpayOrder(amount, currency = "INR") {
-  // Amount is already in paise (from PLAN_PRICING)
-  // No need to multiply by 100
   const options = {
-    amount: amount, // Amount is already in paise
+    amount: amount,
     currency,
     receipt: `receipt_${Date.now()}`,
   };
@@ -93,56 +96,33 @@ export async function createRazorpayOrder(amount, currency = "INR") {
 }
 
 /**
- * Create Razorpay subscription for recurring payments with trial
- * @param {string} planId - Razorpay plan ID
- * @param {Object} customer - Customer details { name, email, contact }
- * @param {number} trialDays - Number of trial days (0 for no trial)
- * @returns {Promise<Object>} Razorpay subscription object
+ * Create Razorpay subscription for recurring payments
+ * Trial starts when subscription is activated (payment method added)
  */
-export async function createRazorpaySubscription(planId, customer, trialDays = 0, redirectUrl = null) {
+export async function createRazorpaySubscription(planId, customer, siteId, domain) {
   try {
-    // Don't set start_at - let Razorpay handle subscription lifecycle
-    // When start_at is set to future, authenticate_url might not be available immediately
-    // Razorpay will keep subscription in "created" state until payment method is added
-    // Once payment method is added, subscription activates and billing starts
-    
-    // Get base URL for redirect
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    const defaultRedirectUrl = `${baseUrl}/payment/return`; // Use dedicated return page
-    const finalRedirectUrl = redirectUrl || defaultRedirectUrl;
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
     
     const subscriptionData = {
       plan_id: planId,
       customer_notify: 1,
-      total_count: 12, // 12 months of recurring payments
-      // Don't set start_at - subscription will start when payment method is added
+      total_count: 120, // 10 years of monthly payments
       notes: {
+        siteId: siteId,
+        domain: domain,
         customer_name: customer.name,
         customer_email: customer.email,
-        redirect_url: finalRedirectUrl, // Store redirect URL in notes
-        return_url: finalRedirectUrl, // Alternative redirect URL
-        callback_url: `${baseUrl}/api/payment/callback`, // Callback endpoint
       },
     };
 
-    // Add notify_info for redirect after payment (if supported)
-    // Razorpay subscriptions may support redirect through callback_url
-    if (redirectUrl || defaultRedirectUrl) {
-      subscriptionData.notify_info = {
-        notify_url: `${baseUrl}/api/webhooks/razorpay`, // Webhook URL
-      };
-    }
-
-    // If trial period is needed, it will be handled in the webhook when subscription is activated
-    // We don't set trial in the subscription creation because trial starts AFTER activation
-    
     const subscription = await razorpay.subscriptions.create(subscriptionData);
+    
     console.log(`[Razorpay] Created subscription ${subscription.id}`, {
       status: subscription.status,
-      authenticate_url: subscription.authenticate_url ? 'present' : 'missing',
-      short_url: subscription.short_url ? 'present' : 'missing',
-      redirect_url: redirectUrl || defaultRedirectUrl,
+      authenticate_url: subscription.authenticate_url ? "present" : "missing",
+      short_url: subscription.short_url ? "present" : "missing",
     });
+    
     return subscription;
   } catch (error) {
     console.error("Razorpay subscription creation error:", error);
@@ -151,30 +131,20 @@ export async function createRazorpaySubscription(planId, customer, trialDays = 0
 }
 
 /**
- * Create a Razorpay plan (one-time setup, can be done manually in dashboard)
- * @param {string} planName - Name of the plan (basic, starter, pro)
- * @param {number} amount - Amount in paise
- * @param {number} trialDays - Trial period in days (0 for no trial)
- * @param {string} interval - "monthly" or "yearly"
- * @returns {Promise<Object>} Razorpay plan object
+ * Create a Razorpay plan (typically done once per plan type)
  */
-export async function createRazorpayPlan(planName, amount, trialDays = 0, interval = "monthly") {
+export async function createRazorpayPlan(planName, amount, interval = "monthly") {
   try {
     const planData = {
       period: interval === "monthly" ? "monthly" : "yearly",
       interval: 1,
       item: {
         name: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan`,
-        amount: amount, // in paise
+        amount: amount,
         currency: "INR",
-        description: `Monthly subscription for ${planName} plan`,
+        description: `Monthly subscription for ${planName} plan with 7-day free trial`,
       },
     };
-
-    // Add trial period if specified
-    if (trialDays > 0) {
-      planData.trial_period = trialDays;
-    }
 
     const plan = await razorpay.plans.create(planData);
     return plan;
@@ -186,14 +156,13 @@ export async function createRazorpayPlan(planName, amount, trialDays = 0, interv
 
 /**
  * Get or create Razorpay plan for a given plan type
- * This ensures the plan exists before creating subscriptions
  */
-export async function getOrCreateRazorpayPlan(planName, amount, trialDays = 0) {
+export async function getOrCreateRazorpayPlan(planName, amount) {
   try {
-    // Check if plan ID is set in environment
+    // Check environment for pre-configured plan ID
     const envPlanId = process.env[`RAZORPAY_${planName.toUpperCase()}_PLAN_ID`];
+    
     if (envPlanId) {
-      // Verify plan exists
       try {
         const plan = await razorpay.plans.fetch(envPlanId);
         return plan;
@@ -202,10 +171,10 @@ export async function getOrCreateRazorpayPlan(planName, amount, trialDays = 0) {
       }
     }
 
-    // Create new plan if not found
+    // Create new plan
     console.log(`Creating Razorpay plan for ${planName}...`);
-    const plan = await createRazorpayPlan(planName, amount, trialDays);
-    console.log(`✅ Created Razorpay plan: ${plan.id} for ${planName}`);
+    const plan = await createRazorpayPlan(planName, amount);
+    console.log(`Created Razorpay plan: ${plan.id} for ${planName}`);
     return plan;
   } catch (error) {
     console.error(`Error getting/creating plan for ${planName}:`, error);
@@ -213,47 +182,82 @@ export async function getOrCreateRazorpayPlan(planName, amount, trialDays = 0) {
   }
 }
 
+/**
+ * Fetch subscription from Razorpay
+ */
+export async function fetchRazorpaySubscription(subscriptionId) {
+  try {
+    return await razorpay.subscriptions.fetch(subscriptionId);
+  } catch (error) {
+    console.error("Error fetching subscription:", error);
+    throw error;
+  }
+}
+
+/**
+ * Cancel a Razorpay subscription
+ */
+export async function cancelRazorpaySubscription(subscriptionId, cancelAtCycleEnd = true) {
+  try {
+    return await razorpay.subscriptions.cancel(subscriptionId, cancelAtCycleEnd);
+  } catch (error) {
+    console.error("Error cancelling subscription:", error);
+    throw error;
+  }
+}
+
+/**
+ * Verify payment signature
+ */
 export function verifyPaymentSignature(orderId, paymentId, signature) {
   const crypto = require("crypto");
   const secret = process.env.RAZORPAY_KEY_SECRET;
-  
-  if (!secret || secret === "test_secret_key") {
-    console.error("⚠️ RAZORPAY_KEY_SECRET is not set or using placeholder. Signature verification will fail.");
-    console.error("⚠️ Please add your actual Razorpay secret key to .env file");
-    // For development/testing, we can skip verification if no real secret is set
-    // But this should be fixed in production
-    if (process.env.NODE_ENV === "development" && !secret) {
-      console.warn("⚠️ Skipping signature verification in development mode (no secret key)");
-      return true; // Skip verification in dev if no secret is set
-    }
+
+  if (!secret) {
+    console.error("RAZORPAY_KEY_SECRET is not set");
     return false;
   }
-  
+
   try {
-    // Use Razorpay's signature verification method
-    // Signature format: HMAC SHA256 of orderId|paymentId
     const generatedSignature = crypto
       .createHmac("sha256", secret)
       .update(orderId + "|" + paymentId)
       .digest("hex");
 
     const isValid = generatedSignature.toLowerCase() === signature.toLowerCase();
-    
+
     if (!isValid) {
-      console.error("Signature verification failed:", {
-        orderId,
-        paymentId,
-        expectedSignature: generatedSignature,
-        receivedSignature: signature,
-        secretLength: secret.length,
-      });
-    } else {
-      console.log("✅ Signature verification successful");
+      console.error("Signature verification failed");
     }
-    
+
     return isValid;
   } catch (error) {
     console.error("Error during signature verification:", error);
+    return false;
+  }
+}
+
+/**
+ * Verify webhook signature
+ */
+export function verifyWebhookSignature(body, signature) {
+  const crypto = require("crypto");
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+  if (!secret) {
+    console.warn("RAZORPAY_WEBHOOK_SECRET not set, skipping verification");
+    return true; // Allow in development
+  }
+
+  try {
+    const expectedSignature = crypto
+      .createHmac("sha256", secret)
+      .update(body)
+      .digest("hex");
+
+    return signature === expectedSignature;
+  } catch (error) {
+    console.error("Error verifying webhook signature:", error);
     return false;
   }
 }

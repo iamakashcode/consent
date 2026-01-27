@@ -10,6 +10,7 @@ function PaymentReturnContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const subscriptionId = searchParams.get("subscription_id") || searchParams.get("subscriptionId");
+  const redirectParam = searchParams.get("redirect");
   const [checking, setChecking] = useState(true);
   const [statusMessage, setStatusMessage] = useState("Checking payment status...");
   const [redirecting, setRedirecting] = useState(false);
@@ -24,6 +25,8 @@ function PaymentReturnContent() {
     const urlSubscriptionId = subscriptionId;
     const storedSubscriptionId = typeof window !== 'undefined' ? sessionStorage.getItem('razorpay_subscription_id') : null;
     const finalSubscriptionId = urlSubscriptionId || storedSubscriptionId;
+    const fallbackRedirect = redirectParam || "/dashboard/usage?payment=success";
+    const siteIdFromUrl = searchParams.get("siteId");
 
     if (!session || !finalSubscriptionId) {
       // No subscription ID, check sessionStorage for redirect info
@@ -40,9 +43,9 @@ function PaymentReturnContent() {
           return;
         }
       }
-      // Fallback: redirect to profile
+      // Fallback: redirect to usage
       setTimeout(() => {
-        router.push("/profile");
+        router.push("/dashboard/usage");
       }, 2000);
       return;
     }
@@ -84,15 +87,23 @@ function PaymentReturnContent() {
                 sessionStorage.removeItem('razorpay_return_url');
               }
               
-              // Redirect to profile with success message
+              // Redirect and close Razorpay tab if possible
               setTimeout(() => {
-                const siteId = syncData.site?.siteId || searchParams.get("siteId");
-                if (siteId) {
-                  router.push(`/profile?payment=success&siteId=${siteId}`);
-                } else {
-                  router.push("/profile?payment=success");
+                const siteId = syncData.site?.siteId || siteIdFromUrl;
+                const target = siteId ? `/dashboard/usage?payment=success&siteId=${siteId}` : fallbackRedirect;
+                if (typeof window !== "undefined") {
+                  if (window.opener && !window.opener.closed) {
+                    try {
+                      window.opener.location.href = target;
+                      window.close();
+                      return;
+                    } catch (e) {
+                      // Fallback to same-tab redirect
+                    }
+                  }
                 }
-              }, 1500);
+                router.push(target);
+              }, 800);
               setChecking(false);
               return;
             }
@@ -128,15 +139,23 @@ function PaymentReturnContent() {
               sessionStorage.removeItem('razorpay_return_url');
             }
             
-            // Redirect to profile with success message
+            // Redirect and close Razorpay tab if possible
             setTimeout(() => {
-              const siteId = subscription.siteId || data.siteId || searchParams.get("siteId");
-              if (siteId) {
-                router.push(`/profile?payment=success&siteId=${siteId}`);
-              } else {
-                router.push("/profile?payment=success");
+              const siteId = subscription.siteId || data.siteId || siteIdFromUrl;
+              const target = siteId ? `/dashboard/usage?payment=success&siteId=${siteId}` : fallbackRedirect;
+              if (typeof window !== "undefined") {
+                if (window.opener && !window.opener.closed) {
+                  try {
+                    window.opener.location.href = target;
+                    window.close();
+                    return;
+                  } catch (e) {
+                    // Fallback to same-tab redirect
+                  }
+                }
               }
-            }, 1500);
+              router.push(target);
+            }, 800);
           } else {
             // Subscription might still be pending, try syncing again with polling
             setStatusMessage("Payment completed! Syncing subscription status...");
@@ -174,13 +193,21 @@ function PaymentReturnContent() {
                     }
                     
                     setTimeout(() => {
-                      const siteId = syncData.site?.siteId || searchParams.get("siteId");
-                      if (siteId) {
-                        router.push(`/profile?payment=success&siteId=${siteId}`);
-                      } else {
-                        router.push("/profile?payment=success");
+                      const siteId = syncData.site?.siteId || siteIdFromUrl;
+                      const target = siteId ? `/dashboard/usage?payment=success&siteId=${siteId}` : fallbackRedirect;
+                      if (typeof window !== "undefined") {
+                        if (window.opener && !window.opener.closed) {
+                          try {
+                            window.opener.location.href = target;
+                            window.close();
+                            return;
+                          } catch (e) {
+                            // Fallback to same-tab redirect
+                          }
+                        }
                       }
-                    }, 1500);
+                      router.push(target);
+                    }, 800);
                     return;
                   }
                 }
@@ -208,13 +235,21 @@ function PaymentReturnContent() {
                     }
                     
                     setTimeout(() => {
-                      const siteId = pollSubscription.siteId || pollData.siteId || searchParams.get("siteId");
-                      if (siteId) {
-                        router.push(`/profile?payment=success&siteId=${siteId}`);
-                      } else {
-                        router.push("/profile?payment=success");
+                      const siteId = pollSubscription.siteId || pollData.siteId || siteIdFromUrl;
+                      const target = siteId ? `/dashboard/usage?payment=success&siteId=${siteId}` : fallbackRedirect;
+                      if (typeof window !== "undefined") {
+                        if (window.opener && !window.opener.closed) {
+                          try {
+                            window.opener.location.href = target;
+                            window.close();
+                            return;
+                          } catch (e) {
+                            // Fallback to same-tab redirect
+                          }
+                        }
                       }
-                    }, 1500);
+                      router.push(target);
+                    }, 800);
                   } else if (attempts >= maxAttempts) {
                     clearInterval(pollInterval);
                     setStatusMessage("Payment received! Your subscription will be activated shortly. Redirecting...");
@@ -230,8 +265,19 @@ function PaymentReturnContent() {
                     }
                     
                     setTimeout(() => {
-                      router.push("/profile?payment=success");
-                    }, 2000);
+                      if (typeof window !== "undefined") {
+                        if (window.opener && !window.opener.closed) {
+                          try {
+                            window.opener.location.href = fallbackRedirect;
+                            window.close();
+                            return;
+                          } catch (e) {
+                            // Fallback to same-tab redirect
+                          }
+                        }
+                      }
+                      router.push(fallbackRedirect);
+                    }, 1200);
                   }
                 }
               } catch (error) {
@@ -250,8 +296,19 @@ function PaymentReturnContent() {
                   }
                   
                   setTimeout(() => {
-                    router.push("/profile?payment=success");
-                  }, 2000);
+                    if (typeof window !== "undefined") {
+                      if (window.opener && !window.opener.closed) {
+                        try {
+                          window.opener.location.href = fallbackRedirect;
+                          window.close();
+                          return;
+                        } catch (e) {
+                          // Fallback to same-tab redirect
+                        }
+                      }
+                    }
+                    router.push(fallbackRedirect);
+                  }, 1200);
                 }
               }
             }, 2000); // Poll every 2 seconds
@@ -271,13 +328,13 @@ function PaymentReturnContent() {
                   sessionStorage.removeItem('razorpay_return_url');
                 }
                 
-                router.push("/profile?payment=success");
+                router.push(fallbackRedirect);
               }
             }, 30000);
           }
         } else {
           // API error, still redirect to profile
-          setStatusMessage("Payment completed! Redirecting to profile...");
+          setStatusMessage("Payment completed! Redirecting to usage...");
           setRedirecting(true);
           await update();
           
@@ -290,12 +347,23 @@ function PaymentReturnContent() {
           }
           
           setTimeout(() => {
-            router.push("/profile?payment=success");
-          }, 1500);
+            if (typeof window !== "undefined") {
+              if (window.opener && !window.opener.closed) {
+                try {
+                  window.opener.location.href = fallbackRedirect;
+                  window.close();
+                  return;
+                } catch (e) {
+                  // Fallback to same-tab redirect
+                }
+              }
+            }
+            router.push(fallbackRedirect);
+          }, 1200);
         }
       } catch (error) {
         console.error("Error checking subscription:", error);
-        setStatusMessage("Payment completed! Redirecting to profile...");
+        setStatusMessage("Payment completed! Redirecting to usage...");
         setRedirecting(true);
         
         // Clear sessionStorage
@@ -307,8 +375,19 @@ function PaymentReturnContent() {
         }
         
         setTimeout(() => {
-          router.push("/profile?payment=success");
-        }, 2000);
+          if (typeof window !== "undefined") {
+            if (window.opener && !window.opener.closed) {
+              try {
+                window.opener.location.href = fallbackRedirect;
+                window.close();
+                return;
+              } catch (e) {
+                // Fallback to same-tab redirect
+              }
+            }
+          }
+          router.push(fallbackRedirect);
+        }, 1200);
       } finally {
         setChecking(false);
       }
@@ -343,7 +422,7 @@ function PaymentReturnContent() {
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
             <p className="text-gray-600 mb-6">{statusMessage}</p>
-            <p className="text-sm text-gray-500">Redirecting to your profile...</p>
+            <p className="text-sm text-gray-500">Redirecting to usage...</p>
           </>
         ) : (
           <>
@@ -355,10 +434,10 @@ function PaymentReturnContent() {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Processing Payment</h1>
             <p className="text-gray-600 mb-6">{statusMessage}</p>
             <Link
-              href="/profile"
+              href="/dashboard/usage"
               className="inline-block bg-indigo-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
             >
-              Go to Profile
+              Go to Usage
             </Link>
           </>
         )}

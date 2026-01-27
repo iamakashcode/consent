@@ -10,6 +10,8 @@ export async function GET(req, { params }) {
     const { siteId } = resolvedParams || {};
     const { searchParams } = new URL(req.url);
     const domainParam = searchParams.get("domain");
+    const isPreview = searchParams.get("preview") === "1";
+    const previewConfigParam = searchParams.get("config");
 
     // Always try to get domain from query param first (most reliable)
     let domain = domainParam || "";
@@ -83,7 +85,7 @@ export async function GET(req, { params }) {
     }
 
     // Check subscription status for this site - block script if subscription is inactive
-    if (siteId) {
+    if (siteId && !isPreview) {
       const subscriptionStatus = await isSubscriptionActive(siteId);
       if (!subscriptionStatus.isActive) {
         console.warn(`[Script] Subscription inactive for site ${siteId}: ${subscriptionStatus.reason}`);
@@ -127,19 +129,57 @@ window.console.error('[Consent SDK] Please upgrade your plan to continue using t
     // Generate siteId for consent key (use provided siteId or generate from domain)
     const finalSiteId = siteId || Buffer.from(domain).toString("base64").replace(/[+/=]/g, "").substring(0, 20);
 
+    let normalizedBannerConfig = bannerConfig;
+    if (typeof normalizedBannerConfig === "string") {
+      try {
+        normalizedBannerConfig = JSON.parse(normalizedBannerConfig);
+      } catch {
+        normalizedBannerConfig = null;
+      }
+    }
+
+    let previewConfig = null;
+    if (isPreview && previewConfigParam) {
+      try {
+        const decoded = Buffer.from(decodeURIComponent(previewConfigParam), "base64").toString("utf-8");
+        previewConfig = JSON.parse(decoded);
+      } catch {
+        previewConfig = null;
+      }
+    }
+
+    const effectiveConfig = previewConfig || normalizedBannerConfig || {};
+
     // Prepare banner configuration for script
     // Ensure bannerConfig has all required fields
     const bannerConfigForScript = {
-      template: bannerConfig?.template || DEFAULT_BANNER_CONFIG.template,
-      position: bannerConfig?.position || DEFAULT_BANNER_CONFIG.position,
-      title: bannerConfig?.title || DEFAULT_BANNER_CONFIG.title,
-      message: bannerConfig?.message || DEFAULT_BANNER_CONFIG.message,
-      acceptButtonText: bannerConfig?.acceptButtonText || DEFAULT_BANNER_CONFIG.acceptButtonText,
-      rejectButtonText: bannerConfig?.rejectButtonText || DEFAULT_BANNER_CONFIG.rejectButtonText,
-      showRejectButton: bannerConfig?.showRejectButton !== undefined ? bannerConfig.showRejectButton : DEFAULT_BANNER_CONFIG.showRejectButton,
+      template: effectiveConfig.template || DEFAULT_BANNER_CONFIG.template,
+      position: effectiveConfig.position || DEFAULT_BANNER_CONFIG.position,
+      title: effectiveConfig.title || DEFAULT_BANNER_CONFIG.title,
+      message: effectiveConfig.message || effectiveConfig.description || DEFAULT_BANNER_CONFIG.message,
+      acceptButtonText: effectiveConfig.acceptButtonText || effectiveConfig.acceptText || DEFAULT_BANNER_CONFIG.acceptButtonText,
+      rejectButtonText: effectiveConfig.rejectButtonText || effectiveConfig.rejectText || DEFAULT_BANNER_CONFIG.rejectButtonText,
+      showRejectButton: effectiveConfig.showRejectButton !== undefined ? effectiveConfig.showRejectButton : DEFAULT_BANNER_CONFIG.showRejectButton,
     };
     const templateKey = bannerConfigForScript.template || "minimal";
-    const bannerTemplate = BANNER_TEMPLATES[templateKey] || BANNER_TEMPLATES.minimal;
+    const baseTemplate = BANNER_TEMPLATES[templateKey] || BANNER_TEMPLATES.minimal;
+    const styleOverrides = {
+      backgroundColor: effectiveConfig.backgroundColor,
+      textColor: effectiveConfig.textColor,
+      buttonColor: effectiveConfig.buttonColor,
+      buttonTextColor: effectiveConfig.buttonTextColor,
+      borderRadius: effectiveConfig.borderRadius,
+      fontSize: effectiveConfig.fontSize,
+      padding: effectiveConfig.padding,
+      border: effectiveConfig.border,
+      boxShadow: effectiveConfig.boxShadow,
+    };
+    const bannerTemplate = {
+      ...baseTemplate,
+      style: Object.fromEntries(
+        Object.entries({ ...baseTemplate.style, ...styleOverrides }).filter(([, value]) => value !== undefined && value !== null && value !== "")
+      ),
+    };
 
     // Common tracker domains to block
     const trackerDomains = [
@@ -170,8 +210,8 @@ window.console.error('[Consent SDK] Please upgrade your plan to continue using t
     const script = `(function(){
 console.log('[Consent SDK] Loading...', window.location.href);
 var DOMAIN="${domain.replace(/"/g, '\\"')}";
-var ALLOWED_DOMAIN="${allowedDomain ? allowedDomain.replace(/"/g, '\\"') : "*"}";
-var IS_VERIFIED=${siteVerified ? "true" : "false"};
+var ALLOWED_DOMAIN="${isPreview ? "*" : (allowedDomain ? allowedDomain.replace(/"/g, '\\"') : "*")}";
+var IS_VERIFIED=${isPreview ? "true" : (siteVerified ? "true" : "false")};
 var TRACKERS=${JSON.stringify(trackerDomains)};
 var SITE_ID="${finalSiteId.replace(/"/g, '\\"')}";
 var CONSENT_KEY='cookie_consent_'+SITE_ID;
@@ -291,9 +331,10 @@ console.log('[Consent SDK] Domain matches:',currentHost);
 // Auto-connect domain by calling verification callback (always try to connect)
 console.log('[Consent SDK] Attempting to connect domain...');
 (function connectDomain(){
+if(${isPreview ? "true" : "false"}){return;}
 try{
 var currentDomain=window.location.hostname.toLowerCase().replace(/^www\\./,'');
-var verifyUrl="${verifyCallbackUrl.replace(/"/g, '\\"')}?domain="+encodeURIComponent(currentDomain);
+var verifyUrl="${verifyCallbackUrl.replace(/"/g, '\\"')}?domain="+encodeURIComponent(currentDomain)+("${isPreview ? "&preview=1" : ""}");
 console.log('[Consent SDK] Calling verification endpoint:',verifyUrl);
 console.log('[Consent SDK] Current domain:',currentDomain);
 console.log('[Consent SDK] Allowed domain:',allowedHost||'*');
@@ -362,6 +403,7 @@ console.error('[Consent SDK] Error in connectDomain function:',e);
 
 // Track page view
 (function trackPageView(){
+if(${isPreview ? "true" : "false"}){return;}
 try{
 var trackData={
 pagePath:window.location.pathname+window.location.search,
