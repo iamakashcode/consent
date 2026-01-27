@@ -63,35 +63,83 @@ export async function POST(req) {
     } else {
       // Crawl the website for trackers
       let html;
+      let trackers = [];
+      
       try {
-        const url = `https://${cleanDomain}`;
-        const response = await fetch(url, {
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          },
-          redirect: "follow",
-          signal: AbortSignal.timeout(15000), // 15 second timeout
-        });
+        // Try HTTPS first
+        let url = `https://${cleanDomain}`;
+        let response;
+        let lastError;
+        
+        try {
+          response = await fetch(url, {
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "Accept-Language": "en-US,en;q=0.9",
+            },
+            redirect: "follow",
+            signal: AbortSignal.timeout(20000), // 20 second timeout
+          });
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          html = await response.text();
+          console.log(`[Crawl] Successfully fetched ${url}`);
+        } catch (httpsError) {
+          console.log(`[Crawl] HTTPS failed for ${cleanDomain}, trying HTTP:`, httpsError.message);
+          lastError = httpsError;
+          
+          // Try HTTP as fallback
+          try {
+            url = `http://${cleanDomain}`;
+            response = await fetch(url, {
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+              },
+              redirect: "follow",
+              signal: AbortSignal.timeout(20000),
+            });
+
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            html = await response.text();
+            console.log(`[Crawl] Successfully fetched ${url} via HTTP`);
+          } catch (httpError) {
+            console.error(`[Crawl] Both HTTPS and HTTP failed for ${cleanDomain}:`, {
+              https: httpsError.message,
+              http: httpError.message,
+            });
+            // Continue without HTML - we'll create site with empty trackers
+            html = null;
+            lastError = httpError;
+          }
         }
 
-        html = await response.text();
+        // If we got HTML, detect trackers
+        if (html) {
+          trackers = detectTrackers(html, cleanDomain);
+          console.log(`[Crawl] Detected ${trackers.length} trackers for ${cleanDomain}`);
+        } else {
+          // If fetch failed, still create the site but with empty trackers
+          // User can still add the domain and set up subscription
+          console.log(`[Crawl] Could not fetch ${cleanDomain}, creating site without trackers`);
+          trackers = [];
+        }
       } catch (error) {
-        console.error(`[Crawl] Failed to fetch ${cleanDomain}:`, error);
-        return Response.json(
-          {
-            error: `Failed to fetch website: ${error.message}. Make sure the domain is accessible via HTTPS.`,
-          },
-          { status: 500 }
-        );
+        console.error(`[Crawl] Unexpected error for ${cleanDomain}:`, error);
+        // Continue anyway - create site without trackers
+        trackers = [];
+        html = null;
       }
-
-      // Detect trackers
-      const trackers = detectTrackers(html, cleanDomain);
 
       // Generate unique siteId
       siteId = generateSiteId();
@@ -153,6 +201,21 @@ export async function POST(req) {
                       subscriptionStatus === "expired" ||
                       subscriptionStatus === "payment_failed";
 
+    // Build success message
+    let message;
+    if (isNewSite) {
+      const trackerCount = Array.isArray(site.trackers) ? site.trackers.length : 0;
+      if (trackerCount > 0) {
+        message = `Domain added successfully! Found ${trackerCount} tracker(s). Select a plan to activate tracking.`;
+      } else {
+        message = "Domain added successfully! Select a plan to activate tracking.";
+      }
+    } else {
+      message = hasSubscription && isSubscriptionActive
+        ? "Domain exists and subscription is active."
+        : "Domain exists. Select a plan to activate tracking.";
+    }
+
     return Response.json({
       domain: cleanDomain,
       trackers: Array.isArray(site.trackers) ? site.trackers : [],
@@ -166,11 +229,7 @@ export async function POST(req) {
       isSubscriptionActive: isSubscriptionActive,
       needsPlan: needsPlan,
       isNewSite: isNewSite,
-      message: isNewSite
-        ? "Domain added successfully! Select a plan to activate tracking."
-        : hasSubscription && isSubscriptionActive
-          ? "Domain exists and subscription is active."
-          : "Domain exists. Select a plan to activate tracking.",
+      message: message,
     });
 
   } catch (error) {
