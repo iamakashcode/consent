@@ -172,7 +172,7 @@ function BillingContent() {
 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <p className="text-sm font-medium text-gray-500 mb-2">Monthly Total</p>
-          <p className="text-3xl font-bold text-gray-900">₹{totalMonthly}</p>
+          <p className="text-3xl font-bold text-gray-900">${totalMonthly}</p>
           <p className="text-sm text-gray-500 mt-1">billed monthly</p>
         </div>
 
@@ -237,7 +237,7 @@ function BillingContent() {
                           <strong className="text-gray-900">{planDetails?.name}</strong> Plan
                         </span>
                         <span>
-                          ₹{planDetails?.price}/{sub.subscription?.billingInterval === "yearly" ? "year" : "month"}
+                          ${planDetails?.price}/{sub.subscription?.billingInterval === "yearly" ? "year" : "month"}
                         </span>
                         <span>
                           {planDetails?.pageViews === Infinity
@@ -322,7 +322,7 @@ function BillingContent() {
                 )}
                 <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
                 <div className="mt-2 mb-4">
-                  <span className="text-3xl font-bold text-gray-900">₹{plan.price}</span>
+                  <span className="text-3xl font-bold text-gray-900">${plan.price}</span>
                   <span className="text-gray-500">/month</span>
                 </div>
                 <ul className="space-y-2 mb-6">

@@ -62,7 +62,36 @@ export async function isDomainActive(siteId) {
     const status = subscription.status?.toLowerCase();
 
     // Pending - payment method not yet added
+    // BUT: Allow access if user trial is active OR if payment was recently completed (within last 5 minutes)
     if (status === "pending") {
+      // Check if user trial is active (should allow access)
+      if (userTrialActive) {
+        return { 
+          isActive: true, 
+          reason: "user_trial (pending payment activation)", 
+          site, 
+          subscription,
+          user,
+          trialDaysLeft: Math.ceil((new Date(user.trialEndAt) - now) / (1000 * 60 * 60 * 24)),
+          trialEndAt: user.trialEndAt,
+        };
+      }
+      
+      // Check if subscription was recently created (within last 5 minutes) - payment might be processing
+      const subscriptionAge = now - new Date(subscription.createdAt || subscription.updatedAt || 0);
+      const fiveMinutesAgo = 5 * 60 * 1000; // 5 minutes in milliseconds
+      
+      if (subscriptionAge < fiveMinutesAgo && (subscription.paddleTransactionId || subscription.paddleSubscriptionId)) {
+        // Payment was recently initiated, allow access temporarily while webhook processes
+        return { 
+          isActive: true, 
+          reason: "Payment processing (recent transaction)", 
+          site, 
+          subscription,
+          user,
+        };
+      }
+      
       return { isActive: false, reason: "Payment setup required", site, subscription, user };
     }
 

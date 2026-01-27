@@ -18,6 +18,50 @@ export async function GET(req) {
 
     const { searchParams } = new URL(req.url);
     const siteId = searchParams.get("siteId");
+    const subscriptionId = searchParams.get("subscriptionId"); // Support Paddle subscription/transaction ID lookup
+
+    // If subscriptionId is provided, find subscription by Paddle subscription/transaction ID
+    if (subscriptionId) {
+      const dbSubscription = await prisma.subscription.findFirst({
+        where: {
+          OR: [
+            { paddleSubscriptionId: subscriptionId },
+            { paddleTransactionId: subscriptionId },
+          ],
+          site: {
+            userId: session.user.id, // Ensure it belongs to the user
+          },
+        },
+        include: {
+          site: {
+            select: {
+              siteId: true,
+              id: true,
+              domain: true,
+            },
+          },
+        },
+      });
+
+      if (!dbSubscription) {
+        return Response.json({ error: "Subscription not found" }, { status: 404 });
+      }
+
+      const status = await isDomainActive(dbSubscription.site.id);
+
+      return Response.json({
+        siteId: dbSubscription.site.siteId,
+        siteDbId: dbSubscription.site.id,
+        domain: dbSubscription.site.domain,
+        subscription: dbSubscription,
+        trialEndAt: status.trialEndAt || status.user?.trialEndAt || null,
+        trialStartedAt: status.user?.trialStartedAt || null,
+        isActive: status.isActive,
+        reason: status.reason,
+        trialDaysLeft: status.trialDaysLeft,
+        userTrialActive: status.user?.trialEndAt && new Date() < new Date(status.user.trialEndAt),
+      });
+    }
 
     // If specific siteId requested, return that subscription only
     if (siteId) {

@@ -39,10 +39,11 @@ export async function POST(req) {
     
     // Apply pending migrations by running their SQL
     // Check which migrations need to be applied
+    // Note: Old Razorpay migration removed - using Paddle now
     const migrationDirs = [
       "20260124130000_add_last_seen_at",
       "20260124140000_add_trial_support",
-      "20260124150000_add_razorpay_subscription_fields",
+      // "20260124150000_add_razorpay_subscription_fields", // Removed - using Paddle now
     ];
 
     for (const migrationDir of migrationDirs) {

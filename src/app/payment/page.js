@@ -297,9 +297,9 @@ function PaymentContent() {
   };
 
   const planPrices = {
-    basic: "₹5",
-    starter: "₹9",
-    pro: "₹20",
+    basic: "$5",
+    starter: "$9",
+    pro: "$20",
   };
 
   return (
@@ -539,7 +539,7 @@ function PaymentContent() {
                     </span>
                   </div>
                   <div className="text-xs text-gray-500 text-center mb-4">
-                    (Amount in payment gateway: ₹{orderData.amount / 100} = {orderData.amount} paise)
+                    (Amount in payment gateway: ${(orderData.amount / 100).toFixed(2)} = {orderData.amount} cents)
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Billing Period</span>

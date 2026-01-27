@@ -15,7 +15,7 @@ const CheckIcon = () => (
 const PLAN_DETAILS = {
   basic: {
     name: "Basic",
-    price: "₹5",
+    price: "$5",
     period: "per month",
     description: "Perfect for getting started",
     pageViews: 100000,
@@ -31,7 +31,7 @@ const PLAN_DETAILS = {
   },
   starter: {
     name: "Starter",
-    price: "₹9",
+    price: "$9",
     period: "per month",
     description: "For growing businesses",
     pageViews: 300000,
@@ -48,7 +48,7 @@ const PLAN_DETAILS = {
   },
   pro: {
     name: "Pro",
-    price: "₹20",
+    price: "$20",
     period: "per month",
     description: "For agencies and enterprises",
     pageViews: Infinity,
@@ -261,7 +261,7 @@ function PlansContent() {
                 <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
                 <span className="text-gray-500">{plan.period}</span>
               </div>
-              <p className="text-xs text-gray-500 mt-1">or ₹{Math.round(parseInt(plan.price.replace('₹', '')) * 10)}/year</p>
+              <p className="text-xs text-gray-500 mt-1">or ${Math.round(parseInt(plan.price.replace('$', '')) * 10)}/year</p>
             </div>
 
             <ul className="space-y-3 mb-6">

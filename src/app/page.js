@@ -341,7 +341,7 @@ export default function HomePage() {
             {[
               {
                 name: "Basic",
-                price: billingCycle === "monthly" ? "₹5" : "₹48",
+                price: billingCycle === "monthly" ? "$5" : "$48",
                 period: billingCycle === "monthly" ? "/month" : "/year",
                 description: "Perfect for getting started",
                 features: [
@@ -350,14 +350,14 @@ export default function HomePage() {
                   "Basic tracker detection",
                   "Cookie consent banner",
                   "Community support",
-                  "7-day free trial",
+                  "14-day free trial",
                 ],
                 cta: "Start Free Trial",
                 popular: false,
               },
               {
                 name: "Starter",
-                price: billingCycle === "monthly" ? "₹9" : "₹86",
+                price: billingCycle === "monthly" ? "$9" : "$86",
                 period: billingCycle === "monthly" ? "/month" : "/year",
                 description: "For growing businesses",
                 features: [
@@ -367,14 +367,14 @@ export default function HomePage() {
                   "Customizable banner",
                   "Email support",
                   "Analytics dashboard",
-                  "7-day free trial",
+                  "14-day free trial",
                 ],
                 cta: "Start Free Trial",
                 popular: true,
               },
               {
                 name: "Pro",
-                price: billingCycle === "monthly" ? "₹20" : "₹192",
+                price: billingCycle === "monthly" ? "$20" : "$192",
                 period: billingCycle === "monthly" ? "/month" : "/year",
                 description: "For agencies and enterprises",
                 features: [

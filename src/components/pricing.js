@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 const plans = [
   {
     name: "Basic",
-    price: "₹5",
+    price: "$5",
     period: "per month",
     description: "Perfect for getting started",
     features: [
@@ -22,7 +22,7 @@ const plans = [
   },
   {
     name: "Starter",
-    price: "₹9",
+    price: "$9",
     period: "per month",
     description: "For growing businesses",
     features: [
@@ -38,7 +38,7 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "₹20",
+    price: "$20",
     period: "per month",
     description: "For agencies and enterprises",
     features: [

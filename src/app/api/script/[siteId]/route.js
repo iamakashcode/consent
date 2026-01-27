@@ -86,7 +86,78 @@ export async function GET(req, { params }) {
 
     // Check subscription status for this site - block script if subscription is inactive
     if (siteId && !isPreview) {
-      const subscriptionStatus = await isSubscriptionActive(siteId);
+      let subscriptionStatus = await isSubscriptionActive(siteId);
+      
+      // If subscription is pending and has a Paddle transaction/subscription ID, try to sync
+      if (!subscriptionStatus.isActive && subscriptionStatus.subscription?.status === "pending" && 
+          (subscriptionStatus.subscription?.paddleTransactionId || subscriptionStatus.subscription?.paddleSubscriptionId)) {
+        console.log(`[Script] Subscription is pending, attempting to sync from Paddle for site ${siteId}`);
+        
+        try {
+          // Try to sync subscription status from Paddle
+          const syncSubscriptionId = subscriptionStatus.subscription.paddleSubscriptionId || subscriptionStatus.subscription.paddleTransactionId;
+          if (syncSubscriptionId) {
+            // Import sync function
+            const { fetchPaddleSubscription } = await import("@/lib/paddle");
+            const { startUserTrial } = await import("@/lib/subscription");
+            
+            try {
+              // Fetch from Paddle
+              const paddleSub = await fetchPaddleSubscription(syncSubscriptionId);
+              
+              if (paddleSub) {
+                // Update subscription status based on Paddle status
+                const paddleStatus = paddleSub.status;
+                let newStatus = subscriptionStatus.subscription.status;
+                
+                if (paddleStatus === "active" || paddleStatus === "trialing") {
+                  // Get site to access user
+                  const site = await prisma.site.findUnique({
+                    where: { id: subscriptionStatus.subscription.siteId },
+                    include: { user: true },
+                  });
+                  
+                  if (site) {
+                    // Start user trial if needed
+                    await startUserTrial(site.userId);
+                    
+                    // Update subscription
+                    await prisma.subscription.update({
+                      where: { id: subscriptionStatus.subscription.id },
+                      data: {
+                        status: paddleStatus === "trialing" ? "trial" : "active",
+                        paddleSubscriptionId: paddleSub.id || subscriptionStatus.subscription.paddleSubscriptionId,
+                        currentPeriodStart: paddleSub.current_billing_period?.starts_at 
+                          ? new Date(paddleSub.current_billing_period.starts_at)
+                          : new Date(),
+                        currentPeriodEnd: paddleSub.current_billing_period?.ends_at
+                          ? new Date(paddleSub.current_billing_period.ends_at)
+                          : (() => {
+                              const end = new Date();
+                              end.setMonth(end.getMonth() + 1);
+                              return end;
+                            })(),
+                        updatedAt: new Date(),
+                      },
+                    });
+                    
+                    // Re-check subscription status
+                    subscriptionStatus = await isSubscriptionActive(siteId);
+                    console.log(`[Script] Synced subscription, new status: ${subscriptionStatus.isActive ? 'active' : 'inactive'}`);
+                  }
+                }
+              }
+            } catch (syncError) {
+              console.warn(`[Script] Could not sync subscription from Paddle:`, syncError.message);
+              // Continue with original status check
+            }
+          }
+        } catch (error) {
+          console.warn(`[Script] Error during subscription sync:`, error.message);
+          // Continue with original status check
+        }
+      }
+      
       if (!subscriptionStatus.isActive) {
         console.warn(`[Script] Subscription inactive for site ${siteId}: ${subscriptionStatus.reason}`);
         // Return a blocked script that shows a message
@@ -223,7 +294,48 @@ window.console.error('[Consent SDK] Please upgrade your plan to continue using t
     const trackUrl = `${baseUrl}/api/sites/${finalSiteId}/track`;
 
     // Generate a simple, reliable script
+    // CRITICAL: Blocking must happen IMMEDIATELY, before any other code runs
     const script = `(function(){
+// IMMEDIATE blocking - this runs FIRST, before any trackers can load
+(function immediateBlock(){
+var SITE_ID="${finalSiteId.replace(/"/g, '\\"')}";
+var CONSENT_KEY='cookie_consent_'+SITE_ID;
+var stored=localStorage.getItem(CONSENT_KEY);
+var hasConsent=stored==='accepted';
+var prefs=null;
+if(hasConsent){
+var prefsStr=localStorage.getItem(CONSENT_KEY+'_prefs');
+if(prefsStr){
+try{prefs=JSON.parse(prefsStr);}catch(e){}
+}
+if(!prefs)prefs={analytics:true,marketing:true};
+}
+
+// IMMEDIATELY block all tracker scripts BEFORE they can execute
+var TRACKER_PATTERNS=['google-analytics','googletagmanager','gtag','ga.js','analytics.js','facebook.net','fbevents','fbq','doubleclick','googleadservices','googlesyndication'];
+var scripts=document.querySelectorAll('script[src]');
+scripts.forEach(function(s){
+var src=(s.src||s.getAttribute('src')||'').toLowerCase();
+var isTracker=TRACKER_PATTERNS.some(function(p){return src.indexOf(p)>-1;});
+if(isTracker&&!hasConsent){
+s.type='javascript/blocked';
+s.removeAttribute('src');
+s.setAttribute('data-blocked-src',s.src||s.getAttribute('src'));
+console.log('[Consent SDK] IMMEDIATELY blocked:',src);
+}else if(isTracker&&hasConsent){
+var urlStr=src;
+var isAnalytics=(urlStr.indexOf('google-analytics')>-1||urlStr.indexOf('googletagmanager')>-1||urlStr.indexOf('gtag')>-1||urlStr.indexOf('analytics')>-1);
+var isMarketing=(urlStr.indexOf('facebook')>-1||urlStr.indexOf('fbevents')>-1||urlStr.indexOf('fbq')>-1||urlStr.indexOf('doubleclick')>-1);
+if((isAnalytics&&!prefs.analytics)||(isMarketing&&!prefs.marketing)){
+s.type='javascript/blocked';
+s.removeAttribute('src');
+s.setAttribute('data-blocked-src',s.src||s.getAttribute('src'));
+console.log('[Consent SDK] IMMEDIATELY blocked based on preferences:',src);
+}
+}
+});
+})();
+
 console.log('[Consent SDK] Loading...', window.location.href);
 var DOMAIN="${domain.replace(/"/g, '\\"')}";
 var ALLOWED_DOMAIN="${isPreview ? "*" : (allowedDomain ? allowedDomain.replace(/"/g, '\\"') : "*")}";
@@ -329,33 +441,65 @@ function blockScript(s){
 if(s&&s.type!=='javascript/blocked'){
 s.setAttribute('data-original-type',s.type||'text/javascript');
 s.type='javascript/blocked';
-console.log('[Consent SDK] Blocked script:',s.src||s.getAttribute('src'));
+// Also remove src to prevent loading
+var originalSrc=s.src||s.getAttribute('src');
+if(originalSrc){
+s.setAttribute('data-blocked-src',originalSrc);
+s.removeAttribute('src');
+if(s.src)s.src=''; // Clear src property
+}
+console.log('[Consent SDK] Blocked script:',originalSrc);
 }
 }
 
 // Block existing scripts IMMEDIATELY - check consent status
 // IMPORTANT: Only block SCRIPT tags, NOT meta tags or other elements
+// This runs IMMEDIATELY when script loads, before any trackers can execute
 var consentStatus=getConsentStatus();
 if(!consentStatus){
 console.log('[Consent SDK] Blocking ALL trackers - consent not granted');
-// Block all external scripts with tracker URLs
+// Block all external scripts with tracker URLs - MORE AGGRESSIVE
 var existingScripts=document.querySelectorAll('script[src]');
 existingScripts.forEach(function(s){
 var scriptSrc=s.src||s.getAttribute('src')||'';
 if(scriptSrc&&isTracker(scriptSrc)){
 blockScript(s);
-console.log('[Consent SDK] ✓ Blocked existing script:',scriptSrc);
+// Also prevent execution by removing from DOM and re-adding as blocked
+try{
+var parent=s.parentNode;
+if(parent){
+var blockedScript=document.createElement('script');
+blockedScript.type='javascript/blocked';
+blockedScript.setAttribute('data-blocked-src',scriptSrc);
+blockedScript.setAttribute('data-original-type',s.type||'text/javascript');
+parent.replaceChild(blockedScript,s);
+console.log('[Consent SDK] ✓ Blocked and replaced existing script:',scriptSrc);
+}
+}catch(e){
+console.warn('[Consent SDK] Error blocking script:',e);
+}
 }
 });
-// Also check inline scripts
+// Also check inline scripts - MORE AGGRESSIVE
 var inlineScripts=document.querySelectorAll('script:not([src])');
 inlineScripts.forEach(function(s){
 var scriptContent=s.textContent||s.innerHTML||'';
 if(scriptContent){
 var lowerContent=scriptContent.toLowerCase();
-if(lowerContent.indexOf('gtag')>-1||lowerContent.indexOf('ga(')>-1||lowerContent.indexOf('fbq')>-1||lowerContent.indexOf('dataLayer')>-1){
+// Check for any tracker patterns
+var hasTracker=lowerContent.indexOf('gtag')>-1||
+lowerContent.indexOf('ga(')>-1||
+lowerContent.indexOf('fbq')>-1||
+lowerContent.indexOf('dataLayer')>-1||
+lowerContent.indexOf('googletagmanager')>-1||
+lowerContent.indexOf('google-analytics')>-1||
+lowerContent.indexOf('facebook.net')>-1||
+lowerContent.indexOf('analytics')>-1&&lowerContent.indexOf('google')>-1;
+if(hasTracker){
 s.textContent='// Blocked by consent manager';
-console.log('[Consent SDK] Blocked inline tracker script');
+s.innerHTML='// Blocked by consent manager';
+console.log('[Consent SDK] ✓ Blocked inline tracker script');
+}
 }
 }
 });
@@ -367,7 +511,20 @@ existingScripts.forEach(function(s){
 var scriptSrc=s.src||s.getAttribute('src')||'';
 if(scriptSrc&&isTracker(scriptSrc)&&shouldBlockTracker(scriptSrc)){
 blockScript(s);
-console.log('[Consent SDK] Blocked script based on preferences:',scriptSrc);
+// Replace with blocked version
+try{
+var parent=s.parentNode;
+if(parent){
+var blockedScript=document.createElement('script');
+blockedScript.type='javascript/blocked';
+blockedScript.setAttribute('data-blocked-src',scriptSrc);
+blockedScript.setAttribute('data-original-type',s.type||'text/javascript');
+parent.replaceChild(blockedScript,s);
+console.log('[Consent SDK] ✓ Blocked script based on preferences:',scriptSrc);
+}
+}catch(e){
+console.warn('[Consent SDK] Error blocking script:',e);
+}
 }
 });
 // Check inline scripts based on preferences
@@ -376,14 +533,17 @@ inlineScripts.forEach(function(s){
 var scriptContent=s.textContent||s.innerHTML||'';
 if(scriptContent){
 var lowerContent=scriptContent.toLowerCase();
-var isAnalyticsInline=(lowerContent.indexOf('gtag')>-1||lowerContent.indexOf('ga(')>-1||lowerContent.indexOf('dataLayer')>-1||lowerContent.indexOf('googletagmanager')>-1);
-var isMarketingInline=(lowerContent.indexOf('fbq')>-1||lowerContent.indexOf('facebook')>-1);
+var isAnalyticsInline=(lowerContent.indexOf('gtag')>-1||lowerContent.indexOf('ga(')>-1||lowerContent.indexOf('dataLayer')>-1||lowerContent.indexOf('googletagmanager')>-1||lowerContent.indexOf('analytics')>-1);
+var isMarketingInline=(lowerContent.indexOf('fbq')>-1||lowerContent.indexOf('facebook')>-1||lowerContent.indexOf('tracking')>-1);
 if(isAnalyticsInline&&!consentStatus.analytics){
 s.textContent='// Blocked by consent manager (analytics disabled)';
-console.log('[Consent SDK] Blocked inline analytics script');
+s.innerHTML='// Blocked by consent manager (analytics disabled)';
+console.log('[Consent SDK] ✓ Blocked inline analytics script');
 }else if(isMarketingInline&&!consentStatus.marketing){
 s.textContent='// Blocked by consent manager (marketing disabled)';
-console.log('[Consent SDK] Blocked inline marketing script');
+s.innerHTML='// Blocked by consent manager (marketing disabled)';
+console.log('[Consent SDK] ✓ Blocked inline marketing script');
+}
 }
 }
 });
@@ -466,20 +626,29 @@ return el;
 // Intercept fetch IMMEDIATELY - handle both fetch(url) and fetch(url, options)
 window.fetch=function(input,init){
 var url=typeof input==='string'?input:(input&&input.url?input.url:'');
-if(url&&isTracker(url)&&shouldBlockTracker(url)){
-console.log('[Consent SDK] Blocked fetch:',url);
+if(url&&isTracker(url)){
+if(shouldBlockTracker(url)){
+console.log('[Consent SDK] ✓ Blocked fetch:',url);
 return Promise.reject(new Error('Blocked by consent manager'));
+}else{
+console.log('[Consent SDK] Allowing fetch based on preferences:',url);
+}
 }
 return origFetch.apply(this,arguments);
 };
 
-// Intercept XHR open and send IMMEDIATELY
+// Intercept XHR open and send IMMEDIATELY - MORE AGGRESSIVE
 XMLHttpRequest.prototype.open=function(method,url){
-if(isTracker(url)&&shouldBlockTracker(url)){
-console.log('[Consent SDK] Blocked XHR open:',url);
+if(url&&isTracker(url)){
+if(shouldBlockTracker(url)){
+console.log('[Consent SDK] ✓ Blocked XHR open:',url);
 this._blocked=true;
 this._blockedUrl=url;
+this.readyState=0; // Prevent further processing
 return;
+}else{
+console.log('[Consent SDK] Allowing XHR based on preferences:',url);
+}
 }
 this._blocked=false;
 return origXHROpen.apply(this,arguments);
@@ -517,25 +686,39 @@ configurable:true
 });
 }
 
-// Block gtag function - check preferences
+// Block gtag function - check preferences - MORE AGGRESSIVE
 if(typeof window!=='undefined'){
+// Store original if exists
+var originalGtag=window.gtag;
 window.gtag=function(){
 var consentStatus=getConsentStatus();
 if(!consentStatus||!consentStatus.analytics){
-console.log('[Consent SDK] Blocked gtag call');
+console.log('[Consent SDK] ✓ Blocked gtag call');
 return;
 }
+// If consent granted, call original or allow
+if(originalGtag&&typeof originalGtag==='function'){
+return originalGtag.apply(this,arguments);
+}
+// Otherwise, allow the call (tracker will execute)
 };
 }
 
-// Block fbq function (Facebook Pixel) - check preferences
+// Block fbq function (Facebook Pixel) - check preferences - MORE AGGRESSIVE
 if(typeof window!=='undefined'){
+// Store original if exists
+var originalFbq=window.fbq;
 window.fbq=function(){
 var consentStatus=getConsentStatus();
 if(!consentStatus||!consentStatus.marketing){
-console.log('[Consent SDK] Blocked fbq call');
+console.log('[Consent SDK] ✓ Blocked fbq call');
 return;
 }
+// If consent granted, call original or allow
+if(originalFbq&&typeof originalFbq==='function'){
+return originalFbq.apply(this,arguments);
+}
+// Otherwise, allow the call (tracker will execute)
 };
 }
 
@@ -852,7 +1035,8 @@ localStorage.setItem(CONSENT_KEY+'_prefs',JSON.stringify(prefs));
 
 // Restore blocked scripts based on preferences
 document.querySelectorAll('script[type="javascript/blocked"]').forEach(function(s){
-var scriptSrc=s.src||s.getAttribute('src');
+// Get script source from data-blocked-src attribute (where we stored it)
+var scriptSrc=s.getAttribute('data-blocked-src')||s.src||s.getAttribute('src')||'';
 if(!scriptSrc)return;
 // Check if should still be blocked based on preferences
 if(shouldBlockTracker(scriptSrc)){
@@ -866,13 +1050,18 @@ if(s.hasAttribute('async'))n.async=true;
 if(s.hasAttribute('defer'))n.defer=true;
 if(s.id)n.id=s.id;
 if(s.className)n.className=s.className;
-// Copy all data attributes
+// Copy all data attributes (except data-blocked-src and data-original-type)
 for(var i=0;i<s.attributes.length;i++){
 var attr=s.attributes[i];
-if(attr.name.startsWith('data-'))n.setAttribute(attr.name,attr.value);
+if(attr.name.startsWith('data-')&&attr.name!=='data-blocked-src'&&attr.name!=='data-original-type'){
+n.setAttribute(attr.name,attr.value);
 }
+}
+// Restore original type if stored
+var originalType=s.getAttribute('data-original-type');
+if(originalType)n.type=originalType;
 s.parentNode.replaceChild(n,s);
-console.log('[Consent SDK] Restored script:',n.src);
+console.log('[Consent SDK] ✓ Restored script:',n.src);
 });
 
 // DON'T restore original functions - keep intercepting but allow based on preferences
