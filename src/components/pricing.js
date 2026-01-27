@@ -15,7 +15,7 @@ const plans = [
       "Basic tracker detection",
       "Cookie consent banner",
       "Community support",
-      "7-day free trial",
+      "14-day free trial",
     ],
     cta: "Start Free Trial",
     popular: false,

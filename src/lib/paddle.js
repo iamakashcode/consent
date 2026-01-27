@@ -35,11 +35,11 @@ export const PLAN_PRICING = {
   pro: 2000,    // $20 = 2000 cents
 };
 
-// Trial period in days - ALL plans get 7-day free trial
+// Trial period in days - ALL plans get 14-day user-based free trial
 export const PLAN_TRIAL_DAYS = {
-  basic: 7,
-  starter: 7,
-  pro: 7,
+  basic: 14,
+  starter: 14,
+  pro: 14,
 };
 
 // Plan page view limits (per domain per month)
@@ -55,21 +55,21 @@ export const PLAN_DETAILS = {
     name: "Basic",
     price: 5,
     pageViews: 100000,
-    trialDays: 7,
+    trialDays: 14,
     features: [
       "1 domain",
       "100,000 page views/month",
       "Basic tracker detection",
       "Cookie consent banner",
       "Community support",
-      "7-day free trial",
+      "14-day free trial",
     ],
   },
   starter: {
     name: "Starter",
     price: 9,
     pageViews: 300000,
-    trialDays: 7,
+    trialDays: 14,
     features: [
       "1 domain",
       "300,000 page views/month",
@@ -77,14 +77,14 @@ export const PLAN_DETAILS = {
       "Customizable banner",
       "Email support",
       "Analytics dashboard",
-      "7-day free trial",
+      "14-day free trial",
     ],
   },
   pro: {
     name: "Pro",
     price: 20,
     pageViews: Infinity,
-    trialDays: 7,
+    trialDays: 14,
     features: [
       "1 domain",
       "Unlimited page views",
@@ -93,7 +93,7 @@ export const PLAN_DETAILS = {
       "Priority support",
       "Advanced analytics",
       "API access",
-      "7-day free trial",
+      "14-day free trial",
     ],
   },
 };

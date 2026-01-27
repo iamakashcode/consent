@@ -292,7 +292,7 @@ export async function POST(req) {
       siteId: site.siteId,
       domain: site.domain,
       plan: plan,
-      message: `Please complete payment for ${site.domain}. Your 7-day free trial will start after payment.`,
+      message: `Please complete payment for ${site.domain}. Your 14-day free trial will start after payment.`,
     });
 
   } catch (error) {

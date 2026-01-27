@@ -94,7 +94,7 @@ function SignupContent() {
           </p>
           <div className="space-y-4">
             {[
-              "7-day free trial on all plans",
+              "14-day free trial on all plans",
               "No credit card required to start",
               "Setup in under 5 minutes",
               "Cancel anytime",

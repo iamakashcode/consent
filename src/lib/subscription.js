@@ -411,7 +411,7 @@ export async function extendSubscriptionPeriod(siteDbId) {
  * @param {string} plan - Plan name
  */
 export function calculateTrialEndDate(plan) {
-  const trialDays = PLAN_TRIAL_DAYS[plan] || 7;
+  const trialDays = PLAN_TRIAL_DAYS[plan] || 14;
   const trialEnd = new Date();
   trialEnd.setDate(trialEnd.getDate() + trialDays);
   return trialEnd;

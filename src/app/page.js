@@ -134,7 +134,7 @@ export default function HomePage() {
             <div className="mt-12 flex flex-wrap items-center justify-center gap-8 text-sm text-gray-500">
               <div className="flex items-center gap-2">
                 <CheckIcon />
-                <span>7-day free trial</span>
+                <span>14-day free trial</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckIcon />
@@ -315,7 +315,7 @@ export default function HomePage() {
             <p className="text-sm font-semibold text-indigo-600 uppercase tracking-wider mb-3">Pricing</p>
             <h2 className="text-4xl font-bold text-gray-900 mb-4">Simple, Per-Domain Pricing</h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-8">
-              Each domain gets its own subscription. Start with a 7-day free trial on all plans.
+              Each domain gets its own subscription. Start with a 14-day user-based free trial on all plans.
             </p>
 
             {/* Billing Toggle */}
@@ -454,7 +454,7 @@ export default function HomePage() {
               <ArrowRightIcon />
             </Link>
             <p className="mt-4 text-sm text-indigo-200">
-              No credit card required. 7-day free trial on all plans.
+              No credit card required. 14-day free trial on all plans.
             </p>
           </div>
         </div>

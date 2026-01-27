@@ -148,7 +148,8 @@ function PlansContent() {
         sessionStorage.setItem("paddle_redirect_url", `/dashboard/usage?payment=success&siteId=${siteId}`);
 
         // Redirect to Paddle checkout (same tab for better UX)
-        window.location.href = checkoutUrl;
+        // Use window.location.assign to avoid React linting error
+        window.location.assign(checkoutUrl);
         setLoading(false);
         setSelectedPlan(null);
         return;

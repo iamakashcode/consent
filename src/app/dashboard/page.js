@@ -402,7 +402,7 @@ function DashboardContent() {
                             {copiedId === site.id ? "Copied!" : "Copy Script"}
                           </button>
                           <Link
-                            href="/dashboard/domains"
+                            href={`/banner?siteId=${site.siteId}`}
                             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                           >
                             Manage

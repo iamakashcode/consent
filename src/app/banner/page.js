@@ -1,9 +1,9 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useState, useEffect, useCallback, useRef } from "react";
-import DashboardLayout from "@/components/DashboardLayout";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import Link from "next/link";
 
 const POSITIONS = [
   { id: "bottom", label: "Bottom", icon: "⬇️" },
@@ -30,6 +30,7 @@ const DEFAULT_CONFIG = {
 function BannerContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sites, setSites] = useState([]);
@@ -128,12 +129,54 @@ function BannerContent() {
 
     const fetchSitesOnce = async () => {
       try {
-        const response = await fetch("/api/sites");
-        if (response.ok) {
-          const data = await response.json();
-          setSites(data);
-          if (data.length > 0) {
-            const nextSite = data[0];
+        // Fetch sites and subscriptions
+        const [sitesRes, subsRes] = await Promise.all([
+          fetch("/api/sites"),
+          fetch("/api/subscription"),
+        ]);
+        
+        if (sitesRes.ok) {
+          const sitesData = await sitesRes.json();
+          let activeSites = [];
+          
+          // Get subscription data to filter only active domains
+          if (subsRes.ok) {
+            const subsData = await subsRes.json();
+            const subscriptionsMap = {};
+            (subsData.subscriptions || []).forEach((item) => {
+              subscriptionsMap[item.siteId] = {
+                ...item,
+                userTrialActive: subsData.userTrialActive || false,
+              };
+            });
+            
+            // Filter sites that have active subscriptions or user trial
+            activeSites = sitesData.filter(site => {
+              const subData = subscriptionsMap[site.siteId];
+              return subData?.isActive || subsData.userTrialActive;
+            });
+          } else {
+            // If subscription API fails, show all sites (fallback)
+            activeSites = sitesData;
+          }
+          
+          setSites(activeSites);
+          
+          // Check if siteId is provided in URL
+          const siteIdParam = searchParams?.get("siteId");
+          let nextSite = null;
+          
+          if (siteIdParam && activeSites.length > 0) {
+            // Find site by siteId
+            nextSite = activeSites.find(s => s.siteId === siteIdParam || s.id === siteIdParam);
+          }
+          
+          // Fallback to first active site if no match or no param
+          if (!nextSite && activeSites.length > 0) {
+            nextSite = activeSites[0];
+          }
+          
+          if (nextSite) {
             setSelectedSite(nextSite);
             selectedSiteRef.current = nextSite;
             let initialConfig = DEFAULT_CONFIG;
@@ -156,7 +199,7 @@ function BannerContent() {
     };
 
     fetchSitesOnce();
-  }, [status, loadPreviewOnce]);
+  }, [status, loadPreviewOnce, searchParams]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -268,18 +311,39 @@ function BannerContent() {
 
   if (status === "loading" || loading) {
     return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
-        </div>
-      </DashboardLayout>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+      </div>
     );
   }
 
-  if (!session) return null;
+  if (!session) {
+    router.push("/login");
+    return null;
+  }
 
   return (
-    <DashboardLayout>
+    <div className="min-h-screen bg-gray-50">
+      {/* Simple Header without Sidebar */}
+      <header className="sticky top-0 z-30 h-16 bg-white border-b border-gray-200">
+        <div className="h-full flex items-center justify-between px-4 lg:px-8">
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-sm">C</span>
+            </div>
+            <span className="text-lg font-semibold text-gray-900">ConsentFlow</span>
+          </Link>
+          <Link
+            href="/dashboard"
+            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            ← Back to Dashboard
+          </Link>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="p-4 lg:p-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -329,23 +393,22 @@ function BannerContent() {
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Settings Panel */}
           <div className="space-y-6">
-            {/* Site Selector */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Domain
-              </label>
-              <select
-                value={selectedSite?.siteId || ""}
-                onChange={(e) => handleSiteChange(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                {sites.map((site) => (
-                  <option key={site.siteId} value={site.siteId}>
-                    {site.domain}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Domain Info */}
+            {selectedSite && (
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Domain
+                </label>
+                <div className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900">
+                  {selectedSite.domain}
+                </div>
+                {sites.length > 1 && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Showing banner for this domain only. <Link href="/dashboard" className="text-indigo-600 hover:underline">Manage all domains</Link>
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Colors */}
             <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -754,10 +817,21 @@ function BannerContent() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+      </main>
+    </div>
   );
 }
 
 export default function BannerPage() {
-  return <BannerContent />;
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+        </div>
+      }
+    >
+      <BannerContent />
+    </Suspense>
+  );
 }

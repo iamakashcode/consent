@@ -460,7 +460,7 @@ function PaymentContent() {
                         Payment Setup Required
                       </p>
                       <p className="text-xs text-blue-700">
-                        Please add a payment method to activate your subscription. {plan === "basic" && "Your 7-day free trial will start after activation."}
+                        Please add a payment method to activate your subscription. {plan === "basic" && "Your 14-day free trial will start after activation."}
                       </p>
                       <p className="text-xs text-blue-600 mt-2">
                         💡 <strong>After completing payment on Paddle:</strong> Your subscription will be automatically synced when you return to your profile page. If you&apos;re not redirected automatically, simply navigate back to your profile page - the status will update automatically.

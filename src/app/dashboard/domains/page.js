@@ -144,12 +144,20 @@ export default function DomainsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     {isActive ? (
-                      <Link
-                        href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}
-                        className="px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
-                      >
-                        Change Plan
-                      </Link>
+                      <>
+                        <Link
+                          href={`/banner?siteId=${site.siteId}`}
+                          className="px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+                        >
+                          Manage
+                        </Link>
+                        <Link
+                          href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}
+                          className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                        >
+                          Change Plan
+                        </Link>
+                      </>
                     ) : (
                       <Link
                         href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}
