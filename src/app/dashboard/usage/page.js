@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 
 const ChartBar = ({ value }) => (
@@ -15,7 +15,7 @@ const ChartBar = ({ value }) => (
   </div>
 );
 
-export default function UsagePage() {
+function UsageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -149,5 +149,19 @@ export default function UsagePage() {
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function UsagePage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full" />
+        </div>
+      </DashboardLayout>
+    }>
+      <UsageContent />
+    </Suspense>
   );
 }

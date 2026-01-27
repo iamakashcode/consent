@@ -47,6 +47,7 @@ function PaymentContent() {
     if (session && plan && ["basic", "starter", "pro"].includes(plan) && !orderData && !loading) {
       createOrder();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, plan, siteId]);
 
   const createOrder = async () => {
@@ -474,7 +475,7 @@ function PaymentContent() {
                         Recurring Subscription
                       </p>
                       <p className="text-xs text-blue-700">
-                        This is a monthly recurring subscription. You'll be charged {planPrices[plan]} every month automatically.
+                        This is a monthly recurring subscription. You&apos;ll be charged {planPrices[plan]} every month automatically.
                       </p>
                     </div>
                   </div>
@@ -508,7 +509,7 @@ function PaymentContent() {
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
                   <p className="text-xs text-blue-800">
-                    <strong>Note:</strong> After completing payment on Razorpay, if you're not automatically redirected, you can manually return to your profile page. Your subscription will be activated automatically.
+                    <strong>Note:</strong> After completing payment on Razorpay, if you&apos;re not automatically redirected, you can manually return to your profile page. Your subscription will be activated automatically.
                   </p>
                 </div>
 
@@ -531,7 +532,7 @@ function PaymentContent() {
                         Please add a payment method to activate your subscription. {plan === "basic" && "Your 7-day free trial will start after activation."}
                       </p>
                       <p className="text-xs text-blue-600 mt-2">
-                        💡 <strong>After completing payment on Razorpay:</strong> Your subscription will be automatically synced when you return to your profile page. If you're not redirected automatically, simply navigate back to your profile page - the status will update automatically.
+                        💡 <strong>After completing payment on Razorpay:</strong> Your subscription will be automatically synced when you return to your profile page. If you&apos;re not redirected automatically, simply navigate back to your profile page - the status will update automatically.
                       </p>
                     </div>
                   </div>
