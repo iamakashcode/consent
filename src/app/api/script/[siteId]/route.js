@@ -336,8 +336,23 @@ function hasTrackerCode(text){
   return false;
 }
 
+// Domain validation - MUST happen BEFORE any blocking logic
+// Exit early if domain doesn't match to prevent blocking on wrong domains
+var currentHost=window.location.hostname.toLowerCase().replace(/^www\\./,'');
+var allowedHost=ALLOWED_DOMAIN!=='*'?ALLOWED_DOMAIN.toLowerCase().replace(/^www\\./,''):null;
+var domainMatches=!allowedHost||currentHost===allowedHost;
+
+if(!domainMatches){
+  console.warn('[Consent SDK] Domain mismatch. Current:',currentHost,'Allowed:',allowedHost||'*');
+  console.warn('[Consent SDK] Exiting - script should not run on this domain');
+  // Exit immediately - do not proceed with blocking logic
+  // Return from IIFE to stop execution
+  return;
+}
+
 // Block existing tracker scripts IMMEDIATELY
 // CRITICAL: Must run before any scripts execute
+// NOTE: Only runs if domain matches (checked above)
 if(!hasConsent()){
   console.log('[Consent SDK] Blocking existing trackers');
   var scripts=document.querySelectorAll('script[src]');
@@ -358,50 +373,11 @@ if(!hasConsent()){
 }
 
 // Store original functions BEFORE any scripts can use them
-var origCreate=document.createElement;
+// NOTE: We do NOT override document.createElement - it breaks React/Next.js/Web Components
+// Instead, we rely on appendChild/insertBefore/MutationObserver interception
 var origFetch=window.fetch;
 var origAppendChild=Node.prototype.appendChild;
 var origInsertBefore=Node.prototype.insertBefore;
-
-// Intercept createElement - MUST happen before any scripts run
-document.createElement=function(tag){
-  var el=origCreate.call(document,tag);
-  if(tag.toLowerCase()==='script'){
-    var _src='';
-    var _blocked=false;
-    
-    // Intercept src property
-    Object.defineProperty(el,'src',{
-      get:function(){return _src;},
-      set:function(v){
-        _src=v;
-        // CRITICAL: Check consent LIVE
-        if(v&&!hasConsent()&&isTracker(v)){
-          _blocked=true;
-          // Don't set src, will be blocked when added to DOM
-          return;
-        }
-        if(v&&!_blocked)el.setAttribute('src',v);
-      },
-      configurable:true
-    });
-    
-    // Intercept setAttribute for src
-    var origSetAttribute=el.setAttribute;
-    el.setAttribute=function(name,value){
-      // CRITICAL: Check consent LIVE
-      if(name==='src'&&!hasConsent()&&isTracker(value)){
-        _blocked=true;
-        return; // Don't set src if blocked
-      }
-      return origSetAttribute.call(this,name,value);
-    };
-    
-    // Note: Inline scripts will be caught by appendChild/insertBefore/MutationObserver
-    // No need to intercept textContent/innerHTML here
-  }
-  return el;
-};
 
 // Intercept fetch - block tracker requests
 window.fetch=function(input,init){
@@ -555,10 +531,9 @@ function setupFunctionBlocking(){
 }
 
 // Setup blocking immediately
+// NOTE: We do NOT use setInterval - it causes unnecessary CPU usage and race conditions
+// Function blocking will be re-setup in enableTrackers() when consent is granted
 setupFunctionBlocking();
-
-// Re-check periodically (in case consent changes)
-setInterval(setupFunctionBlocking,1000);
 
 // Intercept XMLHttpRequest - block tracker requests
 var origXHROpen=XMLHttpRequest.prototype.open;
@@ -596,8 +571,9 @@ navigator.sendBeacon=function(url,data){
 
 // Block Image pixel beacons - common tracking method
 var origImage=window.Image;
-window.Image=function(width,height){
-  var img=origImage(width,height);
+window.Image=function(){
+  // Use correct constructor: new Image() (no arguments needed)
+  var img=new origImage();
   var origSrc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
   if(origSrc){
     Object.defineProperty(img,'src',{
@@ -618,11 +594,7 @@ window.Image=function(width,height){
 
 console.log('[Consent SDK] Tracker blocking initialized');
 
-// Domain verification
-var currentHost=window.location.hostname.toLowerCase().replace(/^www\\./,'');
-var allowedHost=ALLOWED_DOMAIN!=='*'?ALLOWED_DOMAIN.toLowerCase().replace(/^www\\./,''):null;
-var domainMatches=!allowedHost||currentHost===allowedHost;
-
+// Domain verification (domain already validated above)
 if(domainMatches){
   // Verify domain connection
   fetch('${verifyCallbackUrl}?domain='+encodeURIComponent(currentHost)+'${isPreview ? '&preview=1' : ''}',{
@@ -745,16 +717,16 @@ function enableTrackers(){
   console.log('[Consent SDK] Enabling trackers');
   
   // Restore blocked scripts from our stored array
-  // CRITICAL: Only restore scripts that were actually removed
+  // CRITICAL: Only restore scripts with src attribute - DO NOT restore inline scripts
+  // Inline scripts can cause double-firing and broken execution order
   blockedScripts.forEach(function(scriptInfo){
     if(!scriptInfo.parent)return; // Skip if no parent (can't restore)
     
+    // SKIP inline scripts - only restore external scripts with src
+    if(!scriptInfo.src)return;
+    
     var newScript=document.createElement('script');
-    if(scriptInfo.src){
-      newScript.src=scriptInfo.src;
-    }else if(scriptInfo.text){
-      newScript.textContent=scriptInfo.text;
-    }
+    newScript.src=scriptInfo.src;
     
     if(scriptInfo.async)newScript.async=true;
     if(scriptInfo.defer)newScript.defer=true;
@@ -773,14 +745,14 @@ function enableTrackers(){
       scriptInfo.parent.appendChild(newScript);
     }
     
-    console.log('[Consent SDK] Restored script:',scriptInfo.src||'inline');
+    console.log('[Consent SDK] Restored script:',scriptInfo.src);
   });
   
   // Clear blocked scripts array
   blockedScripts=[];
   
   // Restore original functions
-  document.createElement=origCreate;
+  // NOTE: We never overrode document.createElement, so no need to restore it
   window.fetch=origFetch;
   Node.prototype.appendChild=origAppendChild;
   Node.prototype.insertBefore=origInsertBefore;
