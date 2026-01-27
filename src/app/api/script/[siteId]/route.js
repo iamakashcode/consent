@@ -296,10 +296,22 @@ window.console.error('[Consent SDK] Please upgrade your plan to continue using t
     // Generate a simple, reliable script
     // CRITICAL: Blocking must happen IMMEDIATELY, before any other code runs
     const script = `(function(){
-// IMMEDIATE blocking - this runs FIRST, before any trackers can load
-(function immediateBlock(){
+console.log('[Consent SDK] Script loading...', 'Preview mode: ${isPreview}');
+// CRITICAL: In preview mode, clear consent FIRST before any checks
+var isPreviewMode=${isPreview ? "true" : "false"};
 var SITE_ID="${finalSiteId.replace(/"/g, '\\"')}";
 var CONSENT_KEY='cookie_consent_'+SITE_ID;
+if(isPreviewMode){
+console.log('[Consent SDK] Preview mode - clearing consent immediately');
+localStorage.removeItem(CONSENT_KEY);
+localStorage.removeItem(CONSENT_KEY+'_prefs');
+// Also remove any existing banner to force refresh
+if(document.getElementById('cookie-banner')){
+document.getElementById('cookie-banner').remove();
+}
+}
+// IMMEDIATE blocking - this runs FIRST, before any trackers can load
+(function immediateBlock(){
 var stored=localStorage.getItem(CONSENT_KEY);
 var hasConsent=stored==='accepted';
 var prefs=null;
@@ -341,8 +353,7 @@ var DOMAIN="${domain.replace(/"/g, '\\"')}";
 var ALLOWED_DOMAIN="${isPreview ? "*" : (allowedDomain ? allowedDomain.replace(/"/g, '\\"') : "*")}";
 var IS_VERIFIED=${isPreview ? "true" : (siteVerified ? "true" : "false")};
 var TRACKERS=${JSON.stringify(trackerDomains)};
-var SITE_ID="${finalSiteId.replace(/"/g, '\\"')}";
-var CONSENT_KEY='cookie_consent_'+SITE_ID;
+// SITE_ID and CONSENT_KEY already defined above
 var consent=localStorage.getItem(CONSENT_KEY)==='accepted';
 
 // CRITICAL: Set up blocking IMMEDIATELY before anything else
@@ -861,10 +872,20 @@ console.log('[Consent SDK] Body exists:', !!document.body);
 function showBanner(){
 try{
 var currentConsent=getConsentStatus();
-console.log('[Consent SDK] showBanner called, consent status:', currentConsent, 'banner exists:', !!document.getElementById('cookie-banner'));
-if(currentConsent||document.getElementById('cookie-banner')){
+var bannerExists=!!document.getElementById('cookie-banner');
+console.log('[Consent SDK] showBanner called, preview mode:', isPreviewMode, 'consent status:', currentConsent, 'banner exists:', bannerExists);
+// In preview mode, always show banner (remove existing to refresh). Otherwise, only show if no consent
+if(!isPreviewMode && (currentConsent||bannerExists)){
 console.log('[Consent SDK] Banner not needed - consent already granted or banner exists');
 return;
+}
+// In preview mode, always remove existing banner to force refresh with new config
+if(isPreviewMode && bannerExists){
+var existingBanner=document.getElementById('cookie-banner');
+if(existingBanner){
+existingBanner.remove();
+console.log('[Consent SDK] Removed existing banner for preview refresh');
+}
 }
 if(!document.body){
 console.log('[Consent SDK] Body not ready, retrying in 100ms');
@@ -935,6 +956,7 @@ buttonsHtml+='<button id="customize-btn" style="background:transparent;color:'+t
 }
 b.innerHTML='<div style="flex:1;min-width:250px;"><h3 style="margin:0 0 8px 0;font-size:18px;font-weight:600;">'+titleEscaped+'</h3><p style="margin:0;opacity:0.9;line-height:1.5;">'+messageEscaped+'</p></div><div style="display:flex;gap:10px;flex-wrap:wrap;">'+buttonsHtml+'</div>';
 document.body.appendChild(b);
+console.log('[Consent SDK] Banner appended to body, checking if visible...', b.offsetHeight, b.offsetWidth);
 var acceptBtnEl=document.getElementById('accept-btn');
 if(acceptBtnEl){
 acceptBtnEl.onclick=function(){
@@ -944,6 +966,12 @@ localStorage.setItem(CONSENT_KEY+'_prefs',JSON.stringify({analytics:true,marketi
 b.remove();
 enableTrackers({analytics:true,marketing:true});
 };
+}
+// In preview mode, prevent banner from being removed by other code
+if(isPreviewMode){
+console.log('[Consent SDK] Preview mode - protecting banner from removal');
+// Store reference to prevent accidental removal
+window._consentBannerPreview=b;
 }
 if(showReject){
 var rejectBtnEl=document.getElementById('reject-btn');
@@ -966,7 +994,14 @@ showCustomizePanel(b);
 }
 }
 console.log('[Consent SDK] Banner shown successfully');
-console.log('[Consent SDK] Banner element:', document.getElementById('cookie-banner'));
+var finalBanner=document.getElementById('cookie-banner');
+console.log('[Consent SDK] Banner element:', finalBanner);
+if(finalBanner){
+console.log('[Consent SDK] Banner dimensions:', finalBanner.offsetWidth, 'x', finalBanner.offsetHeight);
+console.log('[Consent SDK] Banner computed style display:', window.getComputedStyle(finalBanner).display);
+console.log('[Consent SDK] Banner computed style visibility:', window.getComputedStyle(finalBanner).visibility);
+console.log('[Consent SDK] Banner computed style z-index:', window.getComputedStyle(finalBanner).zIndex);
+}
 }catch(e){
 console.error('[Consent SDK] Error showing banner:',e);
 console.error('[Consent SDK] Error stack:', e.stack);
@@ -1130,9 +1165,13 @@ delete window.fbq;
 console.log('[Consent SDK] Trackers enabled based on preferences:',prefs);
 }
 
-// Only show banner if consent not granted
+// Show banner logic - ALWAYS show in preview mode, otherwise only if consent not granted
+// Note: Consent already cleared in preview mode at the top of the script
 var currentConsentStatus=getConsentStatus();
-if(!currentConsentStatus){
+var shouldShowBanner=isPreviewMode || !currentConsentStatus;
+
+if(shouldShowBanner){
+console.log('[Consent SDK] Should show banner - preview mode:', isPreviewMode, 'has consent:', !!currentConsentStatus);
 // Try to show banner immediately
 showBanner();
 // Also set up multiple fallbacks to ensure banner shows
@@ -1151,6 +1190,22 @@ setTimeout(showBanner,3000);
 window.addEventListener('load',function(){
 setTimeout(showBanner,100);
 });
+// In preview mode, continuously check and re-show banner if it disappears
+if(isPreviewMode){
+console.log('[Consent SDK] Preview mode - setting up banner watchdog');
+var bannerWatchdog=setInterval(function(){
+var banner=document.getElementById('cookie-banner');
+if(!banner && document.body){
+console.log('[Consent SDK] Banner disappeared in preview mode, re-showing...');
+showBanner();
+}
+},500);
+// Stop watchdog after 30 seconds to avoid infinite loop
+setTimeout(function(){
+clearInterval(bannerWatchdog);
+console.log('[Consent SDK] Banner watchdog stopped');
+},30000);
+}
 }else{
 if(currentConsentStatus.analytics&&currentConsentStatus.marketing){
 console.log('[Consent SDK] Consent already granted - all trackers enabled');

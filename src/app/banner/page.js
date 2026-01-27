@@ -89,8 +89,11 @@ function BannerContent() {
       output = `${baseTag}\n` + output;
     }
 
+    // Ensure script is placed before </body> or at the end, and executes immediately
     if (/<\/body>/i.test(output)) {
       output = output.replace(/<\/body>/i, `${scriptTag}\n</body>`);
+    } else if (/<\/html>/i.test(output)) {
+      output = output.replace(/<\/html>/i, `${scriptTag}\n</html>`);
     } else {
       output = `${output}\n${scriptTag}`;
     }
@@ -685,8 +688,9 @@ function BannerContent() {
                   <iframe
                     title="Live banner preview"
                     className="w-full h-full"
-                    sandbox="allow-scripts allow-same-origin allow-forms"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
                     srcDoc={previewHtml}
+                    style={{ border: 'none' }}
                   />
                 ) : (
                   <>
