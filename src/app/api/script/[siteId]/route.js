@@ -273,17 +273,55 @@ function isTracker(url){
   return false;
 }
 
-// Block script - remove src to prevent loading
+// Store removed scripts for restoration
+var blockedScripts=[];
+
+// Block script - PHYSICALLY REMOVE from DOM to prevent execution
+// CRITICAL: type="javascript/blocked" does NOT reliably prevent execution in modern browsers
 function blockScript(s){
-  if(s&&s.type!=='javascript/blocked'){
-    var src=s.src||s.getAttribute('src')||'';
-    if(src){
-      s.setAttribute('data-blocked-src',src);
-      s.removeAttribute('src');
+  if(!s)return;
+  // Check if already blocked
+  if(s.getAttribute('data-consent-blocked')==='true')return;
+  
+  var src=s.src||s.getAttribute('src')||'';
+  var isInline=!src;
+  var text=isInline?(s.textContent||s.innerHTML||''):'';
+  
+  // Store script info for restoration
+  var scriptInfo={
+    src:src,
+    text:text,
+    async:s.async,
+    defer:s.defer,
+    id:s.id,
+    className:s.className,
+    parent:s.parentNode,
+    nextSibling:s.nextSibling,
+    attributes:{}
+  };
+  
+  // Copy all attributes
+  for(var i=0;i<s.attributes.length;i++){
+    var attr=s.attributes[i];
+    if(attr.name!=='src'&&attr.name!=='type'){
+      scriptInfo.attributes[attr.name]=attr.value;
     }
-    s.setAttribute('data-original-type',s.type||'text/javascript');
+  }
+  
+  // Store blocked script info
+  blockedScripts.push(scriptInfo);
+  
+  // PHYSICALLY REMOVE from DOM - this prevents execution
+  if(s.parentNode){
+    s.parentNode.removeChild(s);
+    console.log('[Consent SDK] ✓ Removed tracker script:',src||'inline');
+  }else{
+    // If no parent, mark as blocked (shouldn't happen but safety check)
+    s.setAttribute('data-consent-blocked','true');
+    s.setAttribute('data-blocked-src',src);
+    if(src)s.removeAttribute('src');
     s.type='javascript/blocked';
-    console.log('[Consent SDK] ✓ Blocked script:',src||'inline');
+    console.log('[Consent SDK] ✓ Blocked script (no parent):',src||'inline');
   }
 }
 
@@ -299,6 +337,7 @@ function hasTrackerCode(text){
 }
 
 // Block existing tracker scripts IMMEDIATELY
+// CRITICAL: Must run before any scripts execute
 if(!hasConsent()){
   console.log('[Consent SDK] Blocking existing trackers');
   var scripts=document.querySelectorAll('script[src]');
@@ -313,9 +352,7 @@ if(!hasConsent()){
   for(var i=0;i<inlineScripts.length;i++){
     var text=inlineScripts[i].textContent||inlineScripts[i].innerHTML||'';
     if(hasTrackerCode(text)){
-      inlineScripts[i].type='javascript/blocked';
-      inlineScripts[i].textContent='';
-      console.log('[Consent SDK] ✓ Blocked inline tracker script');
+      blockScript(inlineScripts[i]);
     }
   }
 }
@@ -338,10 +375,11 @@ document.createElement=function(tag){
       get:function(){return _src;},
       set:function(v){
         _src=v;
+        // CRITICAL: Check consent LIVE
         if(v&&!hasConsent()&&isTracker(v)){
           _blocked=true;
-          blockScript(el);
-          return; // Don't set src if blocked
+          // Don't set src, will be blocked when added to DOM
+          return;
         }
         if(v&&!_blocked)el.setAttribute('src',v);
       },
@@ -351,52 +389,16 @@ document.createElement=function(tag){
     // Intercept setAttribute for src
     var origSetAttribute=el.setAttribute;
     el.setAttribute=function(name,value){
+      // CRITICAL: Check consent LIVE
       if(name==='src'&&!hasConsent()&&isTracker(value)){
         _blocked=true;
-        blockScript(el);
         return; // Don't set src if blocked
       }
       return origSetAttribute.call(this,name,value);
     };
     
-    // Intercept textContent for inline scripts
-    var _textContent='';
-    Object.defineProperty(el,'textContent',{
-      get:function(){return _textContent;},
-      set:function(v){
-        if(v&&!hasConsent()&&hasTrackerCode(v)){
-          el.type='javascript/blocked';
-          _textContent='';
-          console.log('[Consent SDK] ✓ Blocked inline tracker');
-          return;
-        }
-        _textContent=v;
-        // Use original textContent setter if available
-        if(Object.getOwnPropertyDescriptor(HTMLElement.prototype,'textContent')){
-          Object.getOwnPropertyDescriptor(HTMLElement.prototype,'textContent').set.call(el,v);
-        }
-      },
-      configurable:true
-    });
-    
-    // Also intercept innerHTML
-    var _innerHTML='';
-    Object.defineProperty(el,'innerHTML',{
-      get:function(){return _innerHTML;},
-      set:function(v){
-        if(v&&!hasConsent()&&hasTrackerCode(v)){
-          el.type='javascript/blocked';
-          _innerHTML='';
-          console.log('[Consent SDK] ✓ Blocked inline tracker (innerHTML)');
-          return;
-        }
-        _innerHTML=v;
-        if(Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML')){
-          Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML').set.call(el,v);
-        }
-      },
-      configurable:true
-    });
+    // Note: Inline scripts will be caught by appendChild/insertBefore/MutationObserver
+    // No need to intercept textContent/innerHTML here
   }
   return el;
 };
@@ -404,6 +406,7 @@ document.createElement=function(tag){
 // Intercept fetch - block tracker requests
 window.fetch=function(input,init){
   var url=typeof input==='string'?input:(input&&input.url?input.url:'');
+  // CRITICAL: Check consent LIVE
   if(url&&!hasConsent()&&isTracker(url)){
     console.log('[Consent SDK] ✓ Blocked fetch:',url);
     return Promise.reject(new Error('Blocked by consent manager'));
@@ -414,16 +417,18 @@ window.fetch=function(input,init){
 // Intercept appendChild and insertBefore to catch scripts added to DOM
 Node.prototype.appendChild=function(child){
   if(child&&child.tagName&&child.tagName.toLowerCase()==='script'){
-    var src=child.src||child.getAttribute('src')||'';
-    if(src&&!hasConsent()&&isTracker(src)){
-      blockScript(child);
-      console.log('[Consent SDK] ✓ Blocked script via appendChild');
-    }
-    var text=child.textContent||child.innerHTML||'';
-    if(text&&!hasConsent()&&hasTrackerCode(text)){
-      child.type='javascript/blocked';
-      child.textContent='';
-      console.log('[Consent SDK] ✓ Blocked inline script via appendChild');
+    // CRITICAL: Check consent LIVE, not cached
+    if(!hasConsent()){
+      var src=child.src||child.getAttribute('src')||'';
+      if(src&&isTracker(src)){
+        blockScript(child);
+        return child; // Return child but it's removed, prevents execution
+      }
+      var text=child.textContent||child.innerHTML||'';
+      if(text&&hasTrackerCode(text)){
+        blockScript(child);
+        return child;
+      }
     }
   }
   return origAppendChild.call(this,child);
@@ -431,23 +436,90 @@ Node.prototype.appendChild=function(child){
 
 Node.prototype.insertBefore=function(newNode,referenceNode){
   if(newNode&&newNode.tagName&&newNode.tagName.toLowerCase()==='script'){
-    var src=newNode.src||newNode.getAttribute('src')||'';
-    if(src&&!hasConsent()&&isTracker(src)){
-      blockScript(newNode);
-      console.log('[Consent SDK] ✓ Blocked script via insertBefore');
-    }
-    var text=newNode.textContent||newNode.innerHTML||'';
-    if(text&&!hasConsent()&&hasTrackerCode(text)){
-      newNode.type='javascript/blocked';
-      newNode.textContent='';
-      console.log('[Consent SDK] ✓ Blocked inline script via insertBefore');
+    // CRITICAL: Check consent LIVE, not cached
+    if(!hasConsent()){
+      var src=newNode.src||newNode.getAttribute('src')||'';
+      if(src&&isTracker(src)){
+        blockScript(newNode);
+        return newNode;
+      }
+      var text=newNode.textContent||newNode.innerHTML||'';
+      if(text&&hasTrackerCode(text)){
+        blockScript(newNode);
+        return newNode;
+      }
     }
   }
   return origInsertBefore.call(this,newNode,referenceNode);
 };
 
-// Block tracking functions IMMEDIATELY
-if(!hasConsent()){
+// MutationObserver - CRITICAL for catching dynamically injected scripts
+// Watches for scripts added AFTER page load (GTM, React, Next.js, etc.)
+var observer=new MutationObserver(function(mutations){
+  // CRITICAL: Check consent LIVE on every mutation
+  if(hasConsent())return;
+  
+  mutations.forEach(function(mutation){
+    mutation.addedNodes.forEach(function(node){
+      if(node.nodeType===1&&node.tagName&&node.tagName.toLowerCase()==='script'){
+        var src=node.src||node.getAttribute('src')||'';
+        if(src&&isTracker(src)){
+          blockScript(node);
+        }else if(!src){
+          var text=node.textContent||node.innerHTML||'';
+          if(hasTrackerCode(text)){
+            blockScript(node);
+          }
+        }
+      }
+      // Also check for scripts inside added nodes
+      if(node.querySelectorAll){
+        var scripts=node.querySelectorAll('script');
+        for(var i=0;i<scripts.length;i++){
+          var s=scripts[i];
+          var src=s.src||s.getAttribute('src')||'';
+          if(src&&isTracker(src)){
+            blockScript(s);
+          }else if(!src){
+            var text=s.textContent||s.innerHTML||'';
+            if(hasTrackerCode(text)){
+              blockScript(s);
+            }
+          }
+        }
+      }
+    });
+  });
+});
+
+// Start observing - watch entire document for script additions
+observer.observe(document.documentElement,{
+  childList:true,
+  subtree:true
+});
+
+console.log('[Consent SDK] MutationObserver initialized for dynamic script blocking');
+
+// Store original tracking functions for restoration
+var origFbq=window.fbq;
+var origGtag=window.gtag;
+var origGa=window.ga;
+var origDataLayerPush=window.dataLayer&&window.dataLayer.push;
+var origGaqPush=window._gaq&&window._gaq.push;
+
+// Block tracking functions - check consent LIVE
+function setupFunctionBlocking(){
+  // CRITICAL: Always check consent LIVE, not cached
+  if(hasConsent()){
+    // Restore if consent granted
+    if(origFbq)window.fbq=origFbq;
+    if(origGtag)window.gtag=origGtag;
+    if(origGa)window.ga=origGa;
+    if(origDataLayerPush)window.dataLayer.push=origDataLayerPush;
+    if(origGaqPush)window._gaq.push=origGaqPush;
+    return;
+  }
+  
   // Block Meta Pixel fbq
   window.fbq=function(){
     console.log('[Consent SDK] ✓ Blocked fbq() call');
@@ -463,7 +535,6 @@ if(!hasConsent()){
   
   // Block dataLayer
   if(!window.dataLayer)window.dataLayer=[];
-  var origPush=window.dataLayer.push;
   window.dataLayer.push=function(){
     console.log('[Consent SDK] ✓ Blocked dataLayer.push()');
     return 0;
@@ -477,17 +548,23 @@ if(!hasConsent()){
   
   // Block _gaq
   if(!window._gaq)window._gaq=[];
-  var origGaqPush=window._gaq.push;
   window._gaq.push=function(){
     console.log('[Consent SDK] ✓ Blocked _gaq.push()');
     return 0;
   };
 }
 
+// Setup blocking immediately
+setupFunctionBlocking();
+
+// Re-check periodically (in case consent changes)
+setInterval(setupFunctionBlocking,1000);
+
 // Intercept XMLHttpRequest - block tracker requests
 var origXHROpen=XMLHttpRequest.prototype.open;
 var origXHRSend=XMLHttpRequest.prototype.send;
 XMLHttpRequest.prototype.open=function(method,url){
+  // CRITICAL: Check consent LIVE
   if(url&&!hasConsent()&&isTracker(url)){
     console.log('[Consent SDK] ✓ Blocked XHR:',url);
     this._blocked=true;
@@ -498,11 +575,45 @@ XMLHttpRequest.prototype.open=function(method,url){
   return origXHROpen.apply(this,arguments);
 };
 XMLHttpRequest.prototype.send=function(data){
-  if(this._blocked){
+  // CRITICAL: Re-check consent on send
+  if(this._blocked||(!hasConsent()&&this._blockedUrl&&isTracker(this._blockedUrl))){
     console.log('[Consent SDK] ✓ Blocked XHR send:',this._blockedUrl);
     return;
   }
   return origXHRSend.apply(this,arguments);
+};
+
+// Block navigator.sendBeacon - used by modern trackers
+var origSendBeacon=navigator.sendBeacon;
+navigator.sendBeacon=function(url,data){
+  // CRITICAL: Check consent LIVE
+  if(!hasConsent()&&isTracker(url)){
+    console.log('[Consent SDK] ✓ Blocked sendBeacon:',url);
+    return false;
+  }
+  return origSendBeacon.apply(this,arguments);
+};
+
+// Block Image pixel beacons - common tracking method
+var origImage=window.Image;
+window.Image=function(width,height){
+  var img=origImage(width,height);
+  var origSrc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
+  if(origSrc){
+    Object.defineProperty(img,'src',{
+      get:function(){return this.getAttribute('src')||'';},
+      set:function(url){
+        // CRITICAL: Check consent LIVE
+        if(!hasConsent()&&isTracker(url)){
+          console.log('[Consent SDK] ✓ Blocked Image pixel:',url);
+          return;
+        }
+        this.setAttribute('src',url);
+      },
+      configurable:true
+    });
+  }
+  return img;
 };
 
 console.log('[Consent SDK] Tracker blocking initialized');
@@ -633,27 +744,40 @@ function showBanner(){
 function enableTrackers(){
   console.log('[Consent SDK] Enabling trackers');
   
-  // Restore blocked scripts
-  document.querySelectorAll('script[type="javascript/blocked"]').forEach(function(s){
-    var blockedSrc=s.getAttribute('data-blocked-src')||s.src||'';
-    if(blockedSrc){
-      var n=document.createElement('script');
-      n.src=blockedSrc;
-      if(s.async)n.async=true;
-      if(s.defer)n.defer=true;
-      // Copy other attributes
-      for(var i=0;i<s.attributes.length;i++){
-        var attr=s.attributes[i];
-        if(attr.name!=='data-blocked-src'&&attr.name!=='data-original-type'&&attr.name!=='type'){
-          n.setAttribute(attr.name,attr.value);
-        }
-      }
-      if(s.parentNode){
-        s.parentNode.replaceChild(n,s);
-        console.log('[Consent SDK] Restored script:',blockedSrc);
-      }
+  // Restore blocked scripts from our stored array
+  // CRITICAL: Only restore scripts that were actually removed
+  blockedScripts.forEach(function(scriptInfo){
+    if(!scriptInfo.parent)return; // Skip if no parent (can't restore)
+    
+    var newScript=document.createElement('script');
+    if(scriptInfo.src){
+      newScript.src=scriptInfo.src;
+    }else if(scriptInfo.text){
+      newScript.textContent=scriptInfo.text;
     }
+    
+    if(scriptInfo.async)newScript.async=true;
+    if(scriptInfo.defer)newScript.defer=true;
+    if(scriptInfo.id)newScript.id=scriptInfo.id;
+    if(scriptInfo.className)newScript.className=scriptInfo.className;
+    
+    // Restore attributes
+    for(var attr in scriptInfo.attributes){
+      newScript.setAttribute(attr,scriptInfo.attributes[attr]);
+    }
+    
+    // Insert at original position
+    if(scriptInfo.nextSibling){
+      scriptInfo.parent.insertBefore(newScript,scriptInfo.nextSibling);
+    }else{
+      scriptInfo.parent.appendChild(newScript);
+    }
+    
+    console.log('[Consent SDK] Restored script:',scriptInfo.src||'inline');
   });
+  
+  // Clear blocked scripts array
+  blockedScripts=[];
   
   // Restore original functions
   document.createElement=origCreate;
@@ -662,24 +786,14 @@ function enableTrackers(){
   Node.prototype.insertBefore=origInsertBefore;
   XMLHttpRequest.prototype.open=origXHROpen;
   XMLHttpRequest.prototype.send=origXHRSend;
+  navigator.sendBeacon=origSendBeacon;
+  window.Image=origImage;
   
-  // Restore tracking functions
-  if(window.fbq&&window.fbq.toString().indexOf('Blocked')>-1){
-    delete window.fbq;
-    delete window._fbq;
-  }
-  if(window.gtag&&window.gtag.toString().indexOf('Blocked')>-1){
-    delete window.gtag;
-  }
-  if(window.ga&&window.ga.toString().indexOf('Blocked')>-1){
-    delete window.ga;
-  }
-  if(window.dataLayer&&window.dataLayer.push&&window.dataLayer.push.toString().indexOf('Blocked')>-1){
-    window.dataLayer.push=Array.prototype.push;
-  }
-  if(window._gaq&&window._gaq.push&&window._gaq.push.toString().indexOf('Blocked')>-1){
-    window._gaq.push=Array.prototype.push;
-  }
+  // Stop MutationObserver
+  if(observer)observer.disconnect();
+  
+  // Restore tracking functions (setupFunctionBlocking will handle this)
+  setupFunctionBlocking();
   
   console.log('[Consent SDK] All trackers enabled');
 }
