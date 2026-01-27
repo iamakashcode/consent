@@ -126,18 +126,15 @@ function PlansContent() {
       // Get checkout URL (prefer checkoutUrl, then subscriptionAuthUrl)
       let checkoutUrl = data.checkoutUrl || data.subscriptionAuthUrl;
       
-      // If checkout URL points to our domain, construct proper Paddle checkout URL
-      if (checkoutUrl && (checkoutUrl.includes(window.location.origin) || checkoutUrl.includes('?_ptxn='))) {
+      // If checkout URL points to our domain (embedded checkout), redirect to our checkout page
+      if (checkoutUrl && checkoutUrl.includes(window.location.origin)) {
         const transactionId = data.transactionId || checkoutUrl.match(/_ptxn=([^&]+)/)?.[1];
         if (transactionId) {
-          // Construct proper Paddle checkout URL
-          const isProduction = window.location.hostname !== 'localhost' && !window.location.hostname.includes('vercel.app');
-          const paddleCheckoutBase = isProduction 
-            ? "https://checkout.paddle.com" 
-            : "https://sandbox-checkout.paddle.com";
-          checkoutUrl = `${paddleCheckoutBase}/transaction/checkout?_ptxn=${transactionId}`;
-          console.log("[Plans] Constructed Paddle checkout URL:", checkoutUrl);
+          checkoutUrl = `/checkout?_ptxn=${transactionId}`;
+          console.log("[Plans] Using embedded checkout page:", checkoutUrl);
         }
+      } else {
+        console.log("[Plans] Using Paddle hosted checkout URL:", checkoutUrl);
       }
       
       if (checkoutUrl) {

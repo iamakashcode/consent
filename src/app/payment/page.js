@@ -94,19 +94,18 @@ function PaymentContent() {
         // Get checkout URL from response (prefer checkoutUrl, then subscriptionAuthUrl)
         let checkoutUrl = data.checkoutUrl || data.subscriptionAuthUrl;
         
-        // If checkout URL points to our domain, construct Paddle checkout URL
-        if (checkoutUrl && (checkoutUrl.includes(window.location.origin) || checkoutUrl.includes('?_ptxn='))) {
-          // Extract transaction ID from URL or use transactionId from response
+        // If checkout URL points to our domain (embedded checkout), redirect to our checkout page
+        // Format: https://ourdomain.com?_ptxn=txn_xxx
+        if (checkoutUrl && checkoutUrl.includes(window.location.origin)) {
+          // Extract transaction ID and redirect to our checkout page
           const transactionId = data.transactionId || checkoutUrl.match(/_ptxn=([^&]+)/)?.[1];
           if (transactionId) {
-            // Construct proper Paddle checkout URL
-            const isProduction = window.location.hostname !== 'localhost';
-            const paddleCheckoutBase = isProduction 
-              ? "https://checkout.paddle.com" 
-              : "https://sandbox-checkout.paddle.com";
-            checkoutUrl = `${paddleCheckoutBase}/transaction/checkout?_ptxn=${transactionId}`;
-            console.log("[Payment] Constructed Paddle checkout URL:", checkoutUrl);
+            checkoutUrl = `/checkout?_ptxn=${transactionId}`;
+            console.log("[Payment] Using embedded checkout page:", checkoutUrl);
           }
+        } else {
+          // Full Paddle hosted URL - use as-is
+          console.log("[Payment] Using Paddle hosted checkout URL:", checkoutUrl);
         }
         
         // If no checkout URL but we have subscriptionId, try to fetch it

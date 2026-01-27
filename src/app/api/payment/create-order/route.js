@@ -194,38 +194,31 @@ export async function POST(req) {
       );
     }
 
-    // Get checkout URL from transaction
-    // Paddle returns checkout.url which may be a relative URL or full URL
+    // Get checkout URL from transaction response
+    // Paddle returns checkout.url which is the actual checkout URL
     let checkoutUrl = paddleTransaction.checkout?.url;
     
-    console.log("[Payment] Transaction checkout:", {
+    console.log("[Payment] Transaction checkout response:", {
       transactionId: paddleTransaction.id,
+      status: paddleTransaction.status,
       checkout: paddleTransaction.checkout,
       checkoutUrl: checkoutUrl,
     });
     
-    // Paddle returns checkout.url which might point to our domain (embedded checkout)
-    // We need to construct the actual Paddle hosted checkout URL
-    // Format: https://checkout.paddle.com/transaction/checkout?_ptxn=txn_xxx (live)
-    // Format: https://sandbox-checkout.paddle.com/transaction/checkout?_ptxn=txn_xxx (sandbox)
-    
-    // Always construct the proper Paddle checkout URL using transaction ID
-    const isProduction = process.env.NODE_ENV === "production";
-    const paddleCheckoutBase = isProduction 
-      ? "https://checkout.paddle.com" 
-      : "https://sandbox-checkout.paddle.com";
-    
-    // Use the actual Paddle hosted checkout URL
-    checkoutUrl = `${paddleCheckoutBase}/transaction/checkout?_ptxn=${paddleTransaction.id}`;
-    
-    console.log("[Payment] Using Paddle hosted checkout URL:", checkoutUrl);
-    
+    // If checkout URL is not provided, transaction might not be ready for checkout
     if (!checkoutUrl) {
+      console.error("[Payment] No checkout URL in transaction response");
       return Response.json(
-        { error: "Failed to get checkout URL. Please try again." },
+        { error: "Checkout URL not available. Please ensure Paddle checkout is enabled in your account." },
         { status: 500 }
       );
     }
+    
+    // Paddle checkout URL format:
+    // - If embedded: https://yourdomain.com?_ptxn=txn_xxx (this is valid, use as-is)
+    // - If hosted: https://checkout.paddle.com/... (full Paddle URL)
+    // Both formats are valid - use the URL as returned by Paddle
+    console.log("[Payment] Using checkout URL from Paddle:", checkoutUrl);
 
     // Store transaction ID temporarily (subscription will be created after payment)
     const transactionId = paddleTransaction.id;

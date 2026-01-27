@@ -259,6 +259,7 @@ export async function createPaddleTransaction(priceId, customerId, siteId, domai
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
     // Create transaction with recurring price - Paddle will create subscription on payment
+    // Note: Paddle returns checkout.url in the response which is the actual checkout URL
     const transaction = await paddleRequest("POST", "/transactions", {
       items: [
         {
@@ -273,17 +274,19 @@ export async function createPaddleTransaction(priceId, customerId, siteId, domai
         siteId,
         domain,
       },
-      // Don't pass checkout.url - let Paddle return the default checkout URL
-      // checkout: {
-      //   url: null, // Use Paddle's default checkout
-      // },
+      // Optionally set checkout URL - if null, Paddle uses default
+      // If we want hosted checkout, we can pass null or omit this
+      // If we want embedded checkout, we pass our domain URL
+      checkout: {
+        url: null, // Let Paddle use default checkout URL (hosted or configured domain)
+      },
     });
 
     console.log("[Paddle] Transaction created:", {
       id: transaction.data?.id,
       status: transaction.data?.status,
       checkoutUrl: transaction.data?.checkout?.url,
-      fullCheckout: transaction.data?.checkout,
+      fullCheckout: JSON.stringify(transaction.data?.checkout, null, 2),
     });
 
     // Transaction includes checkout URL and will create subscription when paid
