@@ -724,23 +724,30 @@ return originalFbq.apply(this,arguments);
 
 console.log('[Consent SDK] Tracker blocking initialized');
 
-// Domain check first - only work on matching domain
+// Domain check - warn if mismatch but continue (banner should always show)
 var currentHost=window.location.hostname.toLowerCase();
 var allowedHost=ALLOWED_DOMAIN !== "*" ? ALLOWED_DOMAIN.toLowerCase().replace(/^www\\./,'') : null;
 currentHost=currentHost.replace(/^www\\./,'');
 
+var domainMatches=true;
 if(allowedHost && currentHost !== allowedHost){
 console.warn('[Consent SDK] Domain mismatch. Current:',currentHost,'Allowed:',allowedHost);
-console.warn('[Consent SDK] Script will not work on this domain.');
-return; // Exit if domain doesn't match
+console.warn('[Consent SDK] Some features may not work on this domain.');
+domainMatches=false;
+// Don't return - banner should still show even if domain doesn't match
+}else{
+console.log('[Consent SDK] Domain matches:',currentHost);
 }
 
-console.log('[Consent SDK] Domain matches:',currentHost);
-
-// Auto-connect domain by calling verification callback (always try to connect)
+// Auto-connect domain by calling verification callback (only if domain matches)
 console.log('[Consent SDK] Attempting to connect domain...');
 (function connectDomain(){
 if(${isPreview ? "true" : "false"}){return;}
+// Only connect if domain matches
+if(!domainMatches){
+console.log('[Consent SDK] Skipping domain connection - domain mismatch');
+return;
+}
 try{
 var currentDomain=window.location.hostname.toLowerCase().replace(/^www\\./,'');
 var verifyUrl="${verifyCallbackUrl.replace(/"/g, '\\"')}?domain="+encodeURIComponent(currentDomain)+("${isPreview ? "&preview=1" : ""}");
@@ -810,9 +817,14 @@ console.error('[Consent SDK] Error in connectDomain function:',e);
 }
 })();
 
-// Track page view
+// Track page view (only if domain matches)
 (function trackPageView(){
 if(${isPreview ? "true" : "false"}){return;}
+// Only track if domain matches
+if(!domainMatches){
+console.log('[Consent SDK] Skipping page view tracking - domain mismatch');
+return;
+}
 try{
 var trackData={
 pagePath:window.location.pathname+window.location.search,
@@ -847,18 +859,26 @@ console.log('[Consent SDK] Document ready state:', document.readyState);
 console.log('[Consent SDK] Body exists:', !!document.body);
 
 function showBanner(){
+try{
 var currentConsent=getConsentStatus();
 console.log('[Consent SDK] showBanner called, consent status:', currentConsent, 'banner exists:', !!document.getElementById('cookie-banner'));
-if(currentConsent||document.getElementById('cookie-banner'))return;
+if(currentConsent||document.getElementById('cookie-banner')){
+console.log('[Consent SDK] Banner not needed - consent already granted or banner exists');
+return;
+}
 if(!document.body){
 console.log('[Consent SDK] Body not ready, retrying in 100ms');
 setTimeout(showBanner,100);
 return;
 }
 console.log('[Consent SDK] Attempting to create banner...');
-try{
 var cfg=${JSON.stringify(bannerConfigForScript)};
 var tmpl=${JSON.stringify(bannerTemplate)};
+if(!cfg||!tmpl){
+console.error('[Consent SDK] Banner config or template missing, using defaults');
+cfg=cfg||{title:'🍪 We use cookies',message:'This site uses tracking cookies. Accept to enable analytics.',acceptButtonText:'Accept',rejectButtonText:'Reject',customizeButtonText:'Customize',position:'bottom',showRejectButton:true,showCustomizeButton:true};
+tmpl=tmpl||{style:{backgroundColor:'#667eea',textColor:'#ffffff',buttonColor:'#ffffff',buttonTextColor:'#667eea',padding:'20px',fontSize:'14px',borderRadius:'8px'}};
+}
 var pos='';
 if(cfg.position==='top'){
 pos='top:0;bottom:auto;';
@@ -950,6 +970,30 @@ console.log('[Consent SDK] Banner element:', document.getElementById('cookie-ban
 }catch(e){
 console.error('[Consent SDK] Error showing banner:',e);
 console.error('[Consent SDK] Error stack:', e.stack);
+// Fallback banner - always show something even if there's an error
+try{
+var fallbackBanner=document.createElement('div');
+fallbackBanner.id='cookie-banner';
+fallbackBanner.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#667eea;color:#fff;padding:20px;z-index:999999;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px;font-family:sans-serif;';
+fallbackBanner.innerHTML='<div style="flex:1;min-width:250px;"><h3 style="margin:0 0 8px 0;font-size:18px;">🍪 We use cookies</h3><p style="margin:0;font-size:14px;opacity:0.9;">This site uses tracking cookies. Accept to enable analytics.</p></div><div style="display:flex;gap:10px;"><button id="accept-btn-fallback" style="background:#fff;color:#667eea;border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;">Accept</button><button id="reject-btn-fallback" style="background:transparent;color:#fff;border:2px solid #fff;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;">Reject</button></div>';
+if(document.body){
+document.body.appendChild(fallbackBanner);
+document.getElementById('accept-btn-fallback').onclick=function(){
+localStorage.setItem(CONSENT_KEY,'accepted');
+localStorage.setItem(CONSENT_KEY+'_prefs',JSON.stringify({analytics:true,marketing:true}));
+fallbackBanner.remove();
+enableTrackers({analytics:true,marketing:true});
+};
+document.getElementById('reject-btn-fallback').onclick=function(){
+localStorage.setItem(CONSENT_KEY,'rejected');
+fallbackBanner.remove();
+};
+console.log('[Consent SDK] Fallback banner shown');
+}
+}catch(fallbackError){
+console.error('[Consent SDK] Even fallback banner failed:',fallbackError);
+}
+}
 // Fallback to simple banner
 var fallback=document.createElement('div');
 fallback.id='cookie-banner';
