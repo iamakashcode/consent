@@ -238,9 +238,11 @@ export async function GET(req, { params }) {
     const trackUrl = `${baseUrl}/api/sites/${finalSiteId}/track`;
 
     // Generate a clean, simple script without complex escaping
+    // CRITICAL: This must execute IMMEDIATELY before any other scripts
     const script = `(function(){
 'use strict';
-console.log('[Consent SDK] Starting...');
+// Execute immediately - no delays
+console.log('[Consent SDK] Starting - blocking trackers...');
 
 var SITE_ID='${finalSiteId}';
 var CONSENT_KEY='cookie_consent_'+SITE_ID;
@@ -271,75 +273,225 @@ function isTracker(url){
   return false;
 }
 
-// Block script
+// Block script - remove src to prevent loading
 function blockScript(s){
   if(s&&s.type!=='javascript/blocked'){
+    var src=s.src||s.getAttribute('src')||'';
+    if(src){
+      s.setAttribute('data-blocked-src',src);
+      s.removeAttribute('src');
+    }
     s.setAttribute('data-original-type',s.type||'text/javascript');
     s.type='javascript/blocked';
-    console.log('[Consent SDK] Blocked:',s.src||'inline');
+    console.log('[Consent SDK] ✓ Blocked script:',src||'inline');
   }
 }
 
-// Block existing tracker scripts
+// Check if inline script contains tracker code
+function hasTrackerCode(text){
+  if(!text)return false;
+  var lower=String(text).toLowerCase();
+  var patterns=['gtag(','ga(','_gaq','fbq(','dataLayer','analytics','tracking','pixel','doubleclick','google-analytics','googletagmanager','facebook.net','fbevents'];
+  for(var i=0;i<patterns.length;i++){
+    if(lower.indexOf(patterns[i])>-1)return true;
+  }
+  return false;
+}
+
+// Block existing tracker scripts IMMEDIATELY
 if(!hasConsent()){
-  console.log('[Consent SDK] Blocking trackers');
+  console.log('[Consent SDK] Blocking existing trackers');
   var scripts=document.querySelectorAll('script[src]');
   for(var i=0;i<scripts.length;i++){
-    if(isTracker(scripts[i].src)){
+    var src=scripts[i].src||'';
+    if(isTracker(src)){
       blockScript(scripts[i]);
+    }
+  }
+  // Block inline tracker scripts
+  var inlineScripts=document.querySelectorAll('script:not([src])');
+  for(var i=0;i<inlineScripts.length;i++){
+    var text=inlineScripts[i].textContent||inlineScripts[i].innerHTML||'';
+    if(hasTrackerCode(text)){
+      inlineScripts[i].type='javascript/blocked';
+      inlineScripts[i].textContent='';
+      console.log('[Consent SDK] ✓ Blocked inline tracker script');
     }
   }
 }
 
-// Store original functions
+// Store original functions BEFORE any scripts can use them
 var origCreate=document.createElement;
 var origFetch=window.fetch;
+var origAppendChild=Node.prototype.appendChild;
+var origInsertBefore=Node.prototype.insertBefore;
 
-// Intercept createElement
+// Intercept createElement - MUST happen before any scripts run
 document.createElement=function(tag){
   var el=origCreate.call(document,tag);
   if(tag.toLowerCase()==='script'){
     var _src='';
+    var _blocked=false;
+    
+    // Intercept src property
     Object.defineProperty(el,'src',{
       get:function(){return _src;},
       set:function(v){
         _src=v;
-        if(v)el.setAttribute('src',v);
-        if(isTracker(v)&&!hasConsent()){
+        if(v&&!hasConsent()&&isTracker(v)){
+          _blocked=true;
           blockScript(el);
+          return; // Don't set src if blocked
         }
+        if(v&&!_blocked)el.setAttribute('src',v);
+      },
+      configurable:true
+    });
+    
+    // Intercept setAttribute for src
+    var origSetAttribute=el.setAttribute;
+    el.setAttribute=function(name,value){
+      if(name==='src'&&!hasConsent()&&isTracker(value)){
+        _blocked=true;
+        blockScript(el);
+        return; // Don't set src if blocked
       }
+      return origSetAttribute.call(this,name,value);
+    };
+    
+    // Intercept textContent for inline scripts
+    var _textContent='';
+    Object.defineProperty(el,'textContent',{
+      get:function(){return _textContent;},
+      set:function(v){
+        if(v&&!hasConsent()&&hasTrackerCode(v)){
+          el.type='javascript/blocked';
+          _textContent='';
+          console.log('[Consent SDK] ✓ Blocked inline tracker');
+          return;
+        }
+        _textContent=v;
+        // Use original textContent setter if available
+        if(Object.getOwnPropertyDescriptor(HTMLElement.prototype,'textContent')){
+          Object.getOwnPropertyDescriptor(HTMLElement.prototype,'textContent').set.call(el,v);
+        }
+      },
+      configurable:true
+    });
+    
+    // Also intercept innerHTML
+    var _innerHTML='';
+    Object.defineProperty(el,'innerHTML',{
+      get:function(){return _innerHTML;},
+      set:function(v){
+        if(v&&!hasConsent()&&hasTrackerCode(v)){
+          el.type='javascript/blocked';
+          _innerHTML='';
+          console.log('[Consent SDK] ✓ Blocked inline tracker (innerHTML)');
+          return;
+        }
+        _innerHTML=v;
+        if(Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML')){
+          Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML').set.call(el,v);
+        }
+      },
+      configurable:true
     });
   }
   return el;
 };
 
-// Intercept fetch
+// Intercept fetch - block tracker requests
 window.fetch=function(input,init){
   var url=typeof input==='string'?input:(input&&input.url?input.url:'');
-  if(isTracker(url)&&!hasConsent()){
-    console.log('[Consent SDK] Blocked fetch:',url);
-    return Promise.reject(new Error('Blocked by consent'));
+  if(url&&!hasConsent()&&isTracker(url)){
+    console.log('[Consent SDK] ✓ Blocked fetch:',url);
+    return Promise.reject(new Error('Blocked by consent manager'));
   }
   return origFetch.apply(this,arguments);
 };
 
-// Block Meta Pixel fbq function
+// Intercept appendChild and insertBefore to catch scripts added to DOM
+Node.prototype.appendChild=function(child){
+  if(child&&child.tagName&&child.tagName.toLowerCase()==='script'){
+    var src=child.src||child.getAttribute('src')||'';
+    if(src&&!hasConsent()&&isTracker(src)){
+      blockScript(child);
+      console.log('[Consent SDK] ✓ Blocked script via appendChild');
+    }
+    var text=child.textContent||child.innerHTML||'';
+    if(text&&!hasConsent()&&hasTrackerCode(text)){
+      child.type='javascript/blocked';
+      child.textContent='';
+      console.log('[Consent SDK] ✓ Blocked inline script via appendChild');
+    }
+  }
+  return origAppendChild.call(this,child);
+};
+
+Node.prototype.insertBefore=function(newNode,referenceNode){
+  if(newNode&&newNode.tagName&&newNode.tagName.toLowerCase()==='script'){
+    var src=newNode.src||newNode.getAttribute('src')||'';
+    if(src&&!hasConsent()&&isTracker(src)){
+      blockScript(newNode);
+      console.log('[Consent SDK] ✓ Blocked script via insertBefore');
+    }
+    var text=newNode.textContent||newNode.innerHTML||'';
+    if(text&&!hasConsent()&&hasTrackerCode(text)){
+      newNode.type='javascript/blocked';
+      newNode.textContent='';
+      console.log('[Consent SDK] ✓ Blocked inline script via insertBefore');
+    }
+  }
+  return origInsertBefore.call(this,newNode,referenceNode);
+};
+
+// Block tracking functions IMMEDIATELY
 if(!hasConsent()){
+  // Block Meta Pixel fbq
   window.fbq=function(){
-    console.log('[Consent SDK] Blocked fbq call');
+    console.log('[Consent SDK] ✓ Blocked fbq() call');
     return false;
   };
-  if(window._fbq)window._fbq=window.fbq;
+  window._fbq=window.fbq;
+  
+  // Block Google Analytics gtag
+  window.gtag=function(){
+    console.log('[Consent SDK] ✓ Blocked gtag() call');
+    return false;
+  };
+  
+  // Block dataLayer
+  if(!window.dataLayer)window.dataLayer=[];
+  var origPush=window.dataLayer.push;
+  window.dataLayer.push=function(){
+    console.log('[Consent SDK] ✓ Blocked dataLayer.push()');
+    return 0;
+  };
+  
+  // Block Google Analytics ga function
+  window.ga=function(){
+    console.log('[Consent SDK] ✓ Blocked ga() call');
+    return false;
+  };
+  
+  // Block _gaq
+  if(!window._gaq)window._gaq=[];
+  var origGaqPush=window._gaq.push;
+  window._gaq.push=function(){
+    console.log('[Consent SDK] ✓ Blocked _gaq.push()');
+    return 0;
+  };
 }
 
-// Intercept XMLHttpRequest
+// Intercept XMLHttpRequest - block tracker requests
 var origXHROpen=XMLHttpRequest.prototype.open;
 var origXHRSend=XMLHttpRequest.prototype.send;
 XMLHttpRequest.prototype.open=function(method,url){
-  if(isTracker(url)&&!hasConsent()){
-    console.log('[Consent SDK] Blocked XHR:',url);
+  if(url&&!hasConsent()&&isTracker(url)){
+    console.log('[Consent SDK] ✓ Blocked XHR:',url);
     this._blocked=true;
+    this._blockedUrl=url;
     return;
   }
   this._blocked=false;
@@ -347,11 +499,13 @@ XMLHttpRequest.prototype.open=function(method,url){
 };
 XMLHttpRequest.prototype.send=function(data){
   if(this._blocked){
-    console.log('[Consent SDK] Blocked XHR send');
+    console.log('[Consent SDK] ✓ Blocked XHR send:',this._blockedUrl);
     return;
   }
   return origXHRSend.apply(this,arguments);
 };
+
+console.log('[Consent SDK] Tracker blocking initialized');
 
 // Domain verification
 var currentHost=window.location.hostname.toLowerCase().replace(/^www\\./,'');
@@ -478,22 +632,56 @@ function showBanner(){
 // Enable trackers after consent
 function enableTrackers(){
   console.log('[Consent SDK] Enabling trackers');
+  
+  // Restore blocked scripts
   document.querySelectorAll('script[type="javascript/blocked"]').forEach(function(s){
-    var n=document.createElement('script');
-    n.src=s.src||s.getAttribute('data-blocked-src')||'';
-    if(s.async)n.async=true;
-    if(s.defer)n.defer=true;
-    s.parentNode.replaceChild(n,s);
+    var blockedSrc=s.getAttribute('data-blocked-src')||s.src||'';
+    if(blockedSrc){
+      var n=document.createElement('script');
+      n.src=blockedSrc;
+      if(s.async)n.async=true;
+      if(s.defer)n.defer=true;
+      // Copy other attributes
+      for(var i=0;i<s.attributes.length;i++){
+        var attr=s.attributes[i];
+        if(attr.name!=='data-blocked-src'&&attr.name!=='data-original-type'&&attr.name!=='type'){
+          n.setAttribute(attr.name,attr.value);
+        }
+      }
+      if(s.parentNode){
+        s.parentNode.replaceChild(n,s);
+        console.log('[Consent SDK] Restored script:',blockedSrc);
+      }
+    }
   });
+  
+  // Restore original functions
   document.createElement=origCreate;
   window.fetch=origFetch;
+  Node.prototype.appendChild=origAppendChild;
+  Node.prototype.insertBefore=origInsertBefore;
   XMLHttpRequest.prototype.open=origXHROpen;
   XMLHttpRequest.prototype.send=origXHRSend;
-  // Restore fbq if it was blocked
+  
+  // Restore tracking functions
   if(window.fbq&&window.fbq.toString().indexOf('Blocked')>-1){
     delete window.fbq;
-    if(window._fbq)delete window._fbq;
+    delete window._fbq;
   }
+  if(window.gtag&&window.gtag.toString().indexOf('Blocked')>-1){
+    delete window.gtag;
+  }
+  if(window.ga&&window.ga.toString().indexOf('Blocked')>-1){
+    delete window.ga;
+  }
+  if(window.dataLayer&&window.dataLayer.push&&window.dataLayer.push.toString().indexOf('Blocked')>-1){
+    window.dataLayer.push=Array.prototype.push;
+  }
+  if(window._gaq&&window._gaq.push&&window._gaq.push.toString().indexOf('Blocked')>-1){
+    window._gaq.push=Array.prototype.push;
+  }
+  
+  console.log('[Consent SDK] All trackers enabled');
 }
 
 // Show banner
