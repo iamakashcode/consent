@@ -177,28 +177,59 @@ export async function GET(req, { params }) {
 
     const effectiveConfig = previewConfig || normalizedBannerConfig || {};
 
-    // Extract banner configuration values with safe defaults
-    const bgColor = effectiveConfig.backgroundColor || '#667eea';
-    const textColor = effectiveConfig.textColor || '#ffffff';
-    const buttonColor = effectiveConfig.buttonColor || '#ffffff';
-    const buttonTextColor = effectiveConfig.buttonTextColor || '#667eea';
-    const position = effectiveConfig.position || 'bottom';
-    const title = (effectiveConfig.title || 'We use cookies').replace(/'/g, "\\'").replace(/"/g, '\\"');
-    const message = (effectiveConfig.message || effectiveConfig.description || 'This site uses tracking cookies. Accept to enable analytics.').replace(/'/g, "\\'").replace(/"/g, '\\"');
-    const acceptText = (effectiveConfig.acceptButtonText || effectiveConfig.acceptText || 'Accept').replace(/'/g, "\\'").replace(/"/g, '\\"');
-    const rejectText = (effectiveConfig.rejectButtonText || effectiveConfig.rejectText || 'Reject').replace(/'/g, "\\'").replace(/"/g, '\\"');
+    // Get template and merge with config
+    const templateKey = effectiveConfig.template || DEFAULT_BANNER_CONFIG.template;
+    const baseTemplate = BANNER_TEMPLATES[templateKey] || BANNER_TEMPLATES.minimal;
+    
+    // Merge template styles with config overrides
+    const bannerStyle = {
+      backgroundColor: effectiveConfig.backgroundColor || baseTemplate.style.backgroundColor || '#667eea',
+      textColor: effectiveConfig.textColor || baseTemplate.style.textColor || '#ffffff',
+      buttonColor: effectiveConfig.buttonColor || baseTemplate.style.buttonColor || '#ffffff',
+      buttonTextColor: effectiveConfig.buttonTextColor || baseTemplate.style.buttonTextColor || '#667eea',
+      borderRadius: effectiveConfig.borderRadius || baseTemplate.style.borderRadius || '8px',
+      padding: effectiveConfig.padding || baseTemplate.style.padding || '20px',
+      fontSize: effectiveConfig.fontSize || baseTemplate.style.fontSize || '14px',
+      border: effectiveConfig.border || baseTemplate.style.border || '',
+      boxShadow: effectiveConfig.boxShadow || baseTemplate.style.boxShadow || '',
+    };
+
+    const position = effectiveConfig.position || baseTemplate.position || DEFAULT_BANNER_CONFIG.position;
+    const title = (effectiveConfig.title || DEFAULT_BANNER_CONFIG.title).replace(/'/g, "\\'").replace(/"/g, '\\"');
+    const message = (effectiveConfig.message || effectiveConfig.description || DEFAULT_BANNER_CONFIG.message).replace(/'/g, "\\'").replace(/"/g, '\\"');
+    const acceptText = (effectiveConfig.acceptButtonText || effectiveConfig.acceptText || DEFAULT_BANNER_CONFIG.acceptButtonText).replace(/'/g, "\\'").replace(/"/g, '\\"');
+    const rejectText = (effectiveConfig.rejectButtonText || effectiveConfig.rejectText || DEFAULT_BANNER_CONFIG.rejectButtonText).replace(/'/g, "\\'").replace(/"/g, '\\"');
     const showReject = effectiveConfig.showRejectButton !== false;
 
+    // Comprehensive tracker domains list including Meta Pixel
     const trackerDomains = [
       "google-analytics.com",
+      "www.google-analytics.com",
       "googletagmanager.com",
+      "www.googletagmanager.com",
+      "gtag.js",
+      "analytics.js",
+      "ga.js",
       "facebook.net",
       "connect.facebook.net",
+      "www.facebook.com/tr",
+      "facebook.com/tr",
+      "fbevents.js",
       "doubleclick.net",
       "googleadservices.com",
       "googlesyndication.com",
+      "licdn.com",
+      "snap.licdn.com",
+      "twitter.com",
+      "analytics.twitter.com",
       "hotjar.com",
-      "clarity.ms"
+      "clarity.ms",
+      "omniture.com",
+      "adobe.com",
+      "segment.io",
+      "segment.com",
+      "mixpanel.com",
+      "amplitude.com"
     ];
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
@@ -293,6 +324,35 @@ window.fetch=function(input,init){
   return origFetch.apply(this,arguments);
 };
 
+// Block Meta Pixel fbq function
+if(!hasConsent()){
+  window.fbq=function(){
+    console.log('[Consent SDK] Blocked fbq call');
+    return false;
+  };
+  if(window._fbq)window._fbq=window.fbq;
+}
+
+// Intercept XMLHttpRequest
+var origXHROpen=XMLHttpRequest.prototype.open;
+var origXHRSend=XMLHttpRequest.prototype.send;
+XMLHttpRequest.prototype.open=function(method,url){
+  if(isTracker(url)&&!hasConsent()){
+    console.log('[Consent SDK] Blocked XHR:',url);
+    this._blocked=true;
+    return;
+  }
+  this._blocked=false;
+  return origXHROpen.apply(this,arguments);
+};
+XMLHttpRequest.prototype.send=function(data){
+  if(this._blocked){
+    console.log('[Consent SDK] Blocked XHR send');
+    return;
+  }
+  return origXHRSend.apply(this,arguments);
+};
+
 // Domain verification
 var currentHost=window.location.hostname.toLowerCase().replace(/^www\\./,'');
 var allowedHost=ALLOWED_DOMAIN!=='*'?ALLOWED_DOMAIN.toLowerCase().replace(/^www\\./,''):null;
@@ -343,11 +403,34 @@ function showBanner(){
   var banner=document.createElement('div');
   banner.id='cookie-banner';
   
-  // Position styles
-  var posStyle='bottom:0;left:0;right:0;';
-  if('${position}'==='top')posStyle='top:0;left:0;right:0;';
+  // Position styles based on config
+  var posStyle='';
+  var pos='${position}';
+  if(pos==='top')posStyle='top:0;bottom:auto;left:0;right:0;';
+  else if(pos==='bottom-left')posStyle='bottom:20px;top:auto;left:20px;right:auto;';
+  else if(pos==='bottom-right')posStyle='bottom:20px;top:auto;left:auto;right:20px;';
+  else if(pos==='top-left')posStyle='top:20px;bottom:auto;left:20px;right:auto;';
+  else if(pos==='top-right')posStyle='top:20px;bottom:auto;left:auto;right:20px;';
+  else posStyle='bottom:0;top:auto;left:0;right:0;';
   
-  banner.style.cssText='position:fixed;'+posStyle+'background:${bgColor};color:${textColor};padding:20px;z-index:999999;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;';
+  // Build complete style from config
+  var bannerCss='position:fixed;'+posStyle;
+  bannerCss+='background:${bannerStyle.backgroundColor};';
+  bannerCss+='color:${bannerStyle.textColor};';
+  bannerCss+='padding:${bannerStyle.padding};';
+  bannerCss+='z-index:999999;';
+  bannerCss+='display:flex;';
+  bannerCss+='align-items:center;';
+  bannerCss+='justify-content:space-between;';
+  bannerCss+='flex-wrap:wrap;';
+  bannerCss+='gap:15px;';
+  bannerCss+='font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
+  bannerCss+='font-size:${bannerStyle.fontSize};';
+  bannerCss+='border-radius:${bannerStyle.borderRadius};';
+  ${bannerStyle.border ? `bannerCss+='border:${bannerStyle.border.replace(/'/g, "\\'")};';` : ''}
+  ${bannerStyle.boxShadow ? `bannerCss+='box-shadow:${bannerStyle.boxShadow.replace(/'/g, "\\'")};';` : ''}
+  
+  banner.style.cssText=bannerCss;
   
   // Create content
   var content=document.createElement('div');
@@ -361,7 +444,9 @@ function showBanner(){
   // Accept button
   var acceptBtn=document.createElement('button');
   acceptBtn.textContent='${acceptText}';
-  acceptBtn.style.cssText='background:${buttonColor};color:${buttonTextColor};border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;';
+  acceptBtn.style.cssText='background:${bannerStyle.buttonColor};color:${bannerStyle.buttonTextColor};border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:${bannerStyle.fontSize};transition:opacity 0.2s;';
+  acceptBtn.onmouseover=function(){this.style.opacity='0.9';};
+  acceptBtn.onmouseout=function(){this.style.opacity='1';};
   acceptBtn.onclick=function(){
     localStorage.setItem(CONSENT_KEY,'accepted');
     banner.remove();
@@ -373,7 +458,9 @@ function showBanner(){
   ${showReject ? `
   var rejectBtn=document.createElement('button');
   rejectBtn.textContent='${rejectText}';
-  rejectBtn.style.cssText='background:transparent;color:${textColor};border:2px solid ${textColor};padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;';
+  rejectBtn.style.cssText='background:transparent;color:${bannerStyle.textColor};border:2px solid ${bannerStyle.textColor};padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:${bannerStyle.fontSize};transition:opacity 0.2s;';
+  rejectBtn.onmouseover=function(){this.style.opacity='0.9';};
+  rejectBtn.onmouseout=function(){this.style.opacity='1';};
   rejectBtn.onclick=function(){
     localStorage.setItem(CONSENT_KEY,'rejected');
     banner.remove();
@@ -400,6 +487,13 @@ function enableTrackers(){
   });
   document.createElement=origCreate;
   window.fetch=origFetch;
+  XMLHttpRequest.prototype.open=origXHROpen;
+  XMLHttpRequest.prototype.send=origXHRSend;
+  // Restore fbq if it was blocked
+  if(window.fbq&&window.fbq.toString().indexOf('Blocked')>-1){
+    delete window.fbq;
+    if(window._fbq)delete window._fbq;
+  }
 }
 
 // Show banner
