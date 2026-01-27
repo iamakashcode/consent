@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
 /**
- * Callback handler for Razorpay subscription setup
- * This is called after user adds payment method to subscription
+ * Callback handler for Paddle subscription setup
+ * This is called after user completes payment in Paddle checkout
  */
 export async function GET(req) {
   try {
@@ -17,37 +17,27 @@ export async function GET(req) {
       return NextResponse.redirect(new URL("/payment?error=missing_subscription", req.url));
     }
 
-    // Find subscription in database
+    // Find subscription in database (using Paddle subscription ID)
     let subscription = null;
     try {
       subscription = await prisma.subscription.findFirst({
-        where: { razorpaySubscriptionId: subscriptionId },
+        where: { 
+          OR: [
+            { paddleSubscriptionId: subscriptionId },
+            { paddleTransactionId: subscriptionId },
+          ]
+        },
         include: { site: { include: { user: true } } },
       });
     } catch (findError) {
       console.error("[Subscription Callback] Error finding subscription:", findError.message);
-      // Try without relation
-      try {
-        const sub = await prisma.subscription.findFirst({
-          where: { razorpaySubscriptionId: subscriptionId },
-        });
-        if (sub) {
-          const site = await prisma.site.findUnique({
-            where: { id: sub.siteId },
-            include: { user: true },
-          });
-          subscription = sub ? { ...sub, site } : null;
-        }
-      } catch (fallbackError) {
-        console.error("[Subscription Callback] Fallback also failed:", fallbackError.message);
-      }
     }
 
     if (!subscription) {
       return NextResponse.redirect(new URL("/payment?error=subscription_not_found", req.url));
     }
 
-    // Update subscription status based on Razorpay status
+    // Update subscription status based on Paddle payment status
     if (status === "authenticated" || status === "active") {
       try {
         await prisma.subscription.update({

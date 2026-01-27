@@ -1,181 +1,25 @@
 import { prisma } from "@/lib/prisma";
-import { createRazorpayOrder, PLAN_PRICING } from "@/lib/razorpay";
-import { razorpay } from "@/lib/razorpay";
+// Note: This endpoint is not needed with Paddle as Paddle handles recurring billing automatically
+// Keeping this for legacy/compatibility but it won't process charges
 
 /**
  * Webhook endpoint to charge users after trial ends
- * This should be called by a cron job (e.g., Vercel Cron) daily
  * 
- * To set up Vercel Cron:
- * Add to vercel.json:
- * {
- *   "crons": [{
- *     "path": "/api/webhooks/charge-trial",
- *     "schedule": "0 0 * * *"
- *   }]
- * }
+ * NOTE: With Paddle, this endpoint is NOT needed as Paddle handles recurring billing automatically.
+ * Paddle automatically charges customers after trial ends based on subscription settings.
+ * 
+ * This endpoint is kept for compatibility but returns a message that it's not needed.
+ * 
+ * With Paddle: Billing is handled automatically by Paddle.
  */
 export async function POST(req) {
-  try {
-    // Optional: Add authentication/authorization check
-    const authHeader = req.headers.get("authorization");
-    const expectedToken = process.env.CRON_SECRET;
-    
-    if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const now = new Date();
-    
-    // Find all subscriptions where:
-    // 1. Plan is "basic"
-    // 2. Trial has ended (trialEndAt < now)
-    // 3. Payment period has ended or doesn't exist (currentPeriodEnd < now or is null)
-    // 4. Status is still "active" (hasn't been cancelled)
-    const expiredTrials = await prisma.subscription.findMany({
-      where: {
-        plan: "basic",
-        status: "active",
-        trialEndAt: {
-          lte: now, // Trial has ended
-        },
-        OR: [
-          { currentPeriodEnd: null },
-          { currentPeriodEnd: { lte: now } }, // Payment period has ended
-        ],
-      },
-      include: {
-        site: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    console.log(`[Charge Trial] Found ${expiredTrials.length} expired trials to charge`);
-
-    const results = [];
-
-    for (const subscription of expiredTrials) {
-      try {
-        // Check if there's already a pending order
-        if (subscription.razorpayOrderId) {
-          try {
-            const existingOrder = await razorpay.orders.fetch(subscription.razorpayOrderId);
-            // If order is still pending (created but not paid), skip
-            if (existingOrder.status === "created") {
-              console.log(`[Charge Trial] Order ${subscription.razorpayOrderId} already exists for site ${subscription.siteId}, skipping`);
-              results.push({
-                siteId: subscription.siteId,
-                domain: subscription.site.domain,
-                status: "skipped",
-                reason: "Order already exists",
-              });
-              continue;
-            }
-          } catch (error) {
-            // Order doesn't exist, proceed to create new one
-            console.log(`[Charge Trial] Existing order not found, creating new one`);
-          }
-        }
-
-        // Create new payment order for automatic charging
-        const amount = PLAN_PRICING.basic; // ₹5 = 500 paise
-        
-        // Try to create Razorpay subscription if plan ID exists
-        let subscriptionCreated = false;
-        if (subscription.razorpayPlanId) {
-          try {
-            // Create customer first (if needed)
-            // Then create subscription
-            // For now, we'll use one-time payment and set up subscription link
-            const order = await createRazorpayOrder(amount);
-            
-            // Store order for payment
-            await prisma.subscription.update({
-              where: { siteId: subscription.siteId },
-              data: {
-                razorpayOrderId: order.id,
-                status: "pending_payment",
-              },
-            });
-            
-            subscriptionCreated = true;
-            
-            results.push({
-              siteId: subscription.siteId,
-              domain: subscription.site.domain,
-              email: subscription.site.user.email,
-              status: "order_created",
-              orderId: order.id,
-              amount: amount / 100,
-              note: "Payment order created. User needs to complete payment.",
-            });
-          } catch (subError) {
-            console.error(`[Charge Trial] Failed to create subscription for site ${subscription.siteId}:`, subError);
-            // Fall through to create regular order
-          }
-        }
-        
-        if (!subscriptionCreated) {
-          // Create regular payment order
-          const order = await createRazorpayOrder(amount);
-
-          // Update subscription with new order ID
-          await prisma.subscription.update({
-            where: { siteId: subscription.siteId },
-            data: {
-              razorpayOrderId: order.id,
-              // Mark as pending payment
-              status: "pending_payment",
-            },
-          });
-
-          console.log(`[Charge Trial] Created order ${order.id} for site ${subscription.siteId} (${subscription.site.domain})`);
-
-          results.push({
-            siteId: subscription.siteId,
-            domain: subscription.site.domain,
-            email: subscription.site.user.email,
-            status: "order_created",
-            orderId: order.id,
-            amount: amount / 100, // Convert paise to rupees
-          });
-        }
-
-        // TODO: Send email notification to user about payment due
-        // You can integrate with an email service here
-
-        } catch (error) {
-          console.error(`[Charge Trial] Error processing subscription for site ${subscription.siteId}:`, error);
-          results.push({
-            siteId: subscription.siteId,
-            domain: subscription.site.domain,
-            status: "error",
-            error: error.message,
-          });
-        }
-    }
-
-    return Response.json({
-      success: true,
-      processed: results.length,
-      results,
-      message: `Processed ${results.length} expired trials`,
-    });
-  } catch (error) {
-    console.error("[Charge Trial] Webhook error:", error);
-    return Response.json(
-      { error: error.message || "Failed to process expired trials" },
-      { status: 500 }
-    );
-  }
+  // With Paddle, recurring billing is handled automatically
+  // This endpoint is kept for compatibility but returns a message
+  return Response.json({
+    success: true,
+    message: "Paddle handles recurring billing automatically. This endpoint is not needed.",
+    note: "Paddle automatically charges customers after trial ends based on subscription settings.",
+  });
 }
 
 /**
@@ -184,7 +28,7 @@ export async function POST(req) {
 export async function GET(req) {
   return Response.json({
     message: "Charge Trial Webhook",
-    description: "POST to this endpoint to charge users after trial ends",
-    note: "Set up a cron job to call this endpoint daily",
+    description: "With Paddle, recurring billing is handled automatically. This endpoint is not needed.",
+    note: "Paddle automatically charges customers after trial ends based on subscription settings.",
   });
 }
