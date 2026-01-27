@@ -252,41 +252,75 @@ var CONSENT_KEY='cookie_consent_'+SITE_ID;
 // ============================================================
 // STEP 1: SAFE FUNCTION STUBBING (FIRST LINE OF EXECUTION)
 // This MUST run before ANY other code, even before consent check
+// CRITICAL: ALWAYS override, don't check if exists (trackers may already be loaded)
 // ============================================================
 
+// Store originals globally for restoration
+var _origFbq,_origGtag,_origGa,_origDataLayerPush,_origGaqPush;
+
 (function stubTrackingFunctionsFirst(){
-  // Block Meta Pixel - fbq (MUST be first)
-  if(!window.fbq){
-    window.fbq=function(){return undefined;};
-    window.fbq.queue=[];
-    window.fbq.loaded=true;
-    window.fbq.version='2.0';
-    window.fbq.push=window.fbq;
-    window.fbq.callMethod=function(){return undefined;};
-    window._fbq=window.fbq;
-  }
+  // Store originals if they exist (for restoration later)
+  _origFbq=window.fbq;
+  _origGtag=window.gtag;
+  _origGa=window.ga;
+  _origDataLayerPush=window.dataLayer&&window.dataLayer.push;
+  _origGaqPush=window._gaq&&window._gaq.push;
   
-  // Block Google Analytics - gtag
-  if(!window.gtag){
-    window.gtag=function(){return undefined;};
-  }
+  // ALWAYS override Meta Pixel - fbq (MUST be first)
+  window.fbq=function(){
+    if(hasConsent()&&_origFbq)return _origFbq.apply(this,arguments);
+    console.log('[Consent SDK] ✓ Blocked fbq()');
+    return undefined;
+  };
+  window.fbq.queue=[];
+  window.fbq.loaded=true;
+  window.fbq.version='2.0';
+  window.fbq.push=window.fbq;
+  window.fbq.callMethod=function(){return undefined;};
+  window._fbq=window.fbq;
   
-  // Block dataLayer
-  if(!window.dataLayer){
-    window.dataLayer=[];
-  }
+  // ALWAYS override Google Analytics - gtag
+  window.gtag=function(){
+    if(hasConsent()&&_origGtag)return _origGtag.apply(this,arguments);
+    console.log('[Consent SDK] ✓ Blocked gtag()');
+    return undefined;
+  };
   
-  // Block classic GA - ga
-  if(!window.ga){
-    window.ga=function(){return undefined;};
-    window.ga.l=Date.now();
-    window.ga.q=[];
-  }
+  // ALWAYS override dataLayer
+  if(!window.dataLayer)window.dataLayer=[];
+  var _origPush=window.dataLayer.push;
+  window.dataLayer.push=function(){
+    if(hasConsent()&&_origPush)return _origPush.apply(window.dataLayer,arguments);
+    var args=Array.prototype.slice.call(arguments);
+    var isTracking=args.some(function(arg){
+      if(typeof arg==='object'&&arg!==null){
+        return arg.event||arg['gtm.start']||arg.ecommerce;
+      }
+      return false;
+    });
+    if(isTracking){
+      console.log('[Consent SDK] ✓ Blocked dataLayer.push()');
+      return 0;
+    }
+    return _origPush?_origPush.apply(window.dataLayer,arguments):window.dataLayer.length;
+  };
   
-  // Block legacy _gaq
-  if(!window._gaq){
-    window._gaq=[];
-  }
+  // ALWAYS override classic GA - ga
+  window.ga=function(){
+    if(hasConsent()&&_origGa)return _origGa.apply(this,arguments);
+    console.log('[Consent SDK] ✓ Blocked ga()');
+    return undefined;
+  };
+  window.ga.l=Date.now();
+  window.ga.q=[];
+  
+  // ALWAYS override legacy _gaq
+  if(!window._gaq)window._gaq=[];
+  window._gaq.push=function(){
+    if(hasConsent())return Array.prototype.push.apply(window._gaq,arguments);
+    console.log('[Consent SDK] ✓ Blocked _gaq.push()');
+    return 0;
+  };
   
   console.log('[Consent SDK] Tracking functions stubbed (first line)');
 })();
@@ -441,6 +475,7 @@ document.createElement=function(tagName,options){
           this.setAttribute('data-consent-blocked','true');
           this.setAttribute('data-blocked-src',url);
           this.type='javascript/blocked';
+          // Don't set src - prevents loading
           return;
         }
         
@@ -514,7 +549,63 @@ document.createElement=function(tagName,options){
 console.log('[Consent SDK] document.createElement overridden for pre-execution blocking');
 
 // ============================================================
-// STEP 6: beforescriptexecute EVENT HANDLING
+// STEP 6: INTERCEPT appendChild AND insertBefore
+// Catch scripts added dynamically (GTM, React, Next.js, etc.)
+// ============================================================
+
+var origAppendChild=Node.prototype.appendChild;
+var origInsertBefore=Node.prototype.insertBefore;
+
+Node.prototype.appendChild=function(child){
+  if(child&&child.tagName&&child.tagName.toLowerCase()==='script'){
+    if(!hasConsent()){
+      var src=child.src||child.getAttribute('src')||'';
+      var text=child.textContent||child.innerHTML||'';
+      var provider=matchesBlockedProvider(src,text);
+      var hasCode=!src&&hasTrackerCode(text);
+      
+      if(provider||hasCode){
+        console.log('[Consent SDK] ✓ Blocked script (appendChild):',src||'inline');
+        var backup=backupNode(child);
+        if(backup)blockedNodes.push(backup);
+        child.setAttribute('data-consent-blocked','true');
+        if(src)child.setAttribute('data-blocked-src',src);
+        child.type='javascript/blocked';
+        // Don't append - prevents execution
+        return child;
+      }
+    }
+  }
+  return origAppendChild.call(this,child);
+};
+
+Node.prototype.insertBefore=function(newNode,referenceNode){
+  if(newNode&&newNode.tagName&&newNode.tagName.toLowerCase()==='script'){
+    if(!hasConsent()){
+      var src=newNode.src||newNode.getAttribute('src')||'';
+      var text=newNode.textContent||newNode.innerHTML||'';
+      var provider=matchesBlockedProvider(src,text);
+      var hasCode=!src&&hasTrackerCode(text);
+      
+      if(provider||hasCode){
+        console.log('[Consent SDK] ✓ Blocked script (insertBefore):',src||'inline');
+        var backup=backupNode(newNode);
+        if(backup)blockedNodes.push(backup);
+        newNode.setAttribute('data-consent-blocked','true');
+        if(src)newNode.setAttribute('data-blocked-src',src);
+        newNode.type='javascript/blocked';
+        // Don't insert - prevents execution
+        return newNode;
+      }
+    }
+  }
+  return origInsertBefore.call(this,newNode,referenceNode);
+};
+
+console.log('[Consent SDK] appendChild/insertBefore intercepted');
+
+// ============================================================
+// STEP 7: beforescriptexecute EVENT HANDLING
 // This is MANDATORY to stop inline Meta Pixel bootstrap and cached GTM scripts
 // ============================================================
 
@@ -563,7 +654,7 @@ function blockExistingScripts(){
   
   console.log('[Consent SDK] Blocking existing scripts in DOM...');
   
-  // Block external scripts
+  // Block external scripts - PHYSICALLY REMOVE from DOM
   var scripts=document.querySelectorAll('script[src]');
   for(var i=0;i<scripts.length;i++){
     var s=scripts[i];
@@ -573,17 +664,25 @@ function blockExistingScripts(){
     var provider=matchesBlockedProvider(src,'');
     
     if(provider){
-      console.log('[Consent SDK] ✓ Blocked existing script:',src);
+      console.log('[Consent SDK] ✓ Blocking existing script:',src);
       var backup=backupNode(s);
       if(backup)blockedNodes.push(backup);
-      s.setAttribute('data-consent-blocked','true');
-      s.setAttribute('data-blocked-src',src);
-      s.type='javascript/blocked';
-      attachBeforeScriptExecute(s);
+      
+      // PHYSICALLY REMOVE from DOM to prevent execution
+      if(s.parentNode){
+        s.parentNode.removeChild(s);
+        console.log('[Consent SDK] ✓ Removed tracker script from DOM:',src);
+      }else{
+        // If no parent, mark as blocked
+        s.setAttribute('data-consent-blocked','true');
+        s.setAttribute('data-blocked-src',src);
+        s.type='javascript/blocked';
+        if(s.src)s.removeAttribute('src');
+      }
     }
   }
   
-  // Block inline scripts
+  // Block inline scripts - PHYSICALLY REMOVE from DOM
   var inlineScripts=document.querySelectorAll('script:not([src])');
   for(var i=0;i<inlineScripts.length;i++){
     var s=inlineScripts[i];
@@ -591,16 +690,25 @@ function blockExistingScripts(){
     
     var text=s.textContent||s.innerHTML||'';
     if(hasTrackerCode(text)){
-      console.log('[Consent SDK] ✓ Blocked existing inline script');
+      console.log('[Consent SDK] ✓ Blocking existing inline script');
       var backup=backupNode(s);
       if(backup)blockedNodes.push(backup);
-      s.setAttribute('data-consent-blocked','true');
-      s.type='javascript/blocked';
-      attachBeforeScriptExecute(s);
+      
+      // PHYSICALLY REMOVE from DOM to prevent execution
+      if(s.parentNode){
+        s.parentNode.removeChild(s);
+        console.log('[Consent SDK] ✓ Removed inline tracker script from DOM');
+      }else{
+        // If no parent, mark as blocked
+        s.setAttribute('data-consent-blocked','true');
+        s.type='javascript/blocked';
+        s.textContent='';
+        s.innerHTML='';
+      }
     }
   }
   
-  // Attach beforescriptexecute to ALL scripts (even if not blocked yet)
+  // Attach beforescriptexecute to remaining scripts (Firefox only, but doesn't hurt)
   var allScripts=document.querySelectorAll('script');
   for(var i=0;i<allScripts.length;i++){
     attachBeforeScriptExecute(allScripts[i]);
@@ -783,10 +891,17 @@ var observer=new MutationObserver(function(mutations){
           console.log('[Consent SDK] ✓ Blocked dynamic script (MutationObserver):',src||'inline');
           var backup=backupNode(node);
           if(backup)blockedNodes.push(backup);
-          node.setAttribute('data-consent-blocked','true');
-          if(src)node.setAttribute('data-blocked-src',src);
-          node.type='javascript/blocked';
-          attachBeforeScriptExecute(node);
+          
+          // PHYSICALLY REMOVE from DOM
+          if(node.parentNode){
+            node.parentNode.removeChild(node);
+            console.log('[Consent SDK] ✓ Removed dynamic script from DOM:',src||'inline');
+          }else{
+            node.setAttribute('data-consent-blocked','true');
+            if(src)node.setAttribute('data-blocked-src',src);
+            node.type='javascript/blocked';
+            attachBeforeScriptExecute(node);
+          }
         }
       }
       // Check scripts inside added nodes
@@ -803,10 +918,17 @@ var observer=new MutationObserver(function(mutations){
             console.log('[Consent SDK] ✓ Blocked nested script (MutationObserver):',src||'inline');
             var backup=backupNode(s);
             if(backup)blockedNodes.push(backup);
-            s.setAttribute('data-consent-blocked','true');
-            if(src)s.setAttribute('data-blocked-src',src);
-            s.type='javascript/blocked';
-            attachBeforeScriptExecute(s);
+            
+            // PHYSICALLY REMOVE from DOM
+            if(s.parentNode){
+              s.parentNode.removeChild(s);
+              console.log('[Consent SDK] ✓ Removed nested script from DOM:',src||'inline');
+            }else{
+              s.setAttribute('data-consent-blocked','true');
+              if(src)s.setAttribute('data-blocked-src',src);
+              s.type='javascript/blocked';
+              attachBeforeScriptExecute(s);
+            }
           }
         }
       }
@@ -987,6 +1109,10 @@ function enableTrackers(){
   // Restore document.createElement to original
   document.createElement=origCreateElement;
   
+  // Restore appendChild and insertBefore
+  Node.prototype.appendChild=origAppendChild;
+  Node.prototype.insertBefore=origInsertBefore;
+  
   // Restore network interception functions
   window.fetch=origFetch;
   XMLHttpRequest.prototype.open=origXHROpen;
@@ -997,17 +1123,38 @@ function enableTrackers(){
   // Stop MutationObserver
   if(observer)observer.disconnect();
   
-  // Restore tracking functions by deleting our blocking stubs
-  // This allows the real tracker scripts to recreate them when they load
-  delete window.fbq;
-  delete window._fbq;
-  delete window.gtag;
-  delete window.ga;
-  // Restore dataLayer.push to standard array push
-  if(window.dataLayer){
+  // Restore tracking functions - use originals if they exist, otherwise delete stubs
+  if(_origFbq){
+    window.fbq=_origFbq;
+    window._fbq=_origFbq;
+  }else{
+    delete window.fbq;
+    delete window._fbq;
+  }
+  
+  if(_origGtag){
+    window.gtag=_origGtag;
+  }else{
+    delete window.gtag;
+  }
+  
+  if(_origGa){
+    window.ga=_origGa;
+  }else{
+    delete window.ga;
+  }
+  
+  // Restore dataLayer.push
+  if(_origDataLayerPush){
+    window.dataLayer.push=_origDataLayerPush;
+  }else if(window.dataLayer){
     window.dataLayer.push=Array.prototype.push;
   }
-  if(window._gaq){
+  
+  // Restore _gaq.push
+  if(_origGaqPush){
+    window._gaq.push=_origGaqPush;
+  }else if(window._gaq){
     window._gaq.push=Array.prototype.push;
   }
   
