@@ -195,7 +195,31 @@ export async function POST(req) {
     }
 
     // Get checkout URL from transaction
-    const checkoutUrl = paddleTransaction.checkout?.url;
+    // Paddle returns checkout.url which may be a relative URL or full URL
+    let checkoutUrl = paddleTransaction.checkout?.url;
+    
+    console.log("[Payment] Transaction checkout:", {
+      transactionId: paddleTransaction.id,
+      checkout: paddleTransaction.checkout,
+      checkoutUrl: checkoutUrl,
+    });
+    
+    // Paddle returns checkout.url which might point to our domain (embedded checkout)
+    // We need to construct the actual Paddle hosted checkout URL
+    // Format: https://checkout.paddle.com/transaction/checkout?_ptxn=txn_xxx (live)
+    // Format: https://sandbox-checkout.paddle.com/transaction/checkout?_ptxn=txn_xxx (sandbox)
+    
+    // Always construct the proper Paddle checkout URL using transaction ID
+    const isProduction = process.env.NODE_ENV === "production";
+    const paddleCheckoutBase = isProduction 
+      ? "https://checkout.paddle.com" 
+      : "https://sandbox-checkout.paddle.com";
+    
+    // Use the actual Paddle hosted checkout URL
+    checkoutUrl = `${paddleCheckoutBase}/transaction/checkout?_ptxn=${paddleTransaction.id}`;
+    
+    console.log("[Payment] Using Paddle hosted checkout URL:", checkoutUrl);
+    
     if (!checkoutUrl) {
       return Response.json(
         { error: "Failed to get checkout URL. Please try again." },
@@ -253,11 +277,13 @@ export async function POST(req) {
     const returnUrl = `${baseUrl}/payment/return?transaction_id=${transactionId}&siteId=${site.siteId}&redirect=${encodeURIComponent(redirectTarget)}`;
 
     console.log(`[Payment] Created transaction ${transactionId} for ${site.domain}`);
+    console.log(`[Payment] Checkout URL: ${checkoutUrl}`);
 
     return Response.json({
       success: true,
       transactionId: transactionId,
-      subscriptionAuthUrl: checkoutUrl,
+      subscriptionAuthUrl: checkoutUrl, // This should be the Paddle checkout URL
+      checkoutUrl: checkoutUrl, // Also include as checkoutUrl for clarity
       requiresPaymentSetup: true,
       returnUrl: returnUrl,
       siteId: site.siteId,

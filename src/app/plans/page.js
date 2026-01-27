@@ -123,7 +123,24 @@ function PlansContent() {
         return;
       }
 
-      if (data.subscriptionAuthUrl) {
+      // Get checkout URL (prefer checkoutUrl, then subscriptionAuthUrl)
+      let checkoutUrl = data.checkoutUrl || data.subscriptionAuthUrl;
+      
+      // If checkout URL points to our domain, construct proper Paddle checkout URL
+      if (checkoutUrl && (checkoutUrl.includes(window.location.origin) || checkoutUrl.includes('?_ptxn='))) {
+        const transactionId = data.transactionId || checkoutUrl.match(/_ptxn=([^&]+)/)?.[1];
+        if (transactionId) {
+          // Construct proper Paddle checkout URL
+          const isProduction = window.location.hostname !== 'localhost' && !window.location.hostname.includes('vercel.app');
+          const paddleCheckoutBase = isProduction 
+            ? "https://checkout.paddle.com" 
+            : "https://sandbox-checkout.paddle.com";
+          checkoutUrl = `${paddleCheckoutBase}/transaction/checkout?_ptxn=${transactionId}`;
+          console.log("[Plans] Constructed Paddle checkout URL:", checkoutUrl);
+        }
+      }
+      
+      if (checkoutUrl) {
         if (data.subscriptionId) {
           sessionStorage.setItem("paddle_subscription_id", data.subscriptionId);
         }
@@ -133,13 +150,10 @@ function PlansContent() {
         sessionStorage.setItem("paddle_site_id", siteId);
         sessionStorage.setItem("paddle_redirect_url", `/dashboard/usage?payment=success&siteId=${siteId}`);
 
-        window.open(data.subscriptionAuthUrl, "_blank");
+        // Redirect to Paddle checkout (same tab for better UX)
+        window.location.href = checkoutUrl;
         setLoading(false);
         setSelectedPlan(null);
-
-        alert(
-          "Payment page opened in a new tab.\n\nAfter completing payment, close that tab and return here.\nYour subscription will activate automatically."
-        );
         return;
       }
 

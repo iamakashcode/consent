@@ -87,58 +87,65 @@ function PaymentContent() {
       }
 
       // If subscription setup is required (Basic trial or Starter/Pro subscription), redirect to Paddle
-      if (data.requiresPaymentSetup || data.subscriptionId) {
+      if (data.requiresPaymentSetup || data.subscriptionId || data.subscriptionAuthUrl || data.checkoutUrl) {
         // Update session first
         await update();
         
-        // Try to get auth URL from response
-        let authUrl = data.subscriptionAuthUrl;
+        // Get checkout URL from response (prefer checkoutUrl, then subscriptionAuthUrl)
+        let checkoutUrl = data.checkoutUrl || data.subscriptionAuthUrl;
         
-        // If no auth URL but we have subscriptionId, try to fetch it
-        if (!authUrl && data.subscriptionId) {
+        // If checkout URL points to our domain, construct Paddle checkout URL
+        if (checkoutUrl && (checkoutUrl.includes(window.location.origin) || checkoutUrl.includes('?_ptxn='))) {
+          // Extract transaction ID from URL or use transactionId from response
+          const transactionId = data.transactionId || checkoutUrl.match(/_ptxn=([^&]+)/)?.[1];
+          if (transactionId) {
+            // Construct proper Paddle checkout URL
+            const isProduction = window.location.hostname !== 'localhost';
+            const paddleCheckoutBase = isProduction 
+              ? "https://checkout.paddle.com" 
+              : "https://sandbox-checkout.paddle.com";
+            checkoutUrl = `${paddleCheckoutBase}/transaction/checkout?_ptxn=${transactionId}`;
+            console.log("[Payment] Constructed Paddle checkout URL:", checkoutUrl);
+          }
+        }
+        
+        // If no checkout URL but we have subscriptionId, try to fetch it
+        if (!checkoutUrl && data.subscriptionId) {
           try {
             console.log("[Payment] Fetching auth URL for subscription:", data.subscriptionId);
-            // Try multiple times with delays (Paddle might need time to generate the URL)
-            for (let attempt = 0; attempt < 3; attempt++) {
-              if (attempt > 0) {
-                await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // 1s, 2s delays
-              }
-              const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
-              if (authResponse.ok) {
-                const authData = await authResponse.json();
-                console.log(`[Payment] Auth URL response (attempt ${attempt + 1}):`, authData);
-                if (authData.authUrl) {
-                  authUrl = authData.authUrl;
-                  break;
-                }
-              } else {
-                const errorData = await authResponse.json();
-                console.warn(`[Payment] Auth URL fetch failed (attempt ${attempt + 1}):`, errorData);
+            const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
+            if (authResponse.ok) {
+              const authData = await authResponse.json();
+              if (authData.authUrl) {
+                checkoutUrl = authData.authUrl;
               }
             }
           } catch (err) {
             console.error("[Payment] Error fetching auth URL:", err);
-            // Continue to show subscription setup UI instead of error
           }
         }
         
-        // If we have an auth URL, open Paddle in new tab
-        if (authUrl) {
-          console.log("[Payment] Opening Paddle in new tab:", authUrl);
-          // Store subscription ID and siteId in sessionStorage for redirect handling
-          if (data.subscriptionId && data.siteId) {
-            sessionStorage.setItem('paddle_subscription_id', data.subscriptionId);
-            sessionStorage.setItem('paddle_site_id', data.siteId);
-            // Store return URL for manual navigation if Paddle doesn't redirect
-            const returnUrl = data.returnUrl || `/payment/return?subscription_id=${data.subscriptionId}&siteId=${data.siteId}`;
-            sessionStorage.setItem('paddle_return_url', returnUrl);
-            sessionStorage.setItem('paddle_redirect_url', `/profile?payment=success&siteId=${data.siteId}`);
+        // If we have a checkout URL, redirect to it (same tab for better UX)
+        if (checkoutUrl) {
+          console.log("[Payment] Redirecting to Paddle checkout:", checkoutUrl);
+          
+          // Store transaction/subscription info for return handling
+          if (data.transactionId) {
+            sessionStorage.setItem('paddle_transaction_id', data.transactionId);
           }
-          // Open Paddle in new tab
-          window.open(authUrl, '_blank');
-          setLoading(false); // Reset loading state
-          // Show message to user
-          alert("Paddle payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
+          if (data.subscriptionId) {
+            sessionStorage.setItem('paddle_subscription_id', data.subscriptionId);
+          }
+          if (data.siteId) {
+            sessionStorage.setItem('paddle_site_id', data.siteId);
+            sessionStorage.setItem('paddle_redirect_url', `/dashboard/usage?payment=success&siteId=${data.siteId}`);
+          }
+          if (data.returnUrl) {
+            sessionStorage.setItem('paddle_return_url', data.returnUrl);
+          }
+          
+          // Redirect to Paddle checkout (same tab - better UX)
+          window.location.href = checkoutUrl;
           return;
         }
         

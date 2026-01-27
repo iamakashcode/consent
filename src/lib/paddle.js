@@ -273,6 +273,17 @@ export async function createPaddleTransaction(priceId, customerId, siteId, domai
         siteId,
         domain,
       },
+      // Don't pass checkout.url - let Paddle return the default checkout URL
+      // checkout: {
+      //   url: null, // Use Paddle's default checkout
+      // },
+    });
+
+    console.log("[Paddle] Transaction created:", {
+      id: transaction.data?.id,
+      status: transaction.data?.status,
+      checkoutUrl: transaction.data?.checkout?.url,
+      fullCheckout: transaction.data?.checkout,
     });
 
     // Transaction includes checkout URL and will create subscription when paid
