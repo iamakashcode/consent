@@ -241,11 +241,106 @@ export async function GET(req, { params }) {
     // CRITICAL: This must execute IMMEDIATELY before any other scripts
     const script = `(function(){
 'use strict';
-// Execute immediately - no delays
-console.log('[Consent SDK] Starting - blocking trackers...');
+
+// ============================================================
+// CRITICAL: BLOCK TRACKING FUNCTIONS IMMEDIATELY - FIRST THING
+// This MUST run before any tracker code can call these functions
+// ============================================================
 
 var SITE_ID='${finalSiteId}';
 var CONSENT_KEY='cookie_consent_'+SITE_ID;
+
+// Check consent - used throughout
+function hasConsent(){
+  return localStorage.getItem(CONSENT_KEY)==='accepted';
+}
+
+// IMMEDIATELY block all tracking functions before anything else runs
+// This is the FIRST thing that executes - critical for blocking
+(function blockTrackingFunctionsImmediately(){
+  // Skip if consent already granted
+  if(hasConsent())return;
+  
+  console.log('[Consent SDK] Blocking tracking functions immediately...');
+  
+  // Store any existing functions (may be undefined at this point)
+  var _origFbq=window.fbq;
+  var _origGtag=window.gtag;
+  var _origGa=window.ga;
+  
+  // Create a queue to capture blocked calls (for debugging)
+  var blockedCalls=[];
+  
+  // Block Meta Pixel - fbq
+  // This MUST be defined before the Meta Pixel inline code runs
+  window.fbq=function(){
+    blockedCalls.push({fn:'fbq',args:Array.prototype.slice.call(arguments),time:Date.now()});
+    console.log('[Consent SDK] ✓ Blocked fbq():',Array.prototype.slice.call(arguments).join(', '));
+    return undefined;
+  };
+  window.fbq.callMethod=function(){
+    blockedCalls.push({fn:'fbq.callMethod',args:Array.prototype.slice.call(arguments),time:Date.now()});
+    return undefined;
+  };
+  window.fbq.queue=[];
+  window.fbq.loaded=true;
+  window.fbq.version='2.0';
+  window.fbq.push=window.fbq;
+  window._fbq=window.fbq;
+  
+  // Block Google Analytics - gtag
+  window.gtag=function(){
+    blockedCalls.push({fn:'gtag',args:Array.prototype.slice.call(arguments),time:Date.now()});
+    console.log('[Consent SDK] ✓ Blocked gtag():',Array.prototype.slice.call(arguments).join(', '));
+    return undefined;
+  };
+  
+  // Block dataLayer
+  if(!window.dataLayer)window.dataLayer=[];
+  var _origPush=window.dataLayer.push;
+  window.dataLayer.push=function(){
+    var args=Array.prototype.slice.call(arguments);
+    // Allow non-tracking pushes (like consent settings)
+    var isTracking=args.some(function(arg){
+      if(typeof arg==='object'&&arg!==null){
+        return arg.event||arg['gtm.start']||arg.ecommerce;
+      }
+      return false;
+    });
+    if(isTracking){
+      blockedCalls.push({fn:'dataLayer.push',args:args,time:Date.now()});
+      console.log('[Consent SDK] ✓ Blocked dataLayer.push()');
+      return 0;
+    }
+    return _origPush?_origPush.apply(window.dataLayer,arguments):window.dataLayer.length;
+  };
+  
+  // Block classic Google Analytics - ga
+  window.ga=function(){
+    blockedCalls.push({fn:'ga',args:Array.prototype.slice.call(arguments),time:Date.now()});
+    console.log('[Consent SDK] ✓ Blocked ga():',Array.prototype.slice.call(arguments).join(', '));
+    return undefined;
+  };
+  window.ga.l=Date.now();
+  window.ga.q=[];
+  
+  // Block legacy _gaq
+  if(!window._gaq)window._gaq=[];
+  window._gaq.push=function(){
+    blockedCalls.push({fn:'_gaq.push',args:Array.prototype.slice.call(arguments),time:Date.now()});
+    console.log('[Consent SDK] ✓ Blocked _gaq.push()');
+    return 0;
+  };
+  
+  // Store blocked calls for debugging
+  window.__consentBlockedCalls=blockedCalls;
+  
+  console.log('[Consent SDK] Tracking functions blocked');
+})();
+
+// Now continue with rest of initialization
+console.log('[Consent SDK] Starting - blocking trackers...');
+
 var TRACKERS=${JSON.stringify(trackerDomains)};
 var isPreviewMode=${isPreview ? 'true' : 'false'};
 var ALLOWED_DOMAIN='${isPreview ? '*' : (allowedDomain || '*')}';
@@ -256,11 +351,6 @@ if(isPreviewMode){
   localStorage.removeItem(CONSENT_KEY);
   var existing=document.getElementById('cookie-banner');
   if(existing)existing.remove();
-}
-
-// Check consent
-function hasConsent(){
-  return localStorage.getItem(CONSENT_KEY)==='accepted';
 }
 
 // Tracker detection
@@ -476,64 +566,8 @@ observer.observe(document.documentElement,{
 
 console.log('[Consent SDK] MutationObserver initialized for dynamic script blocking');
 
-// Store original tracking functions for restoration
-var origFbq=window.fbq;
-var origGtag=window.gtag;
-var origGa=window.ga;
-var origDataLayerPush=window.dataLayer&&window.dataLayer.push;
-var origGaqPush=window._gaq&&window._gaq.push;
-
-// Block tracking functions - check consent LIVE
-function setupFunctionBlocking(){
-  // CRITICAL: Always check consent LIVE, not cached
-  if(hasConsent()){
-    // Restore if consent granted
-    if(origFbq)window.fbq=origFbq;
-    if(origGtag)window.gtag=origGtag;
-    if(origGa)window.ga=origGa;
-    if(origDataLayerPush)window.dataLayer.push=origDataLayerPush;
-    if(origGaqPush)window._gaq.push=origGaqPush;
-    return;
-  }
-  
-  // Block Meta Pixel fbq
-  window.fbq=function(){
-    console.log('[Consent SDK] ✓ Blocked fbq() call');
-    return false;
-  };
-  window._fbq=window.fbq;
-  
-  // Block Google Analytics gtag
-  window.gtag=function(){
-    console.log('[Consent SDK] ✓ Blocked gtag() call');
-    return false;
-  };
-  
-  // Block dataLayer
-  if(!window.dataLayer)window.dataLayer=[];
-  window.dataLayer.push=function(){
-    console.log('[Consent SDK] ✓ Blocked dataLayer.push()');
-    return 0;
-  };
-  
-  // Block Google Analytics ga function
-  window.ga=function(){
-    console.log('[Consent SDK] ✓ Blocked ga() call');
-    return false;
-  };
-  
-  // Block _gaq
-  if(!window._gaq)window._gaq=[];
-  window._gaq.push=function(){
-    console.log('[Consent SDK] ✓ Blocked _gaq.push()');
-    return 0;
-  };
-}
-
-// Setup blocking immediately
-// NOTE: We do NOT use setInterval - it causes unnecessary CPU usage and race conditions
-// Function blocking will be re-setup in enableTrackers() when consent is granted
-setupFunctionBlocking();
+// NOTE: Tracking functions (fbq, gtag, ga, dataLayer) are already blocked
+// at the very top of the script to ensure they're blocked before any tracker code runs
 
 // Intercept XMLHttpRequest - block tracker requests
 var origXHROpen=XMLHttpRequest.prototype.open;
@@ -764,8 +798,19 @@ function enableTrackers(){
   // Stop MutationObserver
   if(observer)observer.disconnect();
   
-  // Restore tracking functions (setupFunctionBlocking will handle this)
-  setupFunctionBlocking();
+  // Restore tracking functions by deleting our blocking stubs
+  // This allows the real tracker scripts to recreate them when they load
+  delete window.fbq;
+  delete window._fbq;
+  delete window.gtag;
+  delete window.ga;
+  // Restore dataLayer.push to standard array push
+  if(window.dataLayer){
+    window.dataLayer.push=Array.prototype.push;
+  }
+  if(window._gaq){
+    window._gaq.push=Array.prototype.push;
+  }
   
   console.log('[Consent SDK] All trackers enabled');
 }
