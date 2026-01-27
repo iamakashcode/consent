@@ -97,12 +97,14 @@ export const BANNER_TEMPLATES = {
 // Default banner configuration
 export const DEFAULT_BANNER_CONFIG = {
   template: "minimal",
-  position: "bottom", // bottom, top
+  position: "bottom", // bottom, top, bottom-left, bottom-right
   title: "🍪 We use cookies",
   message: "This site uses tracking cookies. Accept to enable analytics.",
   acceptButtonText: "Accept",
   rejectButtonText: "Reject",
+  customizeButtonText: "Customize",
   showRejectButton: true,
+  showCustomizeButton: true,
   customStyle: null, // Custom CSS overrides
 };
 

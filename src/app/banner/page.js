@@ -45,6 +45,7 @@ function BannerContent() {
   const [activeInstallTab, setActiveInstallTab] = useState("manual");
   const [copyStatus, setCopyStatus] = useState("");
   const [verifyStatus, setVerifyStatus] = useState("");
+  const [isVerified, setIsVerified] = useState(false);
   const selectedSiteRef = useRef(null);
   const hasFetchedRef = useRef(false);
 
@@ -189,6 +190,9 @@ function BannerContent() {
             setConfig(initialConfig);
             setDebouncedConfig(initialConfig);
             loadPreviewOnce(nextSite, initialConfig);
+            
+            // Check verification status
+            checkVerificationStatus(nextSite.siteId);
           }
         }
       } catch (err) {
@@ -242,7 +246,7 @@ function BannerContent() {
       const response = await fetch(`/api/sites/${selectedSite.siteId}/banner`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
+        body: JSON.stringify({ bannerConfig: config }),
       });
 
       if (response.ok) {
@@ -293,19 +297,71 @@ function BannerContent() {
     }
   };
 
-  const handleVerify = async () => {
-    if (!selectedSite) return;
-    setVerifyStatus("Checking...");
+  const checkVerificationStatus = async (siteId) => {
+    if (!siteId) return;
     try {
-      const res = await fetch(`/api/sites/${selectedSite.siteId}/verify`, { method: "POST" });
-      const data = await res.json();
-      if (res.ok && data.verified) {
-        setVerifyStatus("Verified ✓");
-      } else {
-        setVerifyStatus(data.message || "Not verified yet");
+      const res = await fetch(`/api/sites/${siteId}/verify`);
+      if (res.ok) {
+        const data = await res.json();
+        setIsVerified(data.isVerified || false);
+        if (data.isVerified) {
+          setVerifyStatus("Verified ✓");
+        }
       }
     } catch (err) {
+      console.error("Error checking verification:", err);
+    }
+  };
+
+  const handleVerify = async () => {
+    if (!selectedSite) return;
+    setVerifyStatus("Crawling website...");
+    try {
+      // First, re-crawl the website to check if script is installed
+      const crawlRes = await fetch("/api/crawl", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: selectedSite.domain }),
+      });
+      
+      if (!crawlRes.ok) {
+        setVerifyStatus("Crawl failed");
+        return;
+      }
+
+      // Wait a bit for script to load
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Then check verification status
+      setVerifyStatus("Checking verification...");
+      const res = await fetch(`/api/sites/${selectedSite.siteId}/verify`, { method: "POST" });
+      const data = await res.json();
+      
+      if (res.ok && data.verified) {
+        setIsVerified(true);
+        setVerifyStatus("Verified ✓");
+        // Reload preview to show verified state
+        if (selectedSite) {
+          loadPreviewOnce(selectedSite, config);
+        }
+        // Refresh site data
+        const sitesRes = await fetch("/api/sites");
+        if (sitesRes.ok) {
+          const sitesData = await sitesRes.json();
+          const updatedSite = sitesData.find(s => s.siteId === selectedSite.siteId);
+          if (updatedSite) {
+            setSelectedSite(updatedSite);
+            setSites(sitesData);
+          }
+        }
+      } else {
+        setIsVerified(false);
+        setVerifyStatus(data.message || "Not verified yet - Add script to your website");
+      }
+    } catch (err) {
+      console.error("Verify error:", err);
       setVerifyStatus("Verify failed");
+      setIsVerified(false);
     }
   };
 
@@ -804,15 +860,24 @@ function BannerContent() {
             </div>
 
             <div className="px-6 pb-6">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleVerify}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  Verify
-                </button>
-                <span className="text-sm text-gray-600">{verifyStatus}</span>
-              </div>
+              {!isVerified ? (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleVerify}
+                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    Verify
+                  </button>
+                  <span className="text-sm text-gray-600">{verifyStatus || "Click to verify installation"}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
+                  <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm font-medium text-green-800">Domain verified successfully!</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

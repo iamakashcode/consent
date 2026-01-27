@@ -30,9 +30,15 @@ export async function PUT(req, { params }) {
       );
     }
 
-    // Check if site exists and belongs to user
-    const site = await prisma.site.findUnique({
-      where: { id: siteId },
+    // Check if site exists and belongs to user (try siteId first, then id)
+    const site = await prisma.site.findFirst({
+      where: {
+        OR: [
+          { siteId: siteId },
+          { id: siteId },
+        ],
+      },
+      include: { subscription: true },
     });
 
     if (!site) {
@@ -46,23 +52,12 @@ export async function PUT(req, { params }) {
       );
     }
 
-    // Check user's plan
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      include: { subscription: true },
-    });
-
-    const plan = user.subscription?.plan || "basic";
-    if (plan === "basic") {
-      return Response.json(
-        { error: "Banner customization is available for Starter and Pro plans only" },
-        { status: 403 }
-      );
-    }
+    // Check site's subscription plan (banner customization available for all plans)
+    // No need to restrict - all plans can customize banner
 
     // Update banner configuration
     const updated = await prisma.site.update({
-      where: { id: siteId },
+      where: { id: site.id },
       data: {
         bannerConfig: bannerConfig,
       },
