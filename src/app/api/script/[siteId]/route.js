@@ -893,8 +893,16 @@ setTimeout(showBanner,100);
 return;
 }
 console.log('[Consent SDK] Attempting to create banner...');
-var cfg=${JSON.stringify(bannerConfigForScript)};
-var tmpl=${JSON.stringify(bannerTemplate)};
+try{
+var cfg=${JSON.stringify(JSON.stringify(bannerConfigForScript))};
+var tmpl=${JSON.stringify(JSON.stringify(bannerTemplate))};
+cfg=JSON.parse(cfg);
+tmpl=JSON.parse(tmpl);
+}catch(e){
+console.error('[Consent SDK] Error parsing banner config:',e);
+cfg={title:'🍪 We use cookies',message:'This site uses tracking cookies. Accept to enable analytics.',acceptButtonText:'Accept',rejectButtonText:'Reject',customizeButtonText:'Customize',position:'bottom',showRejectButton:true,showCustomizeButton:true};
+tmpl={style:{backgroundColor:'#667eea',textColor:'#ffffff',buttonColor:'#ffffff',buttonTextColor:'#667eea',padding:'20px',fontSize:'14px',borderRadius:'8px'}};
+}
 if(!cfg||!tmpl){
 console.error('[Consent SDK] Banner config or template missing, using defaults');
 cfg=cfg||{title:'🍪 We use cookies',message:'This site uses tracking cookies. Accept to enable analytics.',acceptButtonText:'Accept',rejectButtonText:'Reject',customizeButtonText:'Customize',position:'bottom',showRejectButton:true,showCustomizeButton:true};
@@ -947,18 +955,22 @@ var messageEscaped=message.replace(/'/g,"\\'").replace(/"/g,'&quot;');
 var acceptBtnEscaped=acceptBtn.replace(/'/g,"\\'").replace(/"/g,'&quot;');
 var rejectBtnEscaped=rejectBtn.replace(/'/g,"\\'").replace(/"/g,'&quot;');
 var customizeBtnEscaped=customizeBtn.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-var buttonsHtml='<button id="accept-btn" style="background:'+btnColor+';color:'+btnTextColor+';border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:'+fontSize+';transition:opacity 0.2s;" onmouseover="this.style.opacity=\\'0.9\\'" onmouseout="this.style.opacity=\\'1\\'">'+acceptBtnEscaped+'</button>';
+// Use addEventListener instead of inline onmouseover/onmouseout to avoid escaping issues
+var buttonsHtml='<button id="accept-btn" style="background:'+btnColor+';color:'+btnTextColor+';border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:'+fontSize+';transition:opacity 0.2s;">'+acceptBtnEscaped+'</button>';
 if(showReject){
-buttonsHtml+='<button id="reject-btn" style="background:transparent;color:'+textColor+';border:2px solid '+textColor+';padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:'+fontSize+';transition:opacity 0.2s;" onmouseover="this.style.opacity=\\'0.9\\'" onmouseout="this.style.opacity=\\'1\\'">'+rejectBtnEscaped+'</button>';
+buttonsHtml+='<button id="reject-btn" style="background:transparent;color:'+textColor+';border:2px solid '+textColor+';padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:'+fontSize+';transition:opacity 0.2s;">'+rejectBtnEscaped+'</button>';
 }
 if(showCustomize){
-buttonsHtml+='<button id="customize-btn" style="background:transparent;color:'+textColor+';border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:'+fontSize+';text-decoration:underline;transition:opacity 0.2s;" onmouseover="this.style.opacity=\\'0.9\\'" onmouseout="this.style.opacity=\\'1\\'">'+customizeBtnEscaped+'</button>';
+buttonsHtml+='<button id="customize-btn" style="background:transparent;color:'+textColor+';border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:'+fontSize+';text-decoration:underline;transition:opacity 0.2s;">'+customizeBtnEscaped+'</button>';
 }
 b.innerHTML='<div style="flex:1;min-width:250px;"><h3 style="margin:0 0 8px 0;font-size:18px;font-weight:600;">'+titleEscaped+'</h3><p style="margin:0;opacity:0.9;line-height:1.5;">'+messageEscaped+'</p></div><div style="display:flex;gap:10px;flex-wrap:wrap;">'+buttonsHtml+'</div>';
 document.body.appendChild(b);
 console.log('[Consent SDK] Banner appended to body, checking if visible...', b.offsetHeight, b.offsetWidth);
+// Add hover effects using addEventListener to avoid escaping issues
 var acceptBtnEl=document.getElementById('accept-btn');
 if(acceptBtnEl){
+acceptBtnEl.addEventListener('mouseover',function(){this.style.opacity='0.9';});
+acceptBtnEl.addEventListener('mouseout',function(){this.style.opacity='1';});
 acceptBtnEl.onclick=function(){
 consent=true;
 localStorage.setItem(CONSENT_KEY,'accepted');
@@ -976,6 +988,8 @@ window._consentBannerPreview=b;
 if(showReject){
 var rejectBtnEl=document.getElementById('reject-btn');
 if(rejectBtnEl){
+rejectBtnEl.addEventListener('mouseover',function(){this.style.opacity='0.9';});
+rejectBtnEl.addEventListener('mouseout',function(){this.style.opacity='1';});
 rejectBtnEl.onclick=function(){
 localStorage.setItem(CONSENT_KEY,'rejected');
 b.remove();
@@ -987,6 +1001,8 @@ console.log('[Consent SDK] Consent rejected - trackers remain blocked');
 if(showCustomize){
 var customizeBtnEl=document.getElementById('customize-btn');
 if(customizeBtnEl){
+customizeBtnEl.addEventListener('mouseover',function(){this.style.opacity='0.9';});
+customizeBtnEl.addEventListener('mouseout',function(){this.style.opacity='1';});
 customizeBtnEl.onclick=function(){
 // Show customization panel
 showCustomizePanel(b);
@@ -1072,9 +1088,30 @@ panel=document.createElement('div');
 panel.id='cookie-customize-panel';
 panel.style.cssText='position:fixed;bottom:80px;left:20px;right:20px;max-width:500px;margin:0 auto;background:white;border:2px solid #e5e7eb;border-radius:12px;padding:20px;z-index:1000000;box-shadow:0 10px 25px rgba(0,0,0,0.2);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
 panel.innerHTML='<div style="margin-bottom:15px;"><h4 style="margin:0 0 10px 0;font-size:16px;font-weight:600;color:#111827;">Cookie Preferences</h4><p style="margin:0;font-size:14px;color:#6b7280;">Choose which cookies you want to accept:</p></div>'+
-'<div style="margin-bottom:15px;"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;border-radius:6px;transition:background 0.2s;" onmouseover="this.style.background=\\'#f3f4f6\\'" onmouseout="this.style.background=\\'transparent\\'"><input type="checkbox" id="customize-analytics" checked style="width:18px;height:18px;cursor:pointer;"><span style="flex:1;font-size:14px;color:#111827;"><strong>Analytics Cookies</strong><br><span style="font-size:12px;color:#6b7280;">Help us understand how visitors interact with our website</span></span></label></div>'+
-'<div style="margin-bottom:15px;"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;border-radius:6px;transition:background 0.2s;" onmouseover="this.style.background=\\'#f3f4f6\\'" onmouseout="this.style.background=\\'transparent\\'"><input type="checkbox" id="customize-marketing" checked style="width:18px;height:18px;cursor:pointer;"><span style="flex:1;font-size:14px;color:#111827;"><strong>Marketing Cookies</strong><br><span style="font-size:12px;color:#6b7280;">Used to track visitors across websites for advertising</span></span></label></div>'+
-'<div style="display:flex;gap:10px;margin-top:20px;"><button id="customize-save" style="flex:1;background:#4f46e5;color:white;border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;transition:opacity 0.2s;" onmouseover="this.style.opacity=\\'0.9\\'" onmouseout="this.style.opacity=\\'1\\'">Save Preferences</button><button id="customize-accept-all" style="flex:1;background:#10b981;color:white;border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;transition:opacity 0.2s;" onmouseover="this.style.opacity=\\'0.9\\'" onmouseout="this.style.opacity=\\'1\\'">Accept All</button></div>';
+'<div style="margin-bottom:15px;"><label id="customize-analytics-label" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;border-radius:6px;transition:background 0.2s;"><input type="checkbox" id="customize-analytics" checked style="width:18px;height:18px;cursor:pointer;"><span style="flex:1;font-size:14px;color:#111827;"><strong>Analytics Cookies</strong><br><span style="font-size:12px;color:#6b7280;">Help us understand how visitors interact with our website</span></span></label></div>'+
+'<div style="margin-bottom:15px;"><label id="customize-marketing-label" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;border-radius:6px;transition:background 0.2s;"><input type="checkbox" id="customize-marketing" checked style="width:18px;height:18px;cursor:pointer;"><span style="flex:1;font-size:14px;color:#111827;"><strong>Marketing Cookies</strong><br><span style="font-size:12px;color:#6b7280;">Used to track visitors across websites for advertising</span></span></label></div>'+
+'<div style="display:flex;gap:10px;margin-top:20px;"><button id="customize-save" style="flex:1;background:#4f46e5;color:white;border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;transition:opacity 0.2s;">Save Preferences</button><button id="customize-accept-all" style="flex:1;background:#10b981;color:white;border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;transition:opacity 0.2s;">Accept All</button></div>';
+// Add hover effects using addEventListener
+var analyticsLabel=document.getElementById('customize-analytics-label');
+if(analyticsLabel){
+analyticsLabel.addEventListener('mouseover',function(){this.style.background='#f3f4f6';});
+analyticsLabel.addEventListener('mouseout',function(){this.style.background='transparent';});
+}
+var marketingLabel=document.getElementById('customize-marketing-label');
+if(marketingLabel){
+marketingLabel.addEventListener('mouseover',function(){this.style.background='#f3f4f6';});
+marketingLabel.addEventListener('mouseout',function(){this.style.background='transparent';});
+}
+var saveBtn=document.getElementById('customize-save');
+if(saveBtn){
+saveBtn.addEventListener('mouseover',function(){this.style.opacity='0.9';});
+saveBtn.addEventListener('mouseout',function(){this.style.opacity='1';});
+}
+var acceptAllBtn=document.getElementById('customize-accept-all');
+if(acceptAllBtn){
+acceptAllBtn.addEventListener('mouseover',function(){this.style.opacity='0.9';});
+acceptAllBtn.addEventListener('mouseout',function(){this.style.opacity='1';});
+}
 document.body.appendChild(panel);
 document.getElementById('customize-save').onclick=function(){
 var analytics=document.getElementById('customize-analytics').checked;
