@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { PLAN_PAGE_VIEW_LIMITS, PLAN_TRIAL_DAYS } from "./razorpay";
+import { PLAN_PAGE_VIEW_LIMITS, PLAN_TRIAL_DAYS } from "./paddle";
 
 /**
  * Check if a domain/site has an active subscription or trial

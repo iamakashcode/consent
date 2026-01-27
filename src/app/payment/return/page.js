@@ -10,6 +10,7 @@ function PaymentReturnContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const subscriptionId = searchParams.get("subscription_id") || searchParams.get("subscriptionId");
+  const transactionId = searchParams.get("transaction_id");
   const redirectParam = searchParams.get("redirect");
   const [checking, setChecking] = useState(true);
   const [statusMessage, setStatusMessage] = useState("Checking payment status...");
@@ -21,9 +22,9 @@ function PaymentReturnContent() {
       return;
     }
 
-    // Try to get subscription ID from URL params, sessionStorage, or query params
-    const urlSubscriptionId = subscriptionId;
-    const storedSubscriptionId = typeof window !== 'undefined' ? sessionStorage.getItem('razorpay_subscription_id') : null;
+    // Try to get subscription/transaction ID from URL params, sessionStorage, or query params
+    const urlSubscriptionId = subscriptionId || transactionId;
+    const storedSubscriptionId = typeof window !== 'undefined' ? (sessionStorage.getItem('paddle_subscription_id') || sessionStorage.getItem('paddle_transaction_id')) : null;
     const finalSubscriptionId = urlSubscriptionId || storedSubscriptionId;
     const fallbackRedirect = redirectParam || "/dashboard/usage?payment=success";
     const siteIdFromUrl = searchParams.get("siteId");
@@ -31,12 +32,13 @@ function PaymentReturnContent() {
     if (!session || !finalSubscriptionId) {
       // No subscription ID, check sessionStorage for redirect info
       if (typeof window !== 'undefined') {
-        const storedRedirectUrl = sessionStorage.getItem('razorpay_redirect_url');
+        const storedRedirectUrl = sessionStorage.getItem('paddle_redirect_url');
         if (storedRedirectUrl) {
-          sessionStorage.removeItem('razorpay_subscription_id');
-          sessionStorage.removeItem('razorpay_site_id');
-          sessionStorage.removeItem('razorpay_redirect_url');
-          sessionStorage.removeItem('razorpay_return_url');
+          sessionStorage.removeItem('paddle_subscription_id');
+          sessionStorage.removeItem('paddle_transaction_id');
+          sessionStorage.removeItem('paddle_site_id');
+          sessionStorage.removeItem('paddle_redirect_url');
+          sessionStorage.removeItem('paddle_return_url');
           setTimeout(() => {
             router.push(storedRedirectUrl);
           }, 1000);
@@ -53,12 +55,12 @@ function PaymentReturnContent() {
     // Check subscription status
     const checkSubscription = async () => {
       try {
-        setStatusMessage("Syncing subscription status from Razorpay...");
+        setStatusMessage("Syncing subscription status from Paddle...");
         
         // Use the final subscription ID (from URL or sessionStorage)
         const subIdToCheck = finalSubscriptionId;
         
-        // First, sync subscription status directly from Razorpay
+        // First, sync subscription status directly from Paddle
         try {
           const syncResponse = await fetch("/api/payment/sync-subscription", {
             method: "POST",
@@ -81,13 +83,14 @@ function PaymentReturnContent() {
               
               // Clear sessionStorage
               if (typeof window !== 'undefined') {
-                sessionStorage.removeItem('razorpay_subscription_id');
-                sessionStorage.removeItem('razorpay_site_id');
-                sessionStorage.removeItem('razorpay_redirect_url');
-                sessionStorage.removeItem('razorpay_return_url');
+                sessionStorage.removeItem('paddle_subscription_id');
+                sessionStorage.removeItem('paddle_transaction_id');
+                sessionStorage.removeItem('paddle_site_id');
+                sessionStorage.removeItem('paddle_redirect_url');
+                sessionStorage.removeItem('paddle_return_url');
               }
               
-              // Redirect and close Razorpay tab if possible
+              // Redirect and close Paddle tab if possible
               setTimeout(() => {
                 const siteId = syncData.site?.siteId || siteIdFromUrl;
                 const target = siteId ? `/dashboard/usage?payment=success&siteId=${siteId}` : fallbackRedirect;
@@ -121,7 +124,7 @@ function PaymentReturnContent() {
           
           // Check if subscription is active
           const subscription = data.subscriptions?.find(
-            (sub) => sub.subscription?.razorpaySubscriptionId === subIdToCheck
+            (sub) => sub.subscription?.paddleSubscriptionId === subIdToCheck
           )?.subscription;
 
           if (subscription && subscription.status === "active") {
@@ -133,13 +136,13 @@ function PaymentReturnContent() {
             
             // Clear sessionStorage
             if (typeof window !== 'undefined') {
-              sessionStorage.removeItem('razorpay_subscription_id');
-              sessionStorage.removeItem('razorpay_site_id');
-              sessionStorage.removeItem('razorpay_redirect_url');
-              sessionStorage.removeItem('razorpay_return_url');
+              sessionStorage.removeItem('paddle_subscription_id');
+              sessionStorage.removeItem('paddle_site_id');
+              sessionStorage.removeItem('paddle_redirect_url');
+              sessionStorage.removeItem('paddle_return_url');
             }
             
-            // Redirect and close Razorpay tab if possible
+            // Redirect and close Paddle tab if possible
             setTimeout(() => {
               const siteId = subscription.siteId || data.siteId || siteIdFromUrl;
               const target = siteId ? `/dashboard/usage?payment=success&siteId=${siteId}` : fallbackRedirect;
@@ -160,14 +163,14 @@ function PaymentReturnContent() {
             // Subscription might still be pending, try syncing again with polling
             setStatusMessage("Payment completed! Syncing subscription status...");
             
-            // Poll for subscription activation by syncing from Razorpay
+            // Poll for subscription activation by syncing from Paddle
             let attempts = 0;
             const maxAttempts = 10;
             const pollInterval = setInterval(async () => {
               attempts++;
               
               try {
-                // Try syncing from Razorpay
+                // Try syncing from Paddle
                 const syncResponse = await fetch("/api/payment/sync-subscription", {
                   method: "POST",
                   headers: {
@@ -186,10 +189,10 @@ function PaymentReturnContent() {
                     
                     // Clear sessionStorage
                     if (typeof window !== 'undefined') {
-                      sessionStorage.removeItem('razorpay_subscription_id');
-                      sessionStorage.removeItem('razorpay_site_id');
-                      sessionStorage.removeItem('razorpay_redirect_url');
-                      sessionStorage.removeItem('razorpay_return_url');
+                      sessionStorage.removeItem('paddle_subscription_id');
+                      sessionStorage.removeItem('paddle_site_id');
+                      sessionStorage.removeItem('paddle_redirect_url');
+                      sessionStorage.removeItem('paddle_return_url');
                     }
                     
                     setTimeout(() => {
@@ -217,7 +220,13 @@ function PaymentReturnContent() {
                 if (pollResponse.ok) {
                   const pollData = await pollResponse.json();
                   const pollSubscription = pollData.subscriptions?.find(
-                    (sub) => sub.subscription?.razorpaySubscriptionId === subIdToCheck
+            (sub) => {
+              const subData = sub.subscription;
+              return subData?.paddleSubscriptionId === subIdToCheck || 
+                     subData?.paddleTransactionId === subIdToCheck ||
+                     subIdToCheck === subData?.paddleSubscriptionId ||
+                     subIdToCheck === subData?.paddleTransactionId;
+            }
                   )?.subscription;
 
                   if (pollSubscription && pollSubscription.status === "active") {
@@ -228,10 +237,10 @@ function PaymentReturnContent() {
                     
                     // Clear sessionStorage
                     if (typeof window !== 'undefined') {
-                      sessionStorage.removeItem('razorpay_subscription_id');
-                      sessionStorage.removeItem('razorpay_site_id');
-                      sessionStorage.removeItem('razorpay_redirect_url');
-                      sessionStorage.removeItem('razorpay_return_url');
+                      sessionStorage.removeItem('paddle_subscription_id');
+                      sessionStorage.removeItem('paddle_site_id');
+                      sessionStorage.removeItem('paddle_redirect_url');
+                      sessionStorage.removeItem('paddle_return_url');
                     }
                     
                     setTimeout(() => {
@@ -258,10 +267,10 @@ function PaymentReturnContent() {
                     
                     // Clear sessionStorage
                     if (typeof window !== 'undefined') {
-                      sessionStorage.removeItem('razorpay_subscription_id');
-                      sessionStorage.removeItem('razorpay_site_id');
-                      sessionStorage.removeItem('razorpay_redirect_url');
-                      sessionStorage.removeItem('razorpay_return_url');
+                      sessionStorage.removeItem('paddle_subscription_id');
+                      sessionStorage.removeItem('paddle_site_id');
+                      sessionStorage.removeItem('paddle_redirect_url');
+                      sessionStorage.removeItem('paddle_return_url');
                     }
                     
                     setTimeout(() => {
@@ -289,10 +298,10 @@ function PaymentReturnContent() {
                   
                   // Clear sessionStorage
                   if (typeof window !== 'undefined') {
-                    sessionStorage.removeItem('razorpay_subscription_id');
-                    sessionStorage.removeItem('razorpay_site_id');
-                    sessionStorage.removeItem('razorpay_redirect_url');
-                    sessionStorage.removeItem('razorpay_return_url');
+                    sessionStorage.removeItem('paddle_subscription_id');
+                    sessionStorage.removeItem('paddle_site_id');
+                    sessionStorage.removeItem('paddle_redirect_url');
+                    sessionStorage.removeItem('paddle_return_url');
                   }
                   
                   setTimeout(() => {
@@ -322,10 +331,10 @@ function PaymentReturnContent() {
                 
                 // Clear sessionStorage
                 if (typeof window !== 'undefined') {
-                  sessionStorage.removeItem('razorpay_subscription_id');
-                  sessionStorage.removeItem('razorpay_site_id');
-                  sessionStorage.removeItem('razorpay_redirect_url');
-                  sessionStorage.removeItem('razorpay_return_url');
+                  sessionStorage.removeItem('paddle_subscription_id');
+                  sessionStorage.removeItem('paddle_site_id');
+                  sessionStorage.removeItem('paddle_redirect_url');
+                  sessionStorage.removeItem('paddle_return_url');
                 }
                 
                 router.push(fallbackRedirect);
@@ -340,10 +349,10 @@ function PaymentReturnContent() {
           
           // Clear sessionStorage
           if (typeof window !== 'undefined') {
-            sessionStorage.removeItem('razorpay_subscription_id');
-            sessionStorage.removeItem('razorpay_site_id');
-            sessionStorage.removeItem('razorpay_redirect_url');
-            sessionStorage.removeItem('razorpay_return_url');
+            sessionStorage.removeItem('paddle_subscription_id');
+            sessionStorage.removeItem('paddle_site_id');
+            sessionStorage.removeItem('paddle_redirect_url');
+            sessionStorage.removeItem('paddle_return_url');
           }
           
           setTimeout(() => {
@@ -368,10 +377,10 @@ function PaymentReturnContent() {
         
         // Clear sessionStorage
         if (typeof window !== 'undefined') {
-          sessionStorage.removeItem('razorpay_subscription_id');
-          sessionStorage.removeItem('razorpay_site_id');
-          sessionStorage.removeItem('razorpay_redirect_url');
-          sessionStorage.removeItem('razorpay_return_url');
+          sessionStorage.removeItem('paddle_subscription_id');
+          sessionStorage.removeItem('paddle_site_id');
+          sessionStorage.removeItem('paddle_redirect_url');
+          sessionStorage.removeItem('paddle_return_url');
         }
         
         setTimeout(() => {

@@ -124,9 +124,14 @@ function PlansContent() {
       }
 
       if (data.subscriptionAuthUrl) {
-        sessionStorage.setItem("razorpay_subscription_id", data.subscriptionId);
-        sessionStorage.setItem("razorpay_site_id", siteId);
-        sessionStorage.setItem("razorpay_redirect_url", `/dashboard/usage?payment=success&siteId=${siteId}`);
+        if (data.subscriptionId) {
+          sessionStorage.setItem("paddle_subscription_id", data.subscriptionId);
+        }
+        if (data.transactionId) {
+          sessionStorage.setItem("paddle_transaction_id", data.transactionId);
+        }
+        sessionStorage.setItem("paddle_site_id", siteId);
+        sessionStorage.setItem("paddle_redirect_url", `/dashboard/usage?payment=success&siteId=${siteId}`);
 
         window.open(data.subscriptionAuthUrl, "_blank");
         setLoading(false);
@@ -146,8 +151,13 @@ function PlansContent() {
           if (authResponse.ok) {
             const authData = await authResponse.json();
             if (authData.authUrl) {
-              sessionStorage.setItem("razorpay_subscription_id", data.subscriptionId);
-              sessionStorage.setItem("razorpay_site_id", siteId);
+              if (data.subscriptionId) {
+                sessionStorage.setItem("paddle_subscription_id", data.subscriptionId);
+              }
+              if (data.transactionId) {
+                sessionStorage.setItem("paddle_transaction_id", data.transactionId);
+              }
+              sessionStorage.setItem("paddle_site_id", siteId);
               window.open(authData.authUrl, "_blank");
               setLoading(false);
               setSelectedPlan(null);

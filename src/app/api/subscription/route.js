@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { getUserSubscriptions, isDomainActive } from "@/lib/subscription";
-import { cancelRazorpaySubscription } from "@/lib/razorpay";
+import { cancelPaddleSubscription } from "@/lib/paddle";
 
 /**
  * GET /api/subscription
@@ -129,13 +129,13 @@ export async function POST(req) {
 async function handleCancel(site, cancelAtPeriodEnd) {
   const subscription = site.subscription;
 
-  // Cancel in Razorpay if we have a subscription ID
-  if (subscription.razorpaySubscriptionId) {
+  // Cancel in Paddle if we have a subscription ID
+  if (subscription.paddleSubscriptionId) {
     try {
-      await cancelRazorpaySubscription(subscription.razorpaySubscriptionId, cancelAtPeriodEnd);
+      await cancelPaddleSubscription(subscription.paddleSubscriptionId, cancelAtPeriodEnd);
     } catch (error) {
-      console.error("[Subscription] Error cancelling in Razorpay:", error);
-      // Continue with local cancellation even if Razorpay fails
+      console.error("[Subscription] Error cancelling in Paddle:", error);
+      // Continue with local cancellation even if Paddle fails
     }
   }
 
@@ -182,7 +182,7 @@ async function handleReactivate(site) {
     );
   }
 
-  // Note: Razorpay doesn't support un-cancelling, so we just update locally
+  // Note: Paddle doesn't support un-cancelling, so we just update locally
   // The webhook will handle reactivation if user makes a new payment
 
   await prisma.subscription.update({

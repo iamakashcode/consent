@@ -2,15 +2,18 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
 import {
   PLAN_PRICING,
-  getOrCreateRazorpayPlan,
-  createRazorpaySubscription,
-  fetchRazorpaySubscription
-} from "@/lib/razorpay";
+  getOrCreatePaddleProduct,
+  getOrCreatePaddlePrice,
+  getOrCreatePaddleCustomer,
+  createPaddleTransaction,
+  fetchPaddleSubscription,
+  getSubscriptionCheckoutUrl,
+} from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
 
 
 /**
- * Create a Razorpay subscription for a domain
+ * Create a Paddle subscription for a domain
  * Domain-first: each domain gets its own subscription
  */
 export async function POST(req) {
@@ -64,24 +67,33 @@ export async function POST(req) {
 
       // If subscription is pending, allow re-attempting payment setup
       if (status === "pending") {
-        // Check if we have an existing Razorpay subscription
-        if (site.subscription.razorpaySubscriptionId) {
+        // Check if we have an existing Paddle subscription or transaction
+        if (site.subscription.paddleSubscriptionId || site.subscription.paddleTransactionId) {
           try {
-            const existingSub = await fetchRazorpaySubscription(site.subscription.razorpaySubscriptionId);
-            if (existingSub.authenticate_url || existingSub.short_url) {
-              return Response.json({
-                success: true,
-                subscriptionId: existingSub.id,
-                subscriptionAuthUrl: existingSub.authenticate_url || existingSub.short_url,
-                requiresPaymentSetup: true,
-                siteId: site.siteId,
-                domain: site.domain,
-                message: "Complete payment setup for your subscription.",
-              });
+            // Try subscription first
+            if (site.subscription.paddleSubscriptionId) {
+              const existingSub = await fetchPaddleSubscription(site.subscription.paddleSubscriptionId);
+              const checkoutUrl = await getSubscriptionCheckoutUrl(existingSub.id);
+              if (checkoutUrl) {
+                return Response.json({
+                  success: true,
+                  subscriptionId: existingSub.id,
+                  subscriptionAuthUrl: checkoutUrl,
+                  requiresPaymentSetup: true,
+                  siteId: site.siteId,
+                  domain: site.domain,
+                  message: "Complete payment setup for your subscription.",
+                });
+              }
+            }
+            // If no subscription, transaction might still be pending
+            if (site.subscription.paddleTransactionId) {
+              // Transaction checkout URLs are one-time, need to create new transaction
+              console.log("[Payment] Existing transaction found, will create new checkout");
             }
           } catch (error) {
             console.log("[Payment] Existing subscription not fetchable, creating new one");
-            // Continue to create new subscription
+            // Continue to create new transaction
           }
         }
       } else if (status === "active" || status === "trial") {
@@ -104,45 +116,98 @@ export async function POST(req) {
 
     const amount = PLAN_PRICING[plan];
 
-    // Get user info for Razorpay
+    // Get user info for Paddle
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { name: true, email: true },
     });
 
-    // Get or create Razorpay plan
-    let razorpayPlan;
+    // Get or create Paddle product
+    let paddleProduct;
     try {
-      razorpayPlan = await getOrCreateRazorpayPlan(plan, amount);
+      paddleProduct = await getOrCreatePaddleProduct(plan);
     } catch (error) {
-      console.error("[Payment] Failed to get/create Razorpay plan:", error);
+      console.error("[Payment] Failed to get/create Paddle product:", error);
       return Response.json(
-        { error: "Failed to set up subscription plan. Please try again." },
+        { error: "Failed to set up subscription product. Please try again." },
         { status: 500 }
       );
     }
 
-    // Create Razorpay subscription
-    let razorpaySubscription;
+    // Get or create Paddle price
+    let paddlePrice;
     try {
-      razorpaySubscription = await createRazorpaySubscription(
-        razorpayPlan.id,
-        {
-          name: user?.name || "User",
-          email: user?.email || session.user.email,
-        },
+      paddlePrice = await getOrCreatePaddlePrice(paddleProduct.id, plan, amount);
+    } catch (error) {
+      console.error("[Payment] Failed to get/create Paddle price:", error);
+      return Response.json(
+        { error: "Failed to set up subscription price. Please try again." },
+        { status: 500 }
+      );
+    }
+
+    // Get or create Paddle customer
+    let paddleCustomer;
+    try {
+      paddleCustomer = await getOrCreatePaddleCustomer(
+        user?.email || session.user.email,
+        user?.name || "User"
+      );
+    } catch (error) {
+      console.error("[Payment] Failed to get/create Paddle customer:", error);
+      return Response.json(
+        { error: "Failed to set up customer. Please try again." },
+        { status: 500 }
+      );
+    }
+
+    // Create Paddle transaction (subscription will be created automatically on payment)
+    let paddleTransaction;
+    try {
+      paddleTransaction = await createPaddleTransaction(
+        paddlePrice.id,
+        paddleCustomer.id,
         site.id,
         site.domain
       );
     } catch (error) {
-      console.error("[Payment] Failed to create Razorpay subscription:", error);
+      console.error("[Payment] Failed to create Paddle transaction:", error);
+      
+      // Check for specific Paddle account configuration errors
+      if (error.message?.includes("checkout_not_enabled") || error.message?.includes("Checkout has not yet been enabled")) {
+        return Response.json(
+          { 
+            error: "Paddle checkout is not enabled for your account. Please complete Paddle onboarding and enable checkout in your Paddle dashboard, or contact Paddle support.",
+            errorCode: "PADDLE_CHECKOUT_NOT_ENABLED",
+            details: error.message
+          },
+          { status: 500 }
+        );
+      }
+      
       return Response.json(
-        { error: "Failed to create subscription. Please try again." },
+        { 
+          error: "Failed to create payment transaction. Please try again.",
+          details: error.message
+        },
         { status: 500 }
       );
     }
 
-    // Create or update subscription in database (pending until payment method added)
+    // Get checkout URL from transaction
+    const checkoutUrl = paddleTransaction.checkout?.url;
+    if (!checkoutUrl) {
+      return Response.json(
+        { error: "Failed to get checkout URL. Please try again." },
+        { status: 500 }
+      );
+    }
+
+    // Store transaction ID temporarily (subscription will be created after payment)
+    const transactionId = paddleTransaction.id;
+
+    // Create or update subscription in database (pending until payment)
+    // Note: paddleSubscriptionId will be set via webhook after payment
     try {
       if (site.subscription) {
         // Update existing subscription
@@ -151,8 +216,10 @@ export async function POST(req) {
           data: {
             plan: plan,
             status: "pending",
-            razorpayPlanId: razorpayPlan.id,
-            razorpaySubscriptionId: razorpaySubscription.id,
+            paddleProductId: paddleProduct.id,
+            paddlePriceId: paddlePrice.id,
+            paddleCustomerId: paddleCustomer.id,
+            paddleTransactionId: transactionId, // Store transaction ID temporarily
             updatedAt: new Date(),
           },
         });
@@ -163,8 +230,10 @@ export async function POST(req) {
             siteId: site.id,
             plan: plan,
             status: "pending",
-            razorpayPlanId: razorpayPlan.id,
-            razorpaySubscriptionId: razorpaySubscription.id,
+            paddleProductId: paddleProduct.id,
+            paddlePriceId: paddlePrice.id,
+            paddleCustomerId: paddleCustomer.id,
+            paddleTransactionId: transactionId, // Store transaction ID temporarily
           },
         });
       }
@@ -176,50 +245,25 @@ export async function POST(req) {
       );
     }
 
-    // Get authentication URL
-    let authUrl = razorpaySubscription.authenticate_url || razorpaySubscription.short_url;
-
-    // If no auth URL, try fetching again (sometimes delayed)
-    if (!authUrl) {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const fetchedSub = await fetchRazorpaySubscription(razorpaySubscription.id);
-        authUrl = fetchedSub.authenticate_url || fetchedSub.short_url;
-      } catch (error) {
-        console.warn("[Payment] Could not fetch auth URL:", error);
-      }
-    }
-
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ||
       req.headers.get("origin") ||
       `http://${req.headers.get("host")}`;
 
     const redirectTarget = `/dashboard/usage?payment=success&siteId=${site.siteId}`;
-    const returnUrl = `${baseUrl}/payment/return?subscription_id=${razorpaySubscription.id}&siteId=${site.siteId}&redirect=${encodeURIComponent(redirectTarget)}`;
+    const returnUrl = `${baseUrl}/payment/return?transaction_id=${transactionId}&siteId=${site.siteId}&redirect=${encodeURIComponent(redirectTarget)}`;
 
-    // Append return URL to auth URL if possible
-    if (authUrl) {
-      try {
-        const urlWithReturn = new URL(authUrl);
-        urlWithReturn.searchParams.set("redirect_url", returnUrl);
-        authUrl = urlWithReturn.toString();
-      } catch (error) {
-        // Use original authUrl if URL parsing fails
-      }
-    }
-
-    console.log(`[Payment] Created subscription ${razorpaySubscription.id} for ${site.domain}`);
+    console.log(`[Payment] Created transaction ${transactionId} for ${site.domain}`);
 
     return Response.json({
       success: true,
-      subscriptionId: razorpaySubscription.id,
-      subscriptionAuthUrl: authUrl,
+      transactionId: transactionId,
+      subscriptionAuthUrl: checkoutUrl,
       requiresPaymentSetup: true,
       returnUrl: returnUrl,
       siteId: site.siteId,
       domain: site.domain,
       plan: plan,
-      message: `Please complete payment setup for ${site.domain}. Your 7-day free trial will start after activation.`,
+      message: `Please complete payment for ${site.domain}. Your 7-day free trial will start after payment.`,
     });
 
   } catch (error) {

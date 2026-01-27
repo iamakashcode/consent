@@ -23,18 +23,19 @@ function PaymentContent() {
       return;
     }
 
-    // Check if user returned from Razorpay payment
+    // Check if user returned from Paddle payment
     if (status === "authenticated" && typeof window !== 'undefined') {
-      const storedSubscriptionId = sessionStorage.getItem('razorpay_subscription_id');
-      const storedRedirectUrl = sessionStorage.getItem('razorpay_redirect_url');
+      const storedSubscriptionId = sessionStorage.getItem('paddle_subscription_id');
+      const storedRedirectUrl = sessionStorage.getItem('paddle_redirect_url');
       
       // If user has payment info in sessionStorage, redirect to profile page
       if (storedSubscriptionId && storedRedirectUrl) {
         // Clear sessionStorage
-        sessionStorage.removeItem('razorpay_subscription_id');
-        sessionStorage.removeItem('razorpay_site_id');
-        sessionStorage.removeItem('razorpay_redirect_url');
-        sessionStorage.removeItem('razorpay_return_url');
+        sessionStorage.removeItem('paddle_subscription_id');
+        sessionStorage.removeItem('paddle_transaction_id');
+        sessionStorage.removeItem('paddle_site_id');
+        sessionStorage.removeItem('paddle_redirect_url');
+        sessionStorage.removeItem('paddle_return_url');
         
         // Redirect to profile page for auto-sync
         router.push(storedRedirectUrl);
@@ -85,7 +86,7 @@ function PaymentContent() {
         return;
       }
 
-      // If subscription setup is required (Basic trial or Starter/Pro subscription), redirect to Razorpay
+      // If subscription setup is required (Basic trial or Starter/Pro subscription), redirect to Paddle
       if (data.requiresPaymentSetup || data.subscriptionId) {
         // Update session first
         await update();
@@ -97,7 +98,7 @@ function PaymentContent() {
         if (!authUrl && data.subscriptionId) {
           try {
             console.log("[Payment] Fetching auth URL for subscription:", data.subscriptionId);
-            // Try multiple times with delays (Razorpay might need time to generate the URL)
+            // Try multiple times with delays (Paddle might need time to generate the URL)
             for (let attempt = 0; attempt < 3; attempt++) {
               if (attempt > 0) {
                 await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // 1s, 2s delays
@@ -121,23 +122,23 @@ function PaymentContent() {
           }
         }
         
-        // If we have an auth URL, open Razorpay in new tab
+        // If we have an auth URL, open Paddle in new tab
         if (authUrl) {
-          console.log("[Payment] Opening Razorpay in new tab:", authUrl);
+          console.log("[Payment] Opening Paddle in new tab:", authUrl);
           // Store subscription ID and siteId in sessionStorage for redirect handling
           if (data.subscriptionId && data.siteId) {
-            sessionStorage.setItem('razorpay_subscription_id', data.subscriptionId);
-            sessionStorage.setItem('razorpay_site_id', data.siteId);
-            // Store return URL for manual navigation if Razorpay doesn't redirect
+            sessionStorage.setItem('paddle_subscription_id', data.subscriptionId);
+            sessionStorage.setItem('paddle_site_id', data.siteId);
+            // Store return URL for manual navigation if Paddle doesn't redirect
             const returnUrl = data.returnUrl || `/payment/return?subscription_id=${data.subscriptionId}&siteId=${data.siteId}`;
-            sessionStorage.setItem('razorpay_return_url', returnUrl);
-            sessionStorage.setItem('razorpay_redirect_url', `/profile?payment=success&siteId=${data.siteId}`);
+            sessionStorage.setItem('paddle_return_url', returnUrl);
+            sessionStorage.setItem('paddle_redirect_url', `/profile?payment=success&siteId=${data.siteId}`);
           }
-          // Open Razorpay in new tab
+          // Open Paddle in new tab
           window.open(authUrl, '_blank');
           setLoading(false); // Reset loading state
           // Show message to user
-          alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
+          alert("Paddle payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
           return;
         }
         
@@ -181,7 +182,7 @@ function PaymentContent() {
               if (authData.authUrl) {
                 window.open(authData.authUrl, '_blank');
                 setLoading(false); // Reset loading state
-                alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
+                alert("Paddle payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
                 return;
               }
             }
@@ -214,7 +215,7 @@ function PaymentContent() {
             if (authData.authUrl) {
               window.open(authData.authUrl, '_blank');
               setLoading(false); // Reset loading state
-              alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
+              alert("Paddle payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
               return;
             }
           }
@@ -244,81 +245,8 @@ function PaymentContent() {
     }
   };
 
-  const handlePayment = () => {
-    if (!orderData) return;
-
-    const options = {
-      key: orderData.key,
-      amount: orderData.amount,
-      currency: orderData.currency,
-      name: "Cookie Consent Manager",
-      description: `Upgrade to ${plan?.charAt(0).toUpperCase() + plan?.slice(1)} Plan - ₹${orderData.amount / 100}`,
-      order_id: orderData.orderId,
-      handler: async function (response) {
-        console.log("Razorpay payment response:", response);
-        
-        // Verify payment
-        try {
-          const payload = {
-            orderId: response.razorpay_order_id,
-            paymentId: response.razorpay_payment_id,
-            signature: response.razorpay_signature,
-            plan: plan,
-          };
-          
-          console.log("Sending verification request:", { ...payload, signature: payload.signature?.substring(0, 20) + "..." });
-          
-          const verifyResponse = await fetch("/api/payment/verify", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          });
-
-          const verifyData = await verifyResponse.json();
-
-          console.log("Verification response:", { 
-            status: verifyResponse.status, 
-            statusText: verifyResponse.statusText,
-            data: verifyData 
-          });
-
-          if (verifyResponse.ok) {
-            // Update session to reflect new plan
-            await update();
-            // Small delay to ensure session is refreshed
-            await new Promise(resolve => setTimeout(resolve, 500));
-            alert("Payment successful! Your plan has been upgraded. Redirecting...");
-            // Force full page reload to ensure fresh session data
-            window.location.href = "/profile";
-          } else {
-            console.error("Verification failed:", verifyData);
-            const errorMsg = verifyData.error || "Unknown error";
-            console.error("Full error details:", { verifyData, response });
-            alert("Payment verification failed: " + errorMsg + "\n\nCheck browser console for details.");
-          }
-        } catch (err) {
-          console.error("Verification error:", err);
-          console.error("Error stack:", err.stack);
-          alert("Payment verification failed: " + (err.message || "Please contact support.") + "\n\nCheck browser console for details.");
-        }
-      },
-      prefill: {
-        email: session?.user?.email || "",
-        name: session?.user?.name || "",
-      },
-      theme: {
-        color: "#667eea",
-      },
-    };
-
-    const razorpay = new window.Razorpay(options);
-    razorpay.open();
-    razorpay.on("payment.failed", function (response) {
-      alert("Payment failed: " + response.error.description);
-    });
-  };
+  // Paddle uses checkout URLs, not inline SDK handlers
+  // Payment is handled via checkout URL redirect - no handlePayment function needed
 
   if (status === "loading" || loading) {
     return (
@@ -370,10 +298,7 @@ function PaymentContent() {
 
   return (
     <>
-      <Script
-        src="https://checkout.razorpay.com/v1/checkout.js"
-        onLoad={() => console.log("Razorpay loaded")}
-      />
+      {/* Paddle uses checkout URLs, no SDK needed */}
       <div className="min-h-screen bg-gray-50">
         <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-12">
           <div className="bg-white rounded-lg shadow-lg p-8">
@@ -419,7 +344,7 @@ function PaymentContent() {
                             if (data.authUrl) {
                               window.open(data.authUrl, '_blank');
                               setLoading(false); // Reset loading state
-                              alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
+                              alert("Paddle payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
                             } else {
                               setError("Failed to get payment setup link. Please contact support.");
                               setLoading(false);
@@ -502,14 +427,14 @@ function PaymentContent() {
 
                 <div className="text-center">
                   <p className="text-sm text-gray-600 mb-4">
-                    Redirecting to Razorpay to set up your subscription...
+                    Redirecting to Paddle to set up your subscription...
                   </p>
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
                 </div>
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
                   <p className="text-xs text-blue-800">
-                    <strong>Note:</strong> After completing payment on Razorpay, if you&apos;re not automatically redirected, you can manually return to your profile page. Your subscription will be activated automatically.
+                    <strong>Note:</strong> After completing payment on Paddle, if you&apos;re not automatically redirected, you can manually return to your profile page. Your subscription will be activated automatically.
                   </p>
                 </div>
 
@@ -532,7 +457,7 @@ function PaymentContent() {
                         Please add a payment method to activate your subscription. {plan === "basic" && "Your 7-day free trial will start after activation."}
                       </p>
                       <p className="text-xs text-blue-600 mt-2">
-                        💡 <strong>After completing payment on Razorpay:</strong> Your subscription will be automatically synced when you return to your profile page. If you&apos;re not redirected automatically, simply navigate back to your profile page - the status will update automatically.
+                        💡 <strong>After completing payment on Paddle:</strong> Your subscription will be automatically synced when you return to your profile page. If you&apos;re not redirected automatically, simply navigate back to your profile page - the status will update automatically.
                       </p>
                     </div>
                   </div>
@@ -563,14 +488,14 @@ function PaymentContent() {
                       if (orderData.subscriptionAuthUrl) {
                         window.open(orderData.subscriptionAuthUrl, '_blank');
                         setLoading(false); // Reset loading state
-                        alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
+                        alert("Paddle payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
                       } else if (orderData.subscriptionId) {
                         const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${orderData.subscriptionId}`);
                         const authData = await authResponse.json();
                         if (authData.authUrl) {
                           window.open(authData.authUrl, '_blank');
                           setLoading(false); // Reset loading state
-                          alert("Razorpay payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
+                          alert("Paddle payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
                         } else {
                           setError("Failed to get payment setup link. Please try again.");
                           setLoading(false);
@@ -616,16 +541,36 @@ function PaymentContent() {
                   </div>
                 </div>
 
-                <button
-                  onClick={handlePayment}
-                  className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
-                >
-                  Pay {planPrices[plan]} & Upgrade
-                </button>
+                {orderData.subscriptionAuthUrl ? (
+                  <button
+                    onClick={() => {
+                      if (orderData.subscriptionAuthUrl) {
+                        window.open(orderData.subscriptionAuthUrl, '_blank');
+                        if (orderData.subscriptionId || orderData.transactionId) {
+                          sessionStorage.setItem('paddle_subscription_id', orderData.subscriptionId || '');
+                          sessionStorage.setItem('paddle_transaction_id', orderData.transactionId || '');
+                          sessionStorage.setItem('paddle_site_id', siteId || '');
+                          sessionStorage.setItem('paddle_redirect_url', `/dashboard/usage?payment=success&siteId=${siteId}`);
+                        }
+                        alert("Paddle checkout opened. After payment, return to dashboard.");
+                      }
+                    }}
+                    className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+                  >
+                    Pay {planPrices[plan]} & Upgrade
+                  </button>
+                ) : (
+                  <button
+                    disabled
+                    className="w-full bg-gray-400 text-white py-3 rounded-lg font-semibold cursor-not-allowed"
+                  >
+                    Loading checkout...
+                  </button>
+                )}
 
                 <p className="text-xs text-center text-gray-500">
                   By proceeding, you agree to our terms and conditions. This is a
-                  test payment using Razorpay test keys.
+                  test payment using Paddle test keys.
                 </p>
               </div>
             ) : orderData && (

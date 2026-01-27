@@ -58,7 +58,7 @@ function ProfileContent() {
   useEffect(() => {
     if (typeof window !== "undefined" && session && !hasCheckedPayment.current) {
       const paymentSuccess = searchParams?.get("payment");
-      const storedSubscriptionId = sessionStorage.getItem("razorpay_subscription_id");
+      const storedSubscriptionId = sessionStorage.getItem("paddle_subscription_id") || sessionStorage.getItem("paddle_transaction_id");
 
       if (paymentSuccess === "success" || storedSubscriptionId) {
         hasCheckedPayment.current = true;
@@ -66,9 +66,10 @@ function ProfileContent() {
         const handlePaymentReturn = async () => {
           if (storedSubscriptionId) {
             await syncSubscription(storedSubscriptionId);
-            sessionStorage.removeItem("razorpay_subscription_id");
-            sessionStorage.removeItem("razorpay_site_id");
-            sessionStorage.removeItem("razorpay_redirect_url");
+            sessionStorage.removeItem("paddle_subscription_id");
+            sessionStorage.removeItem("paddle_transaction_id");
+            sessionStorage.removeItem("paddle_site_id");
+            sessionStorage.removeItem("paddle_redirect_url");
           }
           await fetchSubscriptions();
           alert("Payment successful! Your subscription is now active.");
@@ -80,12 +81,12 @@ function ProfileContent() {
     }
   }, [searchParams, session]);
 
-  const syncSubscription = async (razorpaySubId) => {
+  const syncSubscription = async (paddleSubId) => {
     try {
       const response = await fetch("/api/payment/sync-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscriptionId: razorpaySubId }),
+        body: JSON.stringify({ subscriptionId: paddleSubId }),
       });
       return response.ok;
     } catch (error) {

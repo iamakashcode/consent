@@ -322,17 +322,15 @@ export default function HomePage() {
             <div className="inline-flex items-center bg-white rounded-lg p-1 border border-gray-200">
               <button
                 onClick={() => setBillingCycle("monthly")}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  billingCycle === "monthly" ? "bg-indigo-600 text-white" : "text-gray-600 hover:text-gray-900"
-                }`}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${billingCycle === "monthly" ? "bg-indigo-600 text-white" : "text-gray-600 hover:text-gray-900"
+                  }`}
               >
                 Monthly
               </button>
               <button
                 onClick={() => setBillingCycle("yearly")}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  billingCycle === "yearly" ? "bg-indigo-600 text-white" : "text-gray-600 hover:text-gray-900"
-                }`}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${billingCycle === "yearly" ? "bg-indigo-600 text-white" : "text-gray-600 hover:text-gray-900"
+                  }`}
               >
                 Yearly <span className="text-green-500 ml-1">-20%</span>
               </button>
@@ -395,9 +393,8 @@ export default function HomePage() {
             ].map((plan, index) => (
               <div
                 key={index}
-                className={`relative bg-white rounded-xl p-8 border-2 transition-all ${
-                  plan.popular ? "border-indigo-500 shadow-xl scale-105" : "border-gray-200 hover:border-gray-300"
-                }`}
+                className={`relative bg-white rounded-xl p-8 border-2 transition-all ${plan.popular ? "border-indigo-500 shadow-xl scale-105" : "border-gray-200 hover:border-gray-300"
+                  }`}
               >
                 {plan.popular && (
                   <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
@@ -426,11 +423,10 @@ export default function HomePage() {
 
                 <Link
                   href="/signup"
-                  className={`block w-full py-3 text-center font-medium rounded-lg transition-colors ${
-                    plan.popular
+                  className={`block w-full py-3 text-center font-medium rounded-lg transition-colors ${plan.popular
                       ? "bg-indigo-600 text-white hover:bg-indigo-700"
                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
+                    }`}
                 >
                   {plan.cta}
                 </Link>

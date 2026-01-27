@@ -71,12 +71,12 @@ model Subscription {
   currentPeriodEnd       DateTime?
   cancelAtPeriodEnd      Boolean   @default(false)
   
-  // Razorpay fields
-  razorpaySubscriptionId String?
-  razorpayPlanId         String?
-  razorpayPaymentId      String?
-  razorpaySignature      String?
-  razorpayOrderId        String?
+  // Paddle fields
+  paddleSubscriptionId String?
+  paddlePriceId        String?
+  paddleProductId      String?
+  paddleCustomerId     String?
+  paddleTransactionId  String?
   
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
