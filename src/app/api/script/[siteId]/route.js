@@ -183,16 +183,20 @@ window.console.error('[Consent SDK] Please upgrade your plan to continue using t
       ),
     };
 
-    // Common tracker domains and patterns to block
+    // Common tracker domains and patterns to block (ONLY for scripts, NOT meta tags)
     const trackerDomains = [
       "google-analytics.com",
+      "www.google-analytics.com",
       "googletagmanager.com",
+      "www.googletagmanager.com",
       "google-analytics",
+      "gtag.js",
       "gtag",
       "ga.js",
       "analytics.js",
       "facebook.net",
       "connect.facebook.net",
+      "www.facebook.com/tr",
       "facebook.com/tr",
       "fbevents.js",
       "doubleclick.net",
@@ -209,10 +213,7 @@ window.console.error('[Consent SDK] Please upgrade your plan to continue using t
       "segment.io",
       "segment.com",
       "mixpanel.com",
-      "amplitude.com",
-      "pixel",
-      "tracking",
-      "analytics"
+      "amplitude.com"
     ];
 
     // Get base URL for verification callback and tracking
@@ -250,8 +251,21 @@ return null; // Not accepted
 function isTracker(url){
 if(!url)return false;
 var urlStr=String(url).toLowerCase();
+// More aggressive and specific matching for trackers
+// Google Analytics patterns
+if(urlStr.indexOf('google-analytics.com')>-1||urlStr.indexOf('www.google-analytics.com')>-1)return true;
+if(urlStr.indexOf('analytics.js')>-1||urlStr.indexOf('ga.js')>-1)return true;
+// Google Tag Manager patterns
+if(urlStr.indexOf('googletagmanager.com')>-1||urlStr.indexOf('www.googletagmanager.com')>-1)return true;
+if(urlStr.indexOf('gtag.js')>-1||urlStr.indexOf('/gtag')>-1)return true;
+// Facebook Pixel patterns
+if(urlStr.indexOf('facebook.net')>-1||urlStr.indexOf('connect.facebook.net')>-1)return true;
+if(urlStr.indexOf('fbevents.js')>-1)return true;
+if(urlStr.indexOf('facebook.com/tr')>-1)return true;
+// Other tracker patterns
 for(var i=0;i<TRACKERS.length;i++){
-if(urlStr.indexOf(TRACKERS[i].toLowerCase())>-1)return true;
+var pattern=TRACKERS[i].toLowerCase();
+if(urlStr.indexOf(pattern)>-1)return true;
 }
 return false;
 }
@@ -259,7 +273,19 @@ return false;
 function isAnalyticsTracker(url){
 if(!url)return false;
 var urlStr=String(url).toLowerCase();
-var analyticsPatterns=['google-analytics','analytics.js','ga.js','gtag','googletagmanager','analytics'];
+// More specific patterns for Google Analytics
+var analyticsPatterns=[
+'google-analytics.com',
+'www.google-analytics.com',
+'googletagmanager.com',
+'www.googletagmanager.com',
+'analytics.js',
+'ga.js',
+'gtag.js',
+'/gtag',
+'google-analytics',
+'googletagmanager'
+];
 for(var i=0;i<analyticsPatterns.length;i++){
 if(urlStr.indexOf(analyticsPatterns[i])>-1)return true;
 }
@@ -269,7 +295,19 @@ return false;
 function isMarketingTracker(url){
 if(!url)return false;
 var urlStr=String(url).toLowerCase();
-var marketingPatterns=['facebook','fbq','doubleclick','googleadservices','googlesyndication','advertising','advertising'];
+// More specific patterns for Marketing trackers
+var marketingPatterns=[
+'facebook.net',
+'connect.facebook.net',
+'www.facebook.com/tr',
+'facebook.com/tr',
+'fbevents.js',
+'fbq',
+'doubleclick.net',
+'googleadservices.com',
+'googlesyndication.com',
+'advertising'
+];
 for(var i=0;i<marketingPatterns.length;i++){
 if(urlStr.indexOf(marketingPatterns[i])>-1)return true;
 }
@@ -296,14 +334,29 @@ console.log('[Consent SDK] Blocked script:',s.src||s.getAttribute('src'));
 }
 
 // Block existing scripts IMMEDIATELY - check consent status
+// IMPORTANT: Only block SCRIPT tags, NOT meta tags or other elements
 var consentStatus=getConsentStatus();
 if(!consentStatus){
-console.log('[Consent SDK] Blocking trackers - consent not granted');
+console.log('[Consent SDK] Blocking ALL trackers - consent not granted');
+// Block all external scripts with tracker URLs
 var existingScripts=document.querySelectorAll('script[src]');
 existingScripts.forEach(function(s){
-if(isTracker(s.src)&&shouldBlockTracker(s.src)){
+var scriptSrc=s.src||s.getAttribute('src')||'';
+if(scriptSrc&&isTracker(scriptSrc)){
 blockScript(s);
-console.log('[Consent SDK] Blocked existing script:',s.src);
+console.log('[Consent SDK] ✓ Blocked existing script:',scriptSrc);
+}
+});
+// Also check inline scripts
+var inlineScripts=document.querySelectorAll('script:not([src])');
+inlineScripts.forEach(function(s){
+var scriptContent=s.textContent||s.innerHTML||'';
+if(scriptContent){
+var lowerContent=scriptContent.toLowerCase();
+if(lowerContent.indexOf('gtag')>-1||lowerContent.indexOf('ga(')>-1||lowerContent.indexOf('fbq')>-1||lowerContent.indexOf('dataLayer')>-1){
+s.textContent='// Blocked by consent manager';
+console.log('[Consent SDK] Blocked inline tracker script');
+}
 }
 });
 }else{
@@ -311,9 +364,27 @@ console.log('[Consent SDK] Consent granted, checking preferences:',consentStatus
 // Even if accepted, block based on preferences
 var existingScripts=document.querySelectorAll('script[src]');
 existingScripts.forEach(function(s){
-if(isTracker(s.src)&&shouldBlockTracker(s.src)){
+var scriptSrc=s.src||s.getAttribute('src')||'';
+if(scriptSrc&&isTracker(scriptSrc)&&shouldBlockTracker(scriptSrc)){
 blockScript(s);
-console.log('[Consent SDK] Blocked script based on preferences:',s.src);
+console.log('[Consent SDK] Blocked script based on preferences:',scriptSrc);
+}
+});
+// Check inline scripts based on preferences
+var inlineScripts=document.querySelectorAll('script:not([src])');
+inlineScripts.forEach(function(s){
+var scriptContent=s.textContent||s.innerHTML||'';
+if(scriptContent){
+var lowerContent=scriptContent.toLowerCase();
+var isAnalyticsInline=(lowerContent.indexOf('gtag')>-1||lowerContent.indexOf('ga(')>-1||lowerContent.indexOf('dataLayer')>-1||lowerContent.indexOf('googletagmanager')>-1);
+var isMarketingInline=(lowerContent.indexOf('fbq')>-1||lowerContent.indexOf('facebook')>-1);
+if(isAnalyticsInline&&!consentStatus.analytics){
+s.textContent='// Blocked by consent manager (analytics disabled)';
+console.log('[Consent SDK] Blocked inline analytics script');
+}else if(isMarketingInline&&!consentStatus.marketing){
+s.textContent='// Blocked by consent manager (marketing disabled)';
+console.log('[Consent SDK] Blocked inline marketing script');
+}
 }
 });
 }
@@ -325,9 +396,12 @@ var origXHROpen=XMLHttpRequest.prototype.open;
 var origXHRSend=XMLHttpRequest.prototype.send;
 
 // Intercept createElement IMMEDIATELY - check consent dynamically
+// IMPORTANT: Only intercept SCRIPT tags, NOT meta tags or other elements
 document.createElement=function(tag){
 var el=origCreate.call(document,tag);
-if(tag.toLowerCase()==='script'){
+var tagLower=tag.toLowerCase();
+// Only block script tags, NOT meta, link, or other tags
+if(tagLower==='script'){
 var src='';
 var innerHTML='';
 Object.defineProperty(el,'src',{
@@ -336,7 +410,7 @@ set:function(v){
 src=v;
 if(v)el.setAttribute('src',v);
 // Check consent and preferences dynamically
-if(isTracker(v)&&shouldBlockTracker(v)){
+if(v&&isTracker(v)&&shouldBlockTracker(v)){
 blockScript(el);
 console.log('[Consent SDK] Blocked new script:',v);
 }
@@ -590,8 +664,9 @@ console.log('[Consent SDK] Document ready state:', document.readyState);
 console.log('[Consent SDK] Body exists:', !!document.body);
 
 function showBanner(){
-console.log('[Consent SDK] showBanner called, consent:', consent, 'banner exists:', !!document.getElementById('cookie-banner'));
-if(consent||document.getElementById('cookie-banner'))return;
+var currentConsent=getConsentStatus();
+console.log('[Consent SDK] showBanner called, consent status:', currentConsent, 'banner exists:', !!document.getElementById('cookie-banner'));
+if(currentConsent||document.getElementById('cookie-banner'))return;
 if(!document.body){
 console.log('[Consent SDK] Body not ready, retrying in 100ms');
 setTimeout(showBanner,100);
@@ -604,10 +679,14 @@ var tmpl=${JSON.stringify(bannerTemplate)};
 var pos='';
 if(cfg.position==='top'){
 pos='top:0;bottom:auto;';
+}else if(cfg.position==='top-left'){
+pos='top:20px;bottom:auto;';
+}else if(cfg.position==='top-right'){
+pos='top:20px;bottom:auto;';
 }else if(cfg.position==='bottom-left'){
-pos='bottom:0;top:auto;left:0;right:auto;max-width:400px;';
+pos='bottom:20px;top:auto;';
 }else if(cfg.position==='bottom-right'){
-pos='bottom:0;top:auto;right:0;left:auto;max-width:400px;';
+pos='bottom:20px;top:auto;';
 }else{
 pos='bottom:0;top:auto;';
 }
@@ -622,7 +701,16 @@ var fontSize=tmpl.style.fontSize||'14px';
 var borderRadius=tmpl.style.borderRadius||'8px';
 var border=tmpl.style.border||'';
 var boxShadow=tmpl.style.boxShadow||'';
-b.style.cssText='position:fixed;'+pos+'left:0;right:0;background:'+bgColor+';color:'+textColor+';padding:'+padding+';z-index:999999;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:'+fontSize+';border-radius:'+borderRadius+';'+(border?'border:'+border+';':'')+(boxShadow?'box-shadow:'+boxShadow+';':'');
+// Fix position styles for different positions
+var leftRight='';
+if(cfg.position==='bottom-left'||cfg.position==='top-left'){
+leftRight='left:20px;right:auto;';
+}else if(cfg.position==='bottom-right'||cfg.position==='top-right'){
+leftRight='right:20px;left:auto;';
+}else{
+leftRight='left:0;right:0;';
+}
+b.style.cssText='position:fixed;'+pos+leftRight+'background:'+bgColor+';color:'+textColor+';padding:'+padding+';z-index:999999;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:'+fontSize+';border-radius:'+borderRadius+';'+(border?'border:'+border+';':'')+(boxShadow?'box-shadow:'+boxShadow+';':'');
 var acceptBtn=cfg.acceptButtonText||'Accept';
 var rejectBtn=cfg.rejectButtonText||'Reject';
 var customizeBtn=cfg.customizeButtonText||'Customize';
@@ -692,8 +780,9 @@ document.body.appendChild(fallback);
 document.getElementById('accept-btn-fallback').onclick=function(){
 consent=true;
 localStorage.setItem(CONSENT_KEY,'accepted');
+localStorage.setItem(CONSENT_KEY+'_prefs',JSON.stringify({analytics:true,marketing:true}));
 fallback.remove();
-enableTrackers();
+enableTrackers({analytics:true,marketing:true});
 };
 document.getElementById('reject-btn-fallback').onclick=function(){
 localStorage.setItem(CONSENT_KEY,'rejected');
