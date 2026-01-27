@@ -13,6 +13,12 @@ model User {
   password  String
   name      String?
   isAdmin   Boolean  @default(false)
+  
+  // User-level trial (14 days for new users)
+  // All domains share this trial period
+  trialStartedAt    DateTime?
+  trialEndAt        DateTime?
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   sites     Site[]
@@ -32,9 +38,8 @@ model Site {
   verifiedAt        DateTime?
   lastSeenAt        DateTime?
   
-  // Domain-level trial (each domain gets its own 7-day trial)
-  trialStartedAt    DateTime?
-  trialEndAt        DateTime?
+  // Note: Trial is now user-level, not domain-level
+  // Domain-level trial fields kept for backward compatibility but not used
   
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
@@ -65,7 +70,8 @@ model Subscription {
   id                     String    @id @default(cuid())
   siteId                 String    @unique
   
-  plan                   String    @default("basic")
+  plan                   String    @default("basic") // basic, starter, pro
+  billingInterval        String    @default("monthly") // monthly, yearly
   status                 String    @default("pending") // pending, trial, active, cancelled, expired, payment_failed
   currentPeriodStart     DateTime?
   currentPeriodEnd       DateTime?

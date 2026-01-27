@@ -162,7 +162,7 @@ export async function getOrCreatePaddleProduct(planName) {
     // Create new product
     const product = await paddleRequest("POST", "/products", {
       name: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan`,
-      description: `Monthly subscription for ${planName} plan with 7-day free trial`,
+      description: `Monthly subscription for ${planName} plan with 14-day free trial`,
       type: "standard",
       tax_category: "standard",
     });
@@ -176,13 +176,27 @@ export async function getOrCreatePaddleProduct(planName) {
 
 /**
  * Create or get a Paddle price for a product
+ * @param {string} productId - Paddle product ID
+ * @param {string} planName - Plan name (basic, starter, pro)
+ * @param {number} amount - Amount in cents
+ * @param {string} billingInterval - "monthly" or "yearly" (default: "monthly")
  */
-export async function getOrCreatePaddlePrice(productId, planName, amount) {
+export async function getOrCreatePaddlePrice(productId, planName, amount, billingInterval = "monthly") {
   try {
-    // Check if price exists
+    const interval = billingInterval === "yearly" ? "year" : "month";
+    const frequency = billingInterval === "yearly" ? 1 : 1;
+    
+    // Calculate yearly amount (10 months price for yearly - 2 months discount)
+    const finalAmount = billingInterval === "yearly" 
+      ? Math.round(amount * 10) // 10 months price for yearly
+      : amount;
+
+    // Check if price exists for this interval
     const prices = await paddleRequest("GET", `/prices?product_id=${productId}`);
     const existingPrice = prices.data?.find(
-      (p) => p.billing_cycle?.interval === "month" && p.unit_price?.amount === String(amount)
+      (p) => p.billing_cycle?.interval === interval && 
+            p.billing_cycle?.frequency === frequency &&
+            p.unit_price?.amount === String(finalAmount)
     );
 
     if (existingPrice) {
@@ -190,22 +204,23 @@ export async function getOrCreatePaddlePrice(productId, planName, amount) {
     }
 
     // Create new price with trial
-    const trialDays = PLAN_TRIAL_DAYS[planName] || 7;
+    const trialDays = PLAN_TRIAL_DAYS[planName] || 14;
 
     // Ensure amount is a string integer (in cents)
-    const amountInCents = String(Math.round(amount));
+    const amountInCents = String(Math.round(finalAmount));
+    const periodLabel = billingInterval === "yearly" ? "Yearly" : "Monthly";
 
     const priceData = {
       product_id: productId,
-      description: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan - Monthly`,
-      name: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan - Monthly`,
+      description: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan - ${periodLabel}`,
+      name: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan - ${periodLabel}`,
       unit_price: {
         amount: amountInCents,
         currency_code: "USD",
       },
       billing_cycle: {
-        interval: "month",
-        frequency: 1,
+        interval: interval,
+        frequency: frequency,
       },
       trial_period: {
         interval: "day",

@@ -6,7 +6,7 @@ import { hasVerificationColumns, hasBannerConfigColumn } from "@/lib/db-utils";
 export async function GET(req) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session || !session.user || !session.user.id) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -14,7 +14,7 @@ export async function GET(req) {
     // Fetch sites - handle missing columns gracefully
     const verificationColumns = await hasVerificationColumns();
     const bannerConfigExists = await hasBannerConfigColumn();
-    
+
     // Check if lastSeenAt column exists
     const hasLastSeenAt = await prisma.$queryRaw`
       SELECT column_name 
@@ -23,7 +23,7 @@ export async function GET(req) {
       AND column_name = 'lastSeenAt'
       LIMIT 1
     `.then(result => Array.isArray(result) && result.length > 0).catch(() => false);
-    
+
     let sites;
     try {
       sites = await prisma.site.findMany({
@@ -43,7 +43,7 @@ export async function GET(req) {
           updatedAt: true,
         },
       });
-      
+
       // If verification columns don't exist, populate from bannerConfig fallback
       if (!verificationColumns.allExist && bannerConfigExists) {
         sites = sites.map(site => {
@@ -67,7 +67,7 @@ export async function GET(req) {
           if (site.isVerified && site.lastSeenAt) {
             const lastSeen = new Date(site.lastSeenAt);
             const hoursSinceLastSeen = (now - lastSeen) / (1000 * 60 * 60);
-            
+
             if (hoursSinceLastSeen > 48) {
               console.log(`[Sites API] Site ${site.siteId} inactive for ${hoursSinceLastSeen.toFixed(1)} hours, marking as disconnected`);
               // Update database
@@ -142,7 +142,7 @@ export async function GET(req) {
             verifiedAt: verificationFromBanner?.verifiedAt || null,
           };
         });
-        
+
         // Check lastSeenAt for fallback sites too
         if (hasLastSeenAtFallback) {
           const now = new Date();
@@ -165,7 +165,6 @@ export async function GET(req) {
       }
     }
 
-    console.log("Fetched sites:", { count: sites.length, userId: session.user.id });
     return Response.json(sites);
   } catch (error) {
     console.error("Error fetching sites:", error);
@@ -183,7 +182,7 @@ export async function GET(req) {
       userId: userId,
     });
     return Response.json(
-      { 
+      {
         error: "Internal server error",
         details: process.env.NODE_ENV === "development" ? error.message : undefined
       },
@@ -195,7 +194,7 @@ export async function GET(req) {
 export async function DELETE(req) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session || !session.user || !session.user.id) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -218,7 +217,7 @@ export async function DELETE(req) {
         WHERE "id" = ${siteId} AND "userId" = ${session.user.id}
         RETURNING "id"
       `;
-      
+
       if (!result || result.length === 0) {
         return Response.json(
           { error: "Site not found or access denied" },

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { generateSiteId } from "@/lib/store";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
+import { startUserTrial } from "@/lib/subscription";
 
 /**
  * Crawl a domain and detect trackers
@@ -160,6 +161,23 @@ export async function POST(req) {
           },
         });
         isNewSite = true;
+        
+        // Start user-level trial (14 days) if this is user's first domain
+        // Check if user already has any sites
+        const userSiteCount = await prisma.site.count({
+          where: { userId: userId },
+        });
+        
+        // If this is the first site, start user trial
+        if (userSiteCount === 1) {
+          try {
+            await startUserTrial(userId);
+            console.log(`[Crawl] Started 14-day user trial for user ${userId} (first domain added)`);
+          } catch (trialError) {
+            console.error("[Crawl] Error starting user trial:", trialError);
+            // Continue even if trial start fails
+          }
+        }
       } catch (createError) {
         // Handle race condition if site was created by another request
         if (createError.code === "P2002") {

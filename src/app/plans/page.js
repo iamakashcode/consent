@@ -25,7 +25,7 @@ const PLAN_DETAILS = {
       "Basic tracker detection",
       "Cookie consent banner",
       "Community support",
-      "7-day free trial",
+      "14-day free trial",
     ],
     popular: false,
   },
@@ -42,7 +42,7 @@ const PLAN_DETAILS = {
       "Customizable banner",
       "Email support",
       "Analytics dashboard",
-      "7-day free trial",
+      "14-day free trial",
     ],
     popular: true,
   },
@@ -60,7 +60,7 @@ const PLAN_DETAILS = {
       "Priority support",
       "Advanced analytics",
       "API access",
-      "7-day free trial",
+      "14-day free trial",
     ],
     popular: false,
   },
@@ -97,7 +97,7 @@ function PlansContent() {
 
   if (!session) return null;
 
-  const handlePlanSelect = async (planKey) => {
+  const handlePlanSelect = async (planKey, billingInterval = "monthly") => {
     if (!siteId) {
       alert("Please add a domain first before selecting a plan.");
       router.push("/dashboard");
@@ -111,7 +111,7 @@ function PlansContent() {
       const response = await fetch("/api/payment/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: planKey, siteId }),
+        body: JSON.stringify({ plan: planKey, siteId, billingInterval }),
       });
 
       const data = await response.json();
@@ -256,8 +256,11 @@ function PlansContent() {
             <p className="text-sm text-gray-500 mb-4">{plan.description}</p>
 
             <div className="mb-6">
-              <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
-              <span className="text-gray-500 ml-1">{plan.period}</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
+                <span className="text-gray-500">{plan.period}</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">or ₹{Math.round(parseInt(plan.price.replace('₹', '')) * 10)}/year</p>
             </div>
 
             <ul className="space-y-3 mb-6">
@@ -269,25 +272,44 @@ function PlansContent() {
               ))}
             </ul>
 
-            <button
-              onClick={() => handlePlanSelect(planKey)}
-              disabled={loading || !siteId}
-              className={`w-full py-3 text-sm font-medium rounded-lg transition-colors ${
-                !siteId
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+            <div className="space-y-2">
+              <button
+                onClick={() => handlePlanSelect(planKey, "monthly")}
+                disabled={loading || !siteId}
+                className={`w-full py-3 text-sm font-medium rounded-lg transition-colors ${
+                  !siteId
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : loading && selectedPlan === planKey
+                    ? "bg-gray-100 text-gray-500"
+                    : plan.popular
+                    ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                    : "bg-gray-100 text-gray-900 hover:bg-gray-200"
+                }`}
+              >
+                {!siteId
+                  ? "Add Domain First"
                   : loading && selectedPlan === planKey
-                  ? "bg-gray-100 text-gray-500"
-                  : plan.popular
-                  ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                  : "bg-gray-100 text-gray-900 hover:bg-gray-200"
-              }`}
-            >
-              {!siteId
-                ? "Add Domain First"
-                : loading && selectedPlan === planKey
-                ? "Processing..."
-                : `Select ${plan.name}`}
-            </button>
+                  ? "Processing..."
+                  : `Select ${plan.name} (Monthly)`}
+              </button>
+              <button
+                onClick={() => handlePlanSelect(planKey, "yearly")}
+                disabled={loading || !siteId}
+                className={`w-full py-2 text-xs font-medium rounded-lg transition-colors border ${
+                  !siteId
+                    ? "bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed"
+                    : loading && selectedPlan === planKey
+                    ? "bg-gray-50 text-gray-500 border-gray-200"
+                    : "bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                }`}
+              >
+                {!siteId
+                  ? "Add Domain First"
+                  : loading && selectedPlan === planKey
+                  ? "Processing..."
+                  : `Select ${plan.name} (Yearly - Save 2 months)`}
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -299,7 +321,7 @@ function PlansContent() {
           {[
             {
               q: "How does the trial work?",
-              a: "All plans include a 7-day free trial. Your trial starts when you add a payment method. You won't be charged until the trial ends.",
+              a: "All new users get a 14-day free trial. Your trial starts when you add your first domain. All your domains share this trial period. You won't be charged until the trial ends.",
             },
             {
               q: "Can I cancel anytime?",
@@ -307,7 +329,7 @@ function PlansContent() {
             },
             {
               q: "One subscription per domain?",
-              a: "Yes, each domain needs its own subscription. This allows you to choose different plans based on each domain's traffic needs.",
+              a: "Yes, each domain needs its own subscription. However, all your domains share the same 14-day user trial period.",
             },
             {
               q: "What happens if I exceed page views?",

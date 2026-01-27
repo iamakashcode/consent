@@ -51,7 +51,11 @@ function UsageContent() {
         const data = await subsRes.json();
         const map = {};
         (data.subscriptions || []).forEach((item) => {
-          map[item.siteId] = item;
+          map[item.siteId] = {
+            ...item,
+            userTrialActive: data.userTrialActive || false,
+            userTrialDaysLeft: data.userTrialDaysLeft || null,
+          };
         });
         setSubscriptions(map);
       }
@@ -131,10 +135,29 @@ function UsageContent() {
             )}
             {sites.map((site) => {
               const sub = subscriptions[site.siteId];
+              const isActive = sub?.isActive || false;
+              const status = sub?.subscription?.status?.toLowerCase();
               return (
                 <div key={site.id} className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{site.domain}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900">{site.domain}</p>
+                      {isActive && (
+                        <span className="px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">
+                          Active
+                        </span>
+                      )}
+                      {!isActive && status === "pending" && (
+                        <span className="px-1.5 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-700 rounded">
+                          Payment Required
+                        </span>
+                      )}
+                      {!isActive && !status && (
+                        <span className="px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">
+                          No Plan
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-500">
                       {sub?.subscription?.plan ? `${sub.subscription.plan} plan` : "No plan"}
                     </p>

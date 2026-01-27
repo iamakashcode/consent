@@ -74,7 +74,9 @@ function PaymentReturnContent() {
             const syncData = await syncResponse.json();
             console.log("[Return] Synced subscription:", syncData);
             
-            if (syncData.subscription && syncData.subscription.status === "active") {
+            // Check if subscription is active or trial (both mean user has access)
+            const subscriptionStatus = syncData.subscription?.status?.toLowerCase();
+            if (syncData.subscription && (subscriptionStatus === "active" || subscriptionStatus === "trial")) {
               setStatusMessage("✅ Payment successful! Your subscription is now active.");
               setRedirecting(true);
               
@@ -127,7 +129,8 @@ function PaymentReturnContent() {
             (sub) => sub.subscription?.paddleSubscriptionId === subIdToCheck
           )?.subscription;
 
-          if (subscription && subscription.status === "active") {
+          const subscriptionStatus = subscription?.status?.toLowerCase();
+          if (subscription && (subscriptionStatus === "active" || subscriptionStatus === "trial")) {
             setStatusMessage("✅ Payment successful! Your subscription is now active.");
             setRedirecting(true);
             
@@ -181,7 +184,9 @@ function PaymentReturnContent() {
 
                 if (syncResponse.ok) {
                   const syncData = await syncResponse.json();
-                  if (syncData.subscription && syncData.subscription.status === "active") {
+                  const subscriptionStatus = syncData.subscription?.status?.toLowerCase();
+                  // Check if subscription is active or trial (both mean user has access)
+                  if (syncData.subscription && (subscriptionStatus === "active" || subscriptionStatus === "trial")) {
                     clearInterval(pollInterval);
                     setStatusMessage("✅ Payment successful! Your subscription is now active.");
                     setRedirecting(true);
@@ -190,6 +195,7 @@ function PaymentReturnContent() {
                     // Clear sessionStorage
                     if (typeof window !== 'undefined') {
                       sessionStorage.removeItem('paddle_subscription_id');
+                      sessionStorage.removeItem('paddle_transaction_id');
                       sessionStorage.removeItem('paddle_site_id');
                       sessionStorage.removeItem('paddle_redirect_url');
                       sessionStorage.removeItem('paddle_return_url');
@@ -211,6 +217,7 @@ function PaymentReturnContent() {
                       }
                       router.push(target);
                     }, 800);
+                    setChecking(false);
                     return;
                   }
                 }
@@ -229,7 +236,8 @@ function PaymentReturnContent() {
             }
                   )?.subscription;
 
-                  if (pollSubscription && pollSubscription.status === "active") {
+                  const pollStatus = pollSubscription?.status?.toLowerCase();
+                  if (pollSubscription && (pollStatus === "active" || pollStatus === "trial")) {
                     clearInterval(pollInterval);
                     setStatusMessage("✅ Payment successful! Your subscription is now active.");
                     setRedirecting(true);

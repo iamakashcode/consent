@@ -31,6 +31,9 @@ function BillingContent() {
   const [loading, setLoading] = useState(true);
   const [subscriptions, setSubscriptions] = useState([]);
   const [sites, setSites] = useState([]);
+  const [userTrialActive, setUserTrialActive] = useState(false);
+  const [userTrialEndAt, setUserTrialEndAt] = useState(null);
+  const [userTrialDaysLeft, setUserTrialDaysLeft] = useState(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -54,6 +57,12 @@ function BillingContent() {
       if (subsRes.ok) {
         const data = await subsRes.json();
         setSubscriptions(data.subscriptions || []);
+        // Store user trial info if available
+        if (data.userTrialActive !== undefined) {
+          setUserTrialActive(data.userTrialActive);
+          setUserTrialEndAt(data.userTrialEndAt);
+          setUserTrialDaysLeft(data.userTrialDaysLeft);
+        }
       }
 
       if (sitesRes.ok) {
@@ -123,6 +132,36 @@ function BillingContent() {
         <p className="text-gray-500 mt-1">Manage your domain subscriptions and billing</p>
       </div>
 
+      {/* User Trial Banner */}
+      {userTrialActive && userTrialDaysLeft !== null && (
+        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+              <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-blue-900">14-Day Free Trial Active</h3>
+              <p className="text-sm text-blue-700">
+                {userTrialDaysLeft > 0 
+                  ? `${userTrialDaysLeft} day${userTrialDaysLeft !== 1 ? 's' : ''} remaining in your free trial`
+                  : 'Your trial ends today'}
+                {userTrialEndAt && (
+                  <span className="ml-2">
+                    (ends {new Date(userTrialEndAt).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })})
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -169,9 +208,11 @@ function BillingContent() {
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="font-semibold text-gray-900">{sub.domain}</h3>
-                        {isTrial && (
+                        {(isTrial || userTrialActive) && (
                           <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
-                            Trial: {sub.trialDaysLeft} days left
+                            {userTrialActive 
+                              ? `User Trial: ${userTrialDaysLeft || 0} days left`
+                              : `Trial: ${sub.trialDaysLeft || 0} days left`}
                           </span>
                         )}
                         {isActive && !isTrial && (
@@ -196,7 +237,7 @@ function BillingContent() {
                           <strong className="text-gray-900">{planDetails?.name}</strong> Plan
                         </span>
                         <span>
-                          ₹{planDetails?.price}/month
+                          ₹{planDetails?.price}/{sub.subscription?.billingInterval === "yearly" ? "year" : "month"}
                         </span>
                         <span>
                           {planDetails?.pageViews === Infinity
@@ -293,7 +334,7 @@ function BillingContent() {
                     {plan.pageViews === Infinity ? "Unlimited" : plan.pageViews.toLocaleString()} page views
                   </li>
                   <li className="flex items-center gap-2 text-sm text-gray-600">
-                    <CheckIcon />7-day free trial
+                    <CheckIcon />14-day free trial (per user)
                   </li>
                 </ul>
                 <Link

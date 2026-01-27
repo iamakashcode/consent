@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
 import { fetchPaddleSubscription } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
-import { startDomainTrial } from "@/lib/subscription";
+import { startUserTrial } from "@/lib/subscription";
 
 /**
  * Sync subscription status from Paddle
@@ -82,14 +82,33 @@ export async function POST(req) {
     let newStatus = dbSubscription.status;
     let shouldStartTrial = false;
 
+    // Get site and user info first
+    const site = await prisma.site.findUnique({
+      where: { id: dbSubscription.siteId },
+      include: { user: { select: { trialEndAt: true, trialStartedAt: true } } },
+    });
+
+    if (!site) {
+      return Response.json(
+        { error: "Site not found" },
+        { status: 404 }
+      );
+    }
+
     switch (paddleStatus) {
       case "active":
-        if (dbSubscription.status === "pending") {
+        // If subscription is active in Paddle, check if user trial is active
+        // If user trial is active, keep as trial; otherwise set to active
+        if (site.user?.trialEndAt && new Date() < new Date(site.user.trialEndAt)) {
+          // User trial is active
+          newStatus = "trial";
+          shouldStartTrial = false; // Already active
+        } else if (dbSubscription.status === "pending") {
+          // Payment just completed, start user trial
           newStatus = "trial";
           shouldStartTrial = true;
-        } else if (dbSubscription.status === "trial") {
-          newStatus = "trial";
         } else {
+          // User trial ended, subscription is active
           newStatus = "active";
         }
         break;
@@ -123,14 +142,19 @@ export async function POST(req) {
       },
     });
 
-    // Start trial if needed
+    // Start user-level trial if needed (14 days for new users)
     if (shouldStartTrial) {
-      await startDomainTrial(dbSubscription.siteId, dbSubscription.plan);
+      await startUserTrial(site.userId);
+      console.log(`[Sync] Started user trial for user ${site.userId}`);
     }
 
     return Response.json({
       success: true,
       subscription: updated,
+      site: {
+        siteId: site.siteId,
+        domain: site.domain,
+      },
       paddleStatus,
       message: `Subscription synced. Status: ${newStatus}`,
     });

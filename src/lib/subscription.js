@@ -3,12 +3,13 @@ import { PLAN_PAGE_VIEW_LIMITS, PLAN_TRIAL_DAYS } from "./paddle";
 
 /**
  * Check if a domain/site has an active subscription or trial
+ * User-based trial: All domains share the user's 14-day trial period
  * @param {string} siteId - Can be public siteId or database ID
- * @returns {Promise<{isActive: boolean, reason: string, subscription?: object, site?: object}>}
+ * @returns {Promise<{isActive: boolean, reason: string, subscription?: object, site?: object, user?: object}>}
  */
 export async function isDomainActive(siteId) {
   try {
-    // Find site by public siteId or database ID
+    // Find site by public siteId or database ID, include user for trial check
     const site = await prisma.site.findFirst({
       where: {
         OR: [
@@ -16,7 +17,16 @@ export async function isDomainActive(siteId) {
           { id: siteId },
         ],
       },
-      include: { subscription: true },
+      include: { 
+        subscription: true,
+        user: {
+          select: {
+            id: true,
+            trialStartedAt: true,
+            trialEndAt: true,
+          },
+        },
+      },
     });
 
     if (!site) {
@@ -24,11 +34,28 @@ export async function isDomainActive(siteId) {
     }
 
     const subscription = site.subscription;
+    const user = site.user;
     const now = new Date();
+
+    // Check user-level trial first (14 days for new users)
+    const userTrialActive = user.trialEndAt && now < new Date(user.trialEndAt);
+    if (userTrialActive) {
+      const trialEnd = new Date(user.trialEndAt);
+      const daysLeft = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
+      return { 
+        isActive: true, 
+        reason: "user_trial", 
+        site, 
+        subscription,
+        user,
+        trialDaysLeft: daysLeft,
+        trialEndAt: user.trialEndAt,
+      };
+    }
 
     // No subscription at all
     if (!subscription) {
-      return { isActive: false, reason: "No subscription", site };
+      return { isActive: false, reason: "No subscription", site, user };
     }
 
     // Check subscription status
@@ -36,7 +63,7 @@ export async function isDomainActive(siteId) {
 
     // Pending - payment method not yet added
     if (status === "pending") {
-      return { isActive: false, reason: "Payment setup required", site, subscription };
+      return { isActive: false, reason: "Payment setup required", site, subscription, user };
     }
 
     // Cancelled or expired
@@ -48,41 +75,50 @@ export async function isDomainActive(siteId) {
           reason: "Active until period end", 
           site, 
           subscription,
+          user,
           expiresAt: subscription.currentPeriodEnd,
         };
       }
-      return { isActive: false, reason: `Subscription ${status}`, site, subscription };
+      return { isActive: false, reason: `Subscription ${status}`, site, subscription, user };
     }
 
     // Payment failed
     if (status === "payment_failed") {
-      return { isActive: false, reason: "Payment failed", site, subscription };
-    }
-
-    // Check if in trial period
-    if (status === "trial" || (site.trialEndAt && now < new Date(site.trialEndAt))) {
-      const trialEnd = new Date(site.trialEndAt);
-      const daysLeft = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
-      return { 
-        isActive: true, 
-        reason: "trial", 
-        site, 
-        subscription,
-        trialDaysLeft: daysLeft,
-        trialEndAt: site.trialEndAt,
-      };
+      return { isActive: false, reason: "Payment failed", site, subscription, user };
     }
 
     // Active subscription - check period
     if (status === "active") {
       if (subscription.currentPeriodEnd && now > new Date(subscription.currentPeriodEnd)) {
-        return { isActive: false, reason: "Period expired", site, subscription };
+        return { isActive: false, reason: "Period expired", site, subscription, user };
       }
-      return { isActive: true, reason: "active", site, subscription };
+      return { isActive: true, reason: "active", site, subscription, user };
+    }
+
+    // Trial status (for backward compatibility, but user trial takes precedence)
+    if (status === "trial") {
+      // Still check user trial first
+      if (userTrialActive) {
+        const trialEnd = new Date(user.trialEndAt);
+        const daysLeft = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
+        return { 
+          isActive: true, 
+          reason: "user_trial", 
+          site, 
+          subscription,
+          user,
+          trialDaysLeft: daysLeft,
+          trialEndAt: user.trialEndAt,
+        };
+      }
+      // If subscription is trial but user trial ended, check subscription period
+      if (subscription.currentPeriodEnd && now < new Date(subscription.currentPeriodEnd)) {
+        return { isActive: true, reason: "active", site, subscription, user };
+      }
     }
 
     // Default: allow access if status is unknown (fail-open)
-    return { isActive: true, reason: "active", site, subscription };
+    return { isActive: true, reason: "active", site, subscription, user };
 
   } catch (error) {
     console.error("Error checking domain status:", error);
@@ -104,25 +140,16 @@ export async function isSubscriptionActive(siteId) {
  */
 export async function getSubscriptionWithStatus(siteId) {
   try {
-    const site = await prisma.site.findFirst({
-      where: {
-        OR: [
-          { siteId: siteId },
-          { id: siteId },
-        ],
-      },
-      include: { subscription: true },
-    });
-
-    if (!site) {
-      return { subscription: null, isActive: false, site: null };
-    }
-
     const statusCheck = await isDomainActive(siteId);
     
+    if (!statusCheck.site) {
+      return { subscription: null, isActive: false, site: null, user: null };
+    }
+
     return {
-      subscription: site.subscription,
-      site: site,
+      subscription: statusCheck.subscription,
+      site: statusCheck.site,
+      user: statusCheck.user,
       isActive: statusCheck.isActive,
       reason: statusCheck.reason,
       trialDaysLeft: statusCheck.trialDaysLeft,
@@ -130,7 +157,7 @@ export async function getSubscriptionWithStatus(siteId) {
     };
   } catch (error) {
     console.error("Error getting subscription:", error);
-    return { subscription: null, isActive: false, site: null };
+    return { subscription: null, isActive: false, site: null, user: null };
   }
 }
 
@@ -193,39 +220,86 @@ export async function checkPageViewLimit(siteId) {
 }
 
 /**
- * Start trial for a domain (called when subscription is activated)
- * @param {string} siteDbId - Database ID of the site
- * @param {string} plan - Plan name
+ * Start user-level trial (14 days for new users)
+ * All domains share this trial period
+ * @param {string} userId - User ID
+ * @returns {Promise<{trialStartedAt: Date, trialEndAt: Date, trialDays: number}>}
  */
-export async function startDomainTrial(siteDbId, plan) {
+export async function startUserTrial(userId) {
   try {
-    const trialDays = PLAN_TRIAL_DAYS[plan] || 7;
+    const trialDays = 14; // 14-day trial for all new users
     const now = new Date();
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + trialDays);
 
-    // Update site with trial dates
-    await prisma.site.update({
-      where: { id: siteDbId },
+    // Check if user already has a trial
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { trialEndAt: true },
+    });
+
+    // If user already has an active trial, don't start a new one
+    if (user?.trialEndAt && new Date() < new Date(user.trialEndAt)) {
+      console.log(`[Subscription] User ${userId} already has an active trial`);
+      return { 
+        trialStartedAt: user.trialStartedAt || now, 
+        trialEndAt: user.trialEndAt, 
+        trialDays: Math.ceil((new Date(user.trialEndAt) - now) / (1000 * 60 * 60 * 24)),
+      };
+    }
+
+    // Update user with trial dates
+    await prisma.user.update({
+      where: { id: userId },
       data: {
         trialStartedAt: now,
         trialEndAt: trialEnd,
       },
     });
 
+    console.log(`[Subscription] Started ${trialDays}-day user trial for user ${userId}, ends: ${trialEnd.toISOString()}`);
+
+    return { trialStartedAt: now, trialEndAt: trialEnd, trialDays };
+  } catch (error) {
+    console.error("Error starting user trial:", error);
+    throw error;
+  }
+}
+
+/**
+ * Start trial for a domain (DEPRECATED - now using user-level trial)
+ * Kept for backward compatibility
+ * @param {string} siteDbId - Database ID of the site
+ * @param {string} plan - Plan name
+ */
+export async function startDomainTrial(siteDbId, plan) {
+  try {
+    // Get site to find user
+    const site = await prisma.site.findUnique({
+      where: { id: siteDbId },
+      select: { userId: true },
+    });
+
+    if (!site) {
+      throw new Error("Site not found");
+    }
+
+    // Start user-level trial instead
+    const userTrial = await startUserTrial(site.userId);
+
     // Update subscription status to trial
     await prisma.subscription.update({
       where: { siteId: siteDbId },
       data: {
         status: "trial",
-        currentPeriodStart: now,
-        currentPeriodEnd: trialEnd,
+        currentPeriodStart: userTrial.trialStartedAt,
+        currentPeriodEnd: userTrial.trialEndAt,
       },
     });
 
-    console.log(`[Subscription] Started ${trialDays}-day trial for site ${siteDbId}, ends: ${trialEnd.toISOString()}`);
+    console.log(`[Subscription] Updated subscription ${siteDbId} to trial status (using user trial)`);
 
-    return { trialStartedAt: now, trialEndAt: trialEnd, trialDays };
+    return userTrial;
   } catch (error) {
     console.error("Error starting domain trial:", error);
     throw error;
@@ -376,33 +450,66 @@ export async function isDomainInTrial(siteId) {
  */
 export async function getUserSubscriptions(userId) {
   try {
+    // Get user with trial info
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { trialStartedAt: true, trialEndAt: true },
+    });
+
     const sites = await prisma.site.findMany({
       where: { userId },
       include: { subscription: true },
       orderBy: { createdAt: "desc" },
     });
 
+    const now = new Date();
+    const userTrialActive = user?.trialEndAt && now < new Date(user.trialEndAt);
+
     const subscriptions = sites
       .filter(site => site.subscription)
-      .map(site => ({
-        siteId: site.siteId,
-        siteDbId: site.id,
-        domain: site.domain,
-        subscription: site.subscription,
-        trialEndAt: site.trialEndAt,
-        trialStartedAt: site.trialStartedAt,
-        isActive: site.subscription?.status === "active" || 
-                  site.subscription?.status === "trial" ||
-                  (site.trialEndAt && new Date() < new Date(site.trialEndAt)),
-      }));
+      .map(site => {
+        // Check if domain is active (using user trial or subscription)
+        const subscription = site.subscription;
+        const status = subscription.status?.toLowerCase();
+        
+        let isActive = false;
+        if (userTrialActive) {
+          isActive = true; // User trial is active
+        } else if (status === "active") {
+          // Check if subscription period is valid
+          if (subscription.currentPeriodEnd && now < new Date(subscription.currentPeriodEnd)) {
+            isActive = true;
+          }
+        } else if (status === "trial") {
+          // Check if subscription trial period is valid
+          if (subscription.currentPeriodEnd && now < new Date(subscription.currentPeriodEnd)) {
+            isActive = true;
+          }
+        }
+
+        return {
+          siteId: site.siteId,
+          siteDbId: site.id,
+          domain: site.domain,
+          subscription: site.subscription,
+          trialEndAt: user?.trialEndAt || null, // User-level trial
+          trialStartedAt: user?.trialStartedAt || null,
+          isActive,
+        };
+      });
 
     return {
       subscriptions,
       count: subscriptions.length,
       activeCount: subscriptions.filter(s => s.isActive).length,
+      userTrialActive,
+      userTrialEndAt: user?.trialEndAt || null,
+      userTrialDaysLeft: user?.trialEndAt 
+        ? Math.max(0, Math.ceil((new Date(user.trialEndAt) - now) / (1000 * 60 * 60 * 24)))
+        : null,
     };
   } catch (error) {
     console.error("Error getting user subscriptions:", error);
-    return { subscriptions: [], count: 0, activeCount: 0 };
+    return { subscriptions: [], count: 0, activeCount: 0, userTrialActive: false };
   }
 }

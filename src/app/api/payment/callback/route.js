@@ -13,16 +13,13 @@ export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
     const subscriptionId = searchParams.get("subscription_id") || searchParams.get("subscriptionId");
-    const status = searchParams.get("status");
-    
-    console.log("[Payment Callback] Received callback:", { subscriptionId, status });
-    
+
     // Get session to verify user
     const session = await getServerSession(authOptions);
-    
+
     if (!session || !session.user || !session.user.id) {
       // Redirect to login if not authenticated, but store subscription ID for after login
-      const loginUrl = subscriptionId 
+      const loginUrl = subscriptionId
         ? `/login?redirect=/api/payment/callback?subscription_id=${subscriptionId}`
         : "/login";
       return Response.redirect(new URL(loginUrl, req.url));
@@ -31,7 +28,7 @@ export async function GET(req) {
     // With Paddle, payment callbacks are handled via webhooks
     // This route is kept for compatibility but redirects to dashboard
     let redirectUrl = "/dashboard/usage?payment=success";
-    
+
     // Try to find subscription by Paddle subscription/transaction ID
     if (subscriptionId) {
       try {
@@ -47,7 +44,7 @@ export async function GET(req) {
           },
           include: { site: { select: { siteId: true } } },
         });
-        
+
         if (subscription && subscription.site) {
           redirectUrl = `/dashboard/usage?payment=success&siteId=${subscription.site.siteId}`;
         }

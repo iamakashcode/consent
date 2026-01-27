@@ -90,7 +90,12 @@ function DashboardContent() {
         const subsMap = {};
         if (data.subscriptions) {
           data.subscriptions.forEach((item) => {
-            subsMap[item.siteId] = item;
+            subsMap[item.siteId] = {
+              ...item,
+              userTrialActive: data.userTrialActive || false,
+              userTrialDaysLeft: data.userTrialDaysLeft || null,
+              userTrialEndAt: data.userTrialEndAt || null,
+            };
           });
         }
         setSubscriptions(subsMap);
@@ -329,8 +334,8 @@ function DashboardContent() {
               const isActive = subData?.isActive;
               const subscription = subData?.subscription;
               const isPending = subscription?.status?.toLowerCase() === "pending";
-              const isTrial = subscription?.status?.toLowerCase() === "trial";
-              const trialDaysLeft = subData?.trialDaysLeft;
+              const isTrial = subscription?.status?.toLowerCase() === "trial" || subData?.userTrialActive;
+              const trialDaysLeft = subData?.userTrialDaysLeft || subData?.trialDaysLeft;
 
               return (
                 <div key={site.id} className="px-6 py-4 hover:bg-gray-50 transition-colors">
@@ -353,9 +358,11 @@ function DashboardContent() {
                               Connected
                             </span>
                           )}
-                          {isTrial && trialDaysLeft && (
+                          {(isTrial || subData?.userTrialActive) && (trialDaysLeft || subData?.userTrialDaysLeft) && (
                             <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
-                              Trial: {trialDaysLeft} days left
+                              {subData?.userTrialActive 
+                                ? `User Trial: ${subData.userTrialDaysLeft || 0} days left`
+                                : `Trial: ${trialDaysLeft || 0} days left`}
                             </span>
                           )}
                           {isActive && !isTrial && subscription?.plan && (
@@ -363,12 +370,12 @@ function DashboardContent() {
                               {subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)}
                             </span>
                           )}
-                          {!subData && (
+                          {!isActive && !subData?.userTrialActive && !isPending && (
                             <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">
                               No Plan
                             </span>
                           )}
-                          {isPending && (
+                          {isPending && !subData?.userTrialActive && (
                             <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-700 rounded">
                               Payment Required
                             </span>

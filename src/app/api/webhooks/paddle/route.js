@@ -1,6 +1,6 @@
 import { verifyPaddleWebhookSignature } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
-import { startDomainTrial } from "@/lib/subscription";
+import { startUserTrial, activateSubscription } from "@/lib/subscription";
 
 /**
  * Paddle Webhook Handler
@@ -94,7 +94,7 @@ async function handleSubscriptionActivated(event) {
 
   const dbSubscription = await prisma.subscription.findFirst({
     where: { paddleSubscriptionId: subscriptionId },
-    include: { site: true },
+    include: { site: { include: { user: true } } },
   });
 
   if (!dbSubscription) {
@@ -102,10 +102,12 @@ async function handleSubscriptionActivated(event) {
     return;
   }
 
-  // Start trial
-  await startDomainTrial(dbSubscription.siteId, dbSubscription.plan);
+  // Start user-level trial (14 days) if not already started
+  const userId = dbSubscription.site.userId;
+  const { startUserTrial } = await import("@/lib/subscription");
+  await startUserTrial(userId);
 
-  // Update subscription status
+  // Update subscription status to trial
   await prisma.subscription.update({
     where: { id: dbSubscription.id },
     data: {
@@ -119,6 +121,8 @@ async function handleSubscriptionActivated(event) {
       updatedAt: new Date(),
     },
   });
+
+  console.log(`[Webhook] Subscription ${subscriptionId} activated and user trial started`);
 }
 
 /**
@@ -193,16 +197,58 @@ async function handleTransactionCompleted(event) {
     return;
   }
 
+  // Get site to access user
+  const site = await prisma.site.findUnique({
+    where: { id: dbSubscription.siteId },
+    include: { user: true },
+  });
+
+  if (!site) {
+    console.warn(`[Webhook] Site not found for subscription: ${dbSubscription.id}`);
+    return;
+  }
+
+  // Start user trial if not already started (14 days)
+  await startUserTrial(site.userId);
+
   // Update subscription with subscription ID and transaction info
+  // If subscription status is already trial, keep it; otherwise set to active
+  const currentStatus = dbSubscription.status?.toLowerCase();
+  let newStatus = "active";
+  if (currentStatus === "trial" || currentStatus === "pending") {
+    // Check if user trial is active
+    const user = await prisma.user.findUnique({
+      where: { id: site.userId },
+      select: { trialEndAt: true },
+    });
+    if (user?.trialEndAt && new Date() < new Date(user.trialEndAt)) {
+      newStatus = "trial";
+    } else {
+      newStatus = "active";
+    }
+  }
+
   await prisma.subscription.update({
     where: { id: dbSubscription.id },
     data: {
       paddleSubscriptionId: subscriptionId || dbSubscription.paddleSubscriptionId,
       paddleTransactionId: transaction.id,
-      status: dbSubscription.status === "trial" ? "trial" : "pending", // Will be activated by subscription.activated webhook
+      status: newStatus,
+      currentPeriodStart: transaction.billing_period?.starts_at
+        ? new Date(transaction.billing_period.starts_at)
+        : new Date(),
+      currentPeriodEnd: transaction.billing_period?.ends_at
+        ? new Date(transaction.billing_period.ends_at)
+        : (() => {
+            const end = new Date();
+            end.setMonth(end.getMonth() + 1);
+            return end;
+          })(),
       updatedAt: new Date(),
     },
   });
+
+  console.log(`[Webhook] Transaction ${transaction.id} completed, subscription ${dbSubscription.id} updated to ${newStatus}`);
 }
 
 /**

@@ -59,7 +59,11 @@ export default function DomainsPage() {
         const data = await subsRes.json();
         const map = {};
         (data.subscriptions || []).forEach((item) => {
-          map[item.siteId] = item;
+          map[item.siteId] = {
+            ...item,
+            userTrialActive: data.userTrialActive || false,
+            userTrialDaysLeft: data.userTrialDaysLeft || null,
+          };
         });
         setSubscriptions(map);
       }
@@ -124,7 +128,7 @@ export default function DomainsPage() {
               const status = subscription?.status?.toLowerCase();
               const isActive = subData?.isActive;
               const isPending = status === "pending";
-              const isTrial = status === "trial";
+              const isTrial = status === "trial" || subData?.userTrialActive;
               const statusIcon = isActive ? <CheckCircleIcon /> : isPending ? <ClockIcon /> : <XCircleIcon />;
 
               return (

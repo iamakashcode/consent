@@ -43,11 +43,12 @@ export async function GET(req) {
         siteDbId: site.id,
         domain: site.domain,
         subscription: site.subscription,
-        trialEndAt: site.trialEndAt,
-        trialStartedAt: site.trialStartedAt,
+        trialEndAt: status.trialEndAt || status.user?.trialEndAt || null, // User-level trial
+        trialStartedAt: status.user?.trialStartedAt || null,
         isActive: status.isActive,
         reason: status.reason,
         trialDaysLeft: status.trialDaysLeft,
+        userTrialActive: status.user?.trialEndAt && new Date() < new Date(status.user.trialEndAt),
       });
     }
 

@@ -24,12 +24,20 @@ export async function POST(req) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { plan, siteId } = await req.json();
+    const { plan, siteId, billingInterval = "monthly" } = await req.json();
 
     // Validate plan
     if (!plan || !["basic", "starter", "pro"].includes(plan)) {
       return Response.json(
         { error: "Invalid plan. Choose 'basic', 'starter', or 'pro'" },
+        { status: 400 }
+      );
+    }
+
+    // Validate billing interval
+    if (!["monthly", "yearly"].includes(billingInterval)) {
+      return Response.json(
+        { error: "Invalid billing interval. Choose 'monthly' or 'yearly'" },
         { status: 400 }
       );
     }
@@ -134,10 +142,10 @@ export async function POST(req) {
       );
     }
 
-    // Get or create Paddle price
+    // Get or create Paddle price (with billing interval)
     let paddlePrice;
     try {
-      paddlePrice = await getOrCreatePaddlePrice(paddleProduct.id, plan, amount);
+      paddlePrice = await getOrCreatePaddlePrice(paddleProduct.id, plan, amount, billingInterval);
     } catch (error) {
       console.error("[Payment] Failed to get/create Paddle price:", error);
       return Response.json(
@@ -232,6 +240,7 @@ export async function POST(req) {
           where: { siteId: site.id },
           data: {
             plan: plan,
+            billingInterval: billingInterval,
             status: "pending",
             paddleProductId: paddleProduct.id,
             paddlePriceId: paddlePrice.id,
@@ -246,6 +255,7 @@ export async function POST(req) {
           data: {
             siteId: site.id,
             plan: plan,
+            billingInterval: billingInterval,
             status: "pending",
             paddleProductId: paddleProduct.id,
             paddlePriceId: paddlePrice.id,
