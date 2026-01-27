@@ -872,19 +872,29 @@ console.log('[Consent SDK] Body exists:', !!document.body);
 function showBanner(){
 try{
 var currentConsent=getConsentStatus();
-var bannerExists=!!document.getElementById('cookie-banner');
+var banner=document.getElementById('cookie-banner');
+var bannerExists=!!banner;
 console.log('[Consent SDK] showBanner called, preview mode:', isPreviewMode, 'consent status:', currentConsent, 'banner exists:', bannerExists);
 // In preview mode, always show banner (remove existing to refresh). Otherwise, only show if no consent
 if(!isPreviewMode && (currentConsent||bannerExists)){
 console.log('[Consent SDK] Banner not needed - consent already granted or banner exists');
 return;
 }
-// In preview mode, always remove existing banner to force refresh with new config
+// In preview mode, only remove existing banner if we need to refresh with new config
+// But don't remove if banner is already visible and working
 if(isPreviewMode && bannerExists){
+// Check if banner is actually visible (not hidden)
+var bannerStyle=window.getComputedStyle(banner);
+var isVisible=bannerStyle.display!=='none' && bannerStyle.visibility!=='hidden' && banner.offsetHeight>0;
+if(isVisible){
+console.log('[Consent SDK] Banner already visible in preview mode, skipping recreation');
+return; // Don't recreate if already visible
+}
+// Only remove if banner is hidden or broken
 var existingBanner=document.getElementById('cookie-banner');
 if(existingBanner){
 existingBanner.remove();
-console.log('[Consent SDK] Removed existing banner for preview refresh');
+console.log('[Consent SDK] Removed hidden/broken banner for preview refresh');
 }
 }
 if(!document.body){
@@ -965,7 +975,26 @@ buttonsHtml+='<button id="customize-btn" style="background:transparent;color:'+t
 }
 b.innerHTML='<div style="flex:1;min-width:250px;"><h3 style="margin:0 0 8px 0;font-size:18px;font-weight:600;">'+titleEscaped+'</h3><p style="margin:0;opacity:0.9;line-height:1.5;">'+messageEscaped+'</p></div><div style="display:flex;gap:10px;flex-wrap:wrap;">'+buttonsHtml+'</div>';
 document.body.appendChild(b);
+// Force banner to be visible - ensure it's not hidden
+b.style.display='flex';
+b.style.visibility='visible';
+b.style.opacity='1';
 console.log('[Consent SDK] Banner appended to body, checking if visible...', b.offsetHeight, b.offsetWidth);
+// Verify banner is actually visible after a short delay
+setTimeout(function(){
+var checkBanner=document.getElementById('cookie-banner');
+if(checkBanner){
+var checkStyle=window.getComputedStyle(checkBanner);
+console.log('[Consent SDK] Banner visibility check - display:',checkStyle.display,'visibility:',checkStyle.visibility,'height:',checkBanner.offsetHeight,'z-index:',checkStyle.zIndex);
+if(checkStyle.display==='none'||checkStyle.visibility==='hidden'||checkBanner.offsetHeight===0){
+console.warn('[Consent SDK] Banner is hidden! Forcing visibility...');
+checkBanner.style.display='flex';
+checkBanner.style.visibility='visible';
+checkBanner.style.opacity='1';
+checkBanner.style.zIndex='999999';
+}
+}
+},100);
 // Add hover effects using addEventListener to avoid escaping issues
 var acceptBtnEl=document.getElementById('accept-btn');
 if(acceptBtnEl){
@@ -1223,9 +1252,22 @@ setTimeout(showBanner,500);
 setTimeout(showBanner,1000);
 setTimeout(showBanner,2000);
 setTimeout(showBanner,3000);
-// Also try when window loads
+// Also try when window loads - but check if banner is already visible first
 window.addEventListener('load',function(){
-setTimeout(showBanner,100);
+setTimeout(function(){
+var existingBanner=document.getElementById('cookie-banner');
+if(existingBanner){
+// Banner exists, check if it's visible
+var bannerStyle=window.getComputedStyle(existingBanner);
+var isVisible=bannerStyle.display!=='none' && bannerStyle.visibility!=='hidden' && existingBanner.offsetHeight>0;
+if(isVisible){
+console.log('[Consent SDK] Banner already visible on load, skipping re-show');
+return;
+}
+console.log('[Consent SDK] Banner exists but not visible, re-showing...');
+}
+showBanner();
+},100);
 });
 // In preview mode, continuously check and re-show banner if it disappears
 if(isPreviewMode){
@@ -1235,6 +1277,17 @@ var banner=document.getElementById('cookie-banner');
 if(!banner && document.body){
 console.log('[Consent SDK] Banner disappeared in preview mode, re-showing...');
 showBanner();
+}else if(banner){
+// Banner exists, check if it's actually visible
+var bannerStyle=window.getComputedStyle(banner);
+var isVisible=bannerStyle.display!=='none' && bannerStyle.visibility!=='hidden' && banner.offsetHeight>0;
+if(!isVisible){
+console.log('[Consent SDK] Banner exists but hidden in preview mode, forcing visibility...');
+banner.style.display='flex';
+banner.style.visibility='visible';
+banner.style.opacity='1';
+banner.style.zIndex='999999';
+}
 }
 },500);
 // Stop watchdog after 30 seconds to avoid infinite loop
