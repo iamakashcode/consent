@@ -4,7 +4,7 @@ import { hasVerificationColumns } from "@/lib/db-utils";
 import { isSubscriptionActive } from "@/lib/subscription";
 
 // Generate AGGRESSIVE pre-execution blocker
-function generateInlineBlocker(siteId, allowedDomain, isPreview) {
+function generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiDomain) {
   const CONSENT_KEY = `cookie_consent_${siteId}`;
   
   return `(function(){
@@ -90,7 +90,11 @@ function isFirstParty(url){
   try{
     if(!url)return false;
     var u=new URL(url,location.href);
-    return u.hostname===location.hostname||u.hostname.replace(/^www\\./,'')===location.hostname.replace(/^www\\./,'');
+    var host=u.hostname.toLowerCase().replace(/^www\\./,'');
+    var currentHost=location.hostname.toLowerCase().replace(/^www\\./,'');
+    var consentHost='${consentApiDomain || ''}';
+    // Allow first-party and consent API domain
+    return host===currentHost||(consentHost&&host===consentHost)||host.endsWith('.'+currentHost);
   }catch(e){
     return false;
   }
@@ -120,14 +124,44 @@ var _XHRsend=XMLHttpRequest.prototype.send;
 var _sendBeacon=navigator.sendBeacon;
 var _Image=window.Image;
 
-// Global stubs (safe) - Stub IMMEDIATELY
+// Global stubs (safe) - Stub IMMEDIATELY and make non-configurable
 var noop=function(){log('tracker blocked');};
-window.fbq=window.fbq||noop;
-window._fbq=window.fbq;
-window.fbq.queue=[];window.fbq.loaded=true;window.fbq.version='2.0';
-window.fbq.push=window.fbq;window.fbq.callMethod=noop;
-window.fbq.track=noop;window.fbq.trackCustom=noop;window.fbq.trackSingle=noop;
-window.fbq.init=noop;window.fbq.set=noop;window.fbq.delete=noop;
+try{
+  Object.defineProperty(window,'fbq',{
+    value:noop,
+    writable:false,
+    configurable:false,
+    enumerable:true
+  });
+}catch(e){
+  window.fbq=noop;
+}
+try{
+  Object.defineProperty(window,'_fbq',{
+    value:noop,
+    writable:false,
+    configurable:false,
+    enumerable:true
+  });
+}catch(e){
+  window._fbq=noop;
+}
+// Set up fbq properties (on the stub)
+if(window.fbq){
+  try{
+    window.fbq.queue=[];
+    window.fbq.loaded=true;
+    window.fbq.version='2.0';
+    window.fbq.push=noop;
+    window.fbq.callMethod=noop;
+    window.fbq.track=noop;
+    window.fbq.trackCustom=noop;
+    window.fbq.trackSingle=noop;
+    window.fbq.init=noop;
+    window.fbq.set=noop;
+    window.fbq.delete=noop;
+  }catch(e){}
+}
 
 window.gtag=window.gtag||noop;
 window.ga=window.ga||noop;
@@ -268,13 +302,24 @@ window.__enableConsentTrackers=function(){
   navigator.sendBeacon=_sendBeacon;
   window.Image=_Image;
   
-  // Remove stubs
-  delete window.fbq;delete window._fbq;
-  delete window.gtag;delete window.ga;
-  delete window.analytics;delete window.mixpanel;
-  delete window.amplitude;delete window.hj;delete window.clarity;
-  delete window._hsq;delete window.twq;delete window.pintrk;
-  delete window.ttq;delete window.snaptr;
+  // Remove stubs (handle non-configurable properties gracefully)
+  var propsToRemove=['fbq','_fbq','gtag','ga','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
+  for(var i=0;i<propsToRemove.length;i++){
+    var prop=propsToRemove[i];
+    try{
+      var deleted=delete window[prop];
+      if(!deleted){
+        // Property is non-configurable, try to set to undefined
+        try{
+          window[prop]=undefined;
+        }catch(e2){
+          // Can't delete or set - that's okay, trackers will override on load
+        }
+      }
+    }catch(e){
+      // Ignore errors - property might not exist or be non-configurable
+    }
+  }
   
   // Restore blocked external scripts
   document.querySelectorAll('script[data-blocked-src]').forEach(function(s){
@@ -834,8 +879,17 @@ export async function GET(req, { params }) {
     const actualSiteId = siteId || finalSiteId;
     const verifyCallbackUrl = `${baseUrl}/api/sites/${actualSiteId}/verify-callback`;
     const trackUrl = `${baseUrl}/api/sites/${actualSiteId}/track`;
-
-    const inlineBlocker = generateInlineBlocker(finalSiteId, allowedDomain || '*', isPreview);
+    
+    // Extract consent API hostname for first-party detection
+    let consentApiHostname = '';
+    try {
+      const consentUrl = new URL(baseUrl);
+      consentApiHostname = consentUrl.hostname.replace(/^www\./, '');
+    } catch (e) {
+      consentApiHostname = '';
+    }
+    
+    const inlineBlocker = generateInlineBlocker(finalSiteId, allowedDomain || '*', isPreview, consentApiHostname);
     const mainScript = generateMainScript(finalSiteId, allowedDomain || '*', isPreview, effectiveConfig, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl);
     
     const returnInlineBlocker = searchParams.get("inline") === "1";
