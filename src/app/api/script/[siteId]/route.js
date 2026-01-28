@@ -57,7 +57,11 @@ var TRACKER_CODE_PATTERNS=[
 function log(msg){if(DEBUG)console.log('[ConsentBlock]',msg);}
 
 function hasConsent(){
-  return localStorage.getItem(CONSENT_KEY)==='accepted';
+  try{
+    return localStorage.getItem(CONSENT_KEY)==='accepted';
+  }catch(e){
+    return false;
+  }
 }
 
 function isTrackerUrl(url){
@@ -87,7 +91,7 @@ function isFirstParty(url){
     if(!url)return false;
     var u=new URL(url,location.href);
     return u.hostname===location.hostname||u.hostname.replace(/^www\\./,'')===location.hostname.replace(/^www\\./,'');
-  }catch{
+  }catch(e){
     return false;
   }
 }
@@ -506,7 +510,13 @@ var CONSENT_KEY='${CONSENT_KEY}';
 var isPreviewMode=${isPreview ? 'true' : 'false'};
 var ALLOWED_DOMAIN='${isPreview ? '*' : allowedDomain}';
 
-function hasConsent(){return localStorage.getItem(CONSENT_KEY)==='accepted';}
+function hasConsent(){
+  try{
+    return localStorage.getItem(CONSENT_KEY)==='accepted';
+  }catch(e){
+    return false;
+  }
+}
 
 // Domain check
 var host=location.hostname.toLowerCase().replace(/^www\\./,'');
@@ -515,7 +525,7 @@ if(allowed&&host!==allowed){console.warn('[Consent] Domain mismatch');return;}
 
 // Clear in preview
 if(isPreviewMode){
-  localStorage.removeItem(CONSENT_KEY);
+  try{localStorage.removeItem(CONSENT_KEY);}catch(e){}
   var old=document.getElementById('cookie-banner');
   if(old)old.remove();
 }
@@ -555,7 +565,7 @@ function showBanner(){
   acc.textContent='${acceptText}';
   acc.style.cssText='background:${bannerStyle.buttonColor};color:${bannerStyle.buttonTextColor};border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:${bannerStyle.fontSize};';
   acc.onclick=function(){
-    localStorage.setItem(CONSENT_KEY,'accepted');
+    try{localStorage.setItem(CONSENT_KEY,'accepted');}catch(e){}
     b.remove();
     enableTrackers();
   };
@@ -566,7 +576,7 @@ function showBanner(){
   rej.textContent='${rejectText}';
   rej.style.cssText='background:transparent;color:${bannerStyle.textColor};border:2px solid ${bannerStyle.textColor};padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:${bannerStyle.fontSize};';
   rej.onclick=function(){
-    localStorage.setItem(CONSENT_KEY,'rejected');
+    try{localStorage.setItem(CONSENT_KEY,'rejected');}catch(e){}
     b.remove();
   };
   btns.appendChild(rej);
@@ -795,10 +805,26 @@ export async function GET(req, { params }) {
     };
 
     const position = effectiveConfig.position || baseTemplate.position || DEFAULT_BANNER_CONFIG.position;
-    const title = (effectiveConfig.title || DEFAULT_BANNER_CONFIG.title).replace(/'/g, "\\'").replace(/"/g, '\\"');
-    const message = (effectiveConfig.message || effectiveConfig.description || DEFAULT_BANNER_CONFIG.message).replace(/'/g, "\\'").replace(/"/g, '\\"');
-    const acceptText = (effectiveConfig.acceptButtonText || effectiveConfig.acceptText || DEFAULT_BANNER_CONFIG.acceptButtonText).replace(/'/g, "\\'").replace(/"/g, '\\"');
-    const rejectText = (effectiveConfig.rejectButtonText || effectiveConfig.rejectText || DEFAULT_BANNER_CONFIG.rejectButtonText).replace(/'/g, "\\'").replace(/"/g, '\\"');
+    const title = (effectiveConfig.title || DEFAULT_BANNER_CONFIG.title)
+      .replace(/'/g, "\\'")
+      .replace(/"/g, '\\"')
+      .replace(/`/g, "\\`")
+      .replace(/\$\{/g, "\\${");
+    const message = (effectiveConfig.message || effectiveConfig.description || DEFAULT_BANNER_CONFIG.message)
+      .replace(/'/g, "\\'")
+      .replace(/"/g, '\\"')
+      .replace(/`/g, "\\`")
+      .replace(/\$\{/g, "\\${");
+    const acceptText = (effectiveConfig.acceptButtonText || effectiveConfig.acceptText || DEFAULT_BANNER_CONFIG.acceptButtonText)
+      .replace(/'/g, "\\'")
+      .replace(/"/g, '\\"')
+      .replace(/`/g, "\\`")
+      .replace(/\$\{/g, "\\${");
+    const rejectText = (effectiveConfig.rejectButtonText || effectiveConfig.rejectText || DEFAULT_BANNER_CONFIG.rejectButtonText)
+      .replace(/'/g, "\\'")
+      .replace(/"/g, '\\"')
+      .replace(/`/g, "\\`")
+      .replace(/\$\{/g, "\\${");
     const showReject = effectiveConfig.showRejectButton !== false;
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
