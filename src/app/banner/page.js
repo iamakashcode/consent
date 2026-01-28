@@ -282,7 +282,7 @@ function BannerContent() {
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
     return [
       "<!-- Start ConsentFlow banner -->",
-      `<script id="consentflow" src="${baseUrl}/api/script/${selectedSite.siteId}?domain=${encodeURIComponent(selectedSite.domain)}" async></script>`,
+      `<script id="consentflow" src="${baseUrl}/api/script/${selectedSite.siteId}?domain=${encodeURIComponent(selectedSite.domain)}"></script>`,
       "<!-- End ConsentFlow banner -->",
     ].join("\n");
   };

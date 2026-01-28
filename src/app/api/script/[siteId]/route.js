@@ -9,6 +9,9 @@ function generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiDomai
   
   return `(function(){
 'use strict';
+// IMMEDIATE EXECUTION - Run before any other scripts (CookieYes-style)
+// This IIFE executes synchronously when script loads
+
 /* ======================================================
    CONFIG
 ====================================================== */
@@ -21,7 +24,7 @@ var TRACKER_PATTERNS=[
   // Google
   'google-analytics','googletagmanager','gtag/js','gtag','analytics.js','ga.js','/gtm.js','google.com/pagead','googleadservices','googlesyndication','doubleclick',
   // Meta/Facebook
-  'facebook.net','facebook.com/tr','fbevents.js','connect.facebook',
+  'facebook.net','facebook.com/tr','fbevents.js','connect.facebook','facebook.com','fbcdn.net','fbstatic','facebook',
   // Microsoft
   'clarity.ms','bing.com/bat',
   // Other trackers
@@ -41,7 +44,7 @@ var TRACKER_PATTERNS=[
 ];
 
 var TRACKER_CODE_PATTERNS=[
-  'fbq(','fbq.push','_fbq','fbq.init','fbq.track','fbq.trackcustom','fbq.tracksingle','fbq.set','fbq.callmethod',
+  'fbq(','fbq.push','_fbq','fbq.init','fbq.track','fbq.trackcustom','fbq.tracksingle','fbq.set','fbq.callmethod','fbq.queue','fbevents','facebook pixel','meta pixel',
   'gtag(','gtag.push','ga(','ga.push','_gaq.push','dataLayer.push','dataLayer.push(',
   'analytics.track','analytics.page','analytics.identify','analytics.alias',
   'mixpanel.track','mixpanel.identify','amplitude.','amplitude.getInstance',
@@ -209,7 +212,12 @@ if(B._scriptSrcDesc){
 }
 
 // Global stubs (safe) - Stub IMMEDIATELY and make ALL non-configurable (CookieYes-style)
+// CRITICAL: Override even if trackers already set these (CookieYes-style)
 var noop=function(){log('tracker blocked');};
+// Force override fbq even if it exists
+try{
+  delete window.fbq;
+}catch(e){}
 try{
   Object.defineProperty(window,'fbq',{
     value:noop,
@@ -218,8 +226,17 @@ try{
     enumerable:true
   });
 }catch(e){
-  window.fbq=noop;
+  try{
+    window.fbq=noop;
+    Object.freeze(window.fbq);
+  }catch(e2){
+    window.fbq=noop;
+  }
 }
+// Force override _fbq
+try{
+  delete window._fbq;
+}catch(e){}
 try{
   Object.defineProperty(window,'_fbq',{
     value:noop,
@@ -228,7 +245,12 @@ try{
     enumerable:true
   });
 }catch(e){
-  window._fbq=noop;
+  try{
+    window._fbq=noop;
+    Object.freeze(window._fbq);
+  }catch(e2){
+    window._fbq=noop;
+  }
 }
 // Set up fbq properties (on the stub)
 if(window.fbq){
@@ -248,6 +270,10 @@ if(window.fbq){
 }
 
 // Make gtag, ga, dataLayer non-configurable (CookieYes-style)
+// Force override even if already exists
+try{
+  delete window.gtag;
+}catch(e){}
 try{
   Object.defineProperty(window,'gtag',{
     value:noop,
@@ -256,8 +282,16 @@ try{
     enumerable:true
   });
 }catch(e){
-  window.gtag=noop;
+  try{
+    window.gtag=noop;
+    Object.freeze(window.gtag);
+  }catch(e2){
+    window.gtag=noop;
+  }
 }
+try{
+  delete window.ga;
+}catch(e){}
 try{
   Object.defineProperty(window,'ga',{
     value:noop,
@@ -266,9 +300,18 @@ try{
     enumerable:true
   });
 }catch(e){
-  window.ga=noop;
+  try{
+    window.ga=noop;
+    Object.freeze(window.ga);
+  }catch(e2){
+    window.ga=noop;
+  }
 }
-window.dataLayer=window.dataLayer||[];
+// Override dataLayer even if it exists
+if(!window.dataLayer||!Array.isArray(window.dataLayer)){
+  window.dataLayer=[];
+}
+// Force override push method
 try{
   Object.defineProperty(window.dataLayer,'push',{
     value:function(){log('dataLayer.push() blocked');return 0;},
@@ -276,7 +319,12 @@ try{
     configurable:false
   });
 }catch(e){
-  window.dataLayer.push=function(){log('dataLayer.push() blocked');return 0;};
+  try{
+    window.dataLayer.push=function(){log('dataLayer.push() blocked');return 0;};
+    Object.freeze(window.dataLayer.push);
+  }catch(e2){
+    window.dataLayer.push=function(){log('dataLayer.push() blocked');return 0;};
+  }
 }
 window._gaq=window._gaq||[];
 try{
@@ -302,6 +350,57 @@ window.ttq=window.ttq||{track:noop,page:noop,identify:noop};
 window.snaptr=window.snaptr||noop;
 
 log('Global stubs initialized');
+
+// CRITICAL: Override any trackers that might have already initialized (CookieYes-style)
+// Check if trackers already exist and force override them
+(function overrideExistingTrackers(){
+  // Meta Pixel - check if already initialized
+  if(window.fbq&&typeof window.fbq==='function'&&window.fbq!==noop){
+    try{
+      log('Overriding existing fbq');
+      delete window.fbq;
+      Object.defineProperty(window,'fbq',{
+        value:noop,
+        writable:false,
+        configurable:false,
+        enumerable:true
+      });
+    }catch(e){
+      window.fbq=noop;
+    }
+  }
+  
+  // Google Analytics - check if already initialized
+  if(window.gtag&&typeof window.gtag==='function'&&window.gtag!==noop){
+    try{
+      log('Overriding existing gtag');
+      delete window.gtag;
+      Object.defineProperty(window,'gtag',{
+        value:noop,
+        writable:false,
+        configurable:false,
+        enumerable:true
+      });
+    }catch(e){
+      window.gtag=noop;
+    }
+  }
+  
+  // dataLayer - override push if it exists
+  if(window.dataLayer&&Array.isArray(window.dataLayer)){
+    try{
+      var origPush=window.dataLayer.push;
+      if(origPush&&origPush.toString().indexOf('blocked')===-1){
+        log('Overriding existing dataLayer.push');
+        Object.defineProperty(window.dataLayer,'push',{
+          value:function(){log('dataLayer.push() blocked');return 0;},
+          writable:false,
+          configurable:false
+        });
+      }
+    }catch(e){}
+  }
+})();
 
 // Block <script src=""> via setAttribute
 Element.prototype.setAttribute=function(name,value){
@@ -562,6 +661,14 @@ window.__enableConsentTrackers=function(){
   window.Function=_Function;
   window.postMessage=_postMessage;
   
+  // Disconnect MutationObserver
+  if(B.observer){
+    try{
+      B.observer.disconnect();
+      log('MutationObserver disconnected');
+    }catch(e){}
+  }
+  
   // Remove stubs (handle non-configurable properties gracefully)
   var propsToRemove=['fbq','_fbq','gtag','ga','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
   for(var i=0;i<propsToRemove.length;i++){
@@ -624,6 +731,7 @@ window.__enableConsentTrackers=function(){
 // Block existing scripts immediately
 function blockExistingTrackers(){
   if(hasConsent())return;
+  if(!document||!document.getElementsByTagName)return; // Safety check
   
   var scripts=document.getElementsByTagName('script');
   var toRemove=[];
@@ -678,23 +786,41 @@ function blockExistingTrackers(){
   }
 }
 
-// Run immediately
-blockExistingTrackers();
-setTimeout(blockExistingTrackers,0);
-setTimeout(blockExistingTrackers,10);
-setTimeout(blockExistingTrackers,50);
+// Run immediately - CRITICAL for pre-execution blocking
+// Execute synchronously before any other scripts can run
+(function runBlocking(){
+  try{
+    blockExistingTrackers();
+  }catch(e){
+    log('Error in initial block: '+e.message);
+  }
+})();
+
+// Run multiple times to catch scripts at different stages
+setTimeout(function(){try{blockExistingTrackers();}catch(e){}},0);
+setTimeout(function(){try{blockExistingTrackers();}catch(e){}},1);
+setTimeout(function(){try{blockExistingTrackers();}catch(e){}},5);
+setTimeout(function(){try{blockExistingTrackers();}catch(e){}},10);
+setTimeout(function(){try{blockExistingTrackers();}catch(e){}},50);
+setTimeout(function(){try{blockExistingTrackers();}catch(e){}},100);
+
 if(document.readyState==='loading'){
-  document.addEventListener('DOMContentLoaded',blockExistingTrackers);
+  document.addEventListener('DOMContentLoaded',function(){try{blockExistingTrackers();}catch(e){}});
 }
-window.addEventListener('load',blockExistingTrackers);
+window.addEventListener('load',function(){try{blockExistingTrackers();}catch(e){}});
 
 /* ======================================================
    LAYER 2 — POST-LOAD ENFORCEMENT
 ====================================================== */
 
-if(!hasConsent()){
+// Set up MutationObserver IMMEDIATELY (don't wait for consent check)
+// This catches trackers injected during script execution
+B.observer=null;
+(function setupObserver(){
+  if(hasConsent())return;
+  
   // MutationObserver
-  var observer=new MutationObserver(function(mutations){
+  B.observer=new MutationObserver(function(mutations){
     mutations.forEach(function(m){
       m.addedNodes.forEach(function(node){
         if(node.nodeType!==1)return;
@@ -742,8 +868,15 @@ if(!hasConsent()){
     });
   });
   
-  observer.observe(document.documentElement||document,{childList:true,subtree:true});
-  
+  try{
+    B.observer.observe(document.documentElement||document,{childList:true,subtree:true});
+    log('MutationObserver started');
+  }catch(e){
+    log('MutationObserver error: '+e.message);
+  }
+})();
+
+if(!hasConsent()){
   // fetch interception (third-party only)
   window.fetch=function(input,init){
     if(hasConsent())return _fetch.apply(window,arguments);
