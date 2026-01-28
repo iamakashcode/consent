@@ -3,423 +3,655 @@ import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES } from "@/lib/banner-templates"
 import { hasVerificationColumns } from "@/lib/db-utils";
 import { isSubscriptionActive } from "@/lib/subscription";
 
-// Generate aggressive inline blocker - blocks trackers BEFORE they execute
+// Generate AGGRESSIVE pre-execution blocker
 function generateInlineBlocker(siteId, allowedDomain, isPreview) {
   const CONSENT_KEY = `cookie_consent_${siteId}`;
   
   return `(function(){
 'use strict';
 // ============================================================
-// AGGRESSIVE PRE-EXECUTION BLOCKER
-// Blocks trackers BEFORE they can execute - DOM manipulation at its finest
+// AGGRESSIVE PRE-EXECUTION BLOCKER v2
+// Must be the FIRST script in <head> to work properly
 // ============================================================
 
-// Global blocker API
-window._consentBlocker=window._consentBlocker||{};
-var blocker=window._consentBlocker;
-blocker.CONSENT_KEY='${CONSENT_KEY}';
-blocker.blockedNodes=[];
-blocker.origFbq=window.fbq;
-blocker.origGtag=window.gtag;
-blocker.origGa=window.ga;
-blocker.origDataLayerPush=window.dataLayer&&window.dataLayer.push;
-blocker.origGaqPush=window._gaq&&window._gaq.push;
-blocker.origAnalyticsTrack=window.analytics&&window.analytics.track;
-blocker.origCreateElement=document.createElement;
-blocker.origAppendChild=Node.prototype.appendChild;
-blocker.origInsertBefore=Node.prototype.insertBefore;
-blocker.origRemoveChild=Node.prototype.removeChild;
-blocker.origReplaceChild=Node.prototype.replaceChild;
-blocker.origFetch=window.fetch;
-blocker.origXHROpen=XMLHttpRequest.prototype.open;
-blocker.origXHRSend=XMLHttpRequest.prototype.send;
-blocker.origSendBeacon=navigator.sendBeacon;
-blocker.origImage=window.Image;
+var B=window._cb=window._cb||{};
+B.key='${CONSENT_KEY}';
+B.blocked=[];
+B.debug=true;
 
-// Live consent check
-function hasConsent(){
-  return localStorage.getItem(blocker.CONSENT_KEY)==='accepted';
-}
+// Log function
+function log(msg){if(B.debug)console.log('[ConsentBlock]',msg);}
 
-// Essential check
-function isEssential(node){
-  return node&&node.getAttribute&&node.getAttribute('data-consent')==='essential';
-}
+// Check consent LIVE
+function hasConsent(){return localStorage.getItem(B.key)==='accepted';}
 
-// Comprehensive tracker detection
-var TRACKER_DOMAINS=['google','facebook','meta','doubleclick','tiktok','twitter','linkedin','hotjar','clarity','segment','mixpanel','amplitude','ads','tagmanager','analytics','tracking','pixel','beacon','collect','metrics','insight','telemetry','monitor','gtm','ga','gtag','fbevents','googletagmanager','google-analytics','facebook.net','connect.facebook','fbevents','analytics.js','gtag.js','ga.js'];
-function isTracker(url,text,node){
-  if(isEssential(node))return false;
-  var str=((url||'')+(text||'')).toLowerCase();
-  if(!str)return false;
-  if(/tracking|analytics|pixel|collect|beacon|tag|ads|metrics|insight|telemetry|event|monitor|gtm|ga|gtag|fbq|_gaq|dataLayer/i.test(str))return true;
-  for(var i=0;i<TRACKER_DOMAINS.length;i++)if(str.indexOf(TRACKER_DOMAINS[i])>-1)return true;
-  var patterns=['fbq(','_fbq','gtag(','ga(','_gaq','dataLayer','analytics.track','analytics.page','analytics.identify','mixpanel.track','amplitude','navigator.sendBeacon','new Image().src','_hsq','hj(','clarity(','window.fbq','window.gtag','window.ga','window.dataLayer'];
-  for(var j=0;j<patterns.length;j++)if(str.indexOf(patterns[j])>-1)return true;
-  if(url&&/[\\/]track|[\\/]event|[\\/]collect|[\\/]pixel|[\\/]beacon|[\\/]analytics|[\\/]metrics|[\\/]gtm|[\\/]ga/i.test(url))return true;
+// COMPREHENSIVE tracker detection
+var TRACKER_PATTERNS=[
+  // Google
+  'google-analytics','googletagmanager','gtag','analytics.js','ga.js','/gtm.js','/gtag/js','google.com/pagead','googleadservices','googlesyndication','doubleclick',
+  // Facebook/Meta
+  'facebook.net','facebook.com/tr','fbevents.js','connect.facebook','fbq','_fbq',
+  // Microsoft
+  'clarity.ms','bing.com/bat',
+  // Other trackers
+  'hotjar.com','static.hotjar','mixpanel.com','amplitude.com','segment.com','segment.io','heapanalytics','fullstory.com','mouseflow.com','crazyegg.com','lucky-orange','inspectlet.com','logrocket.com',
+  // Twitter/X
+  'analytics.twitter','static.ads-twitter','t.co/i/adsct',
+  // LinkedIn
+  'snap.licdn','linkedin.com/px','ads.linkedin',
+  // TikTok
+  'analytics.tiktok','tiktok.com/i18n',
+  // Pinterest
+  'pintrk','ct.pinterest',
+  // Snapchat
+  'sc-static.net','tr.snapchat',
+  // Generic patterns
+  '/pixel','/beacon','/collect','/track','/analytics','/event','/conversion'
+];
+
+var TRACKER_CODE_PATTERNS=[
+  'fbq(','fbq.push','_fbq','gtag(','gtag.push','ga(','ga.push','_gaq.push','dataLayer.push','analytics.track','analytics.page','mixpanel.track','amplitude.','hj(','clarity(','pintrk(','twq(','snaptr(','ttq.','_linkedin'
+];
+
+function isTracker(url,code){
+  if(!url&&!code)return false;
+  var s=((url||'')+(code||'')).toLowerCase();
+  
+  // Check URL patterns
+  for(var i=0;i<TRACKER_PATTERNS.length;i++){
+    if(s.indexOf(TRACKER_PATTERNS[i])!==-1)return true;
+  }
+  
+  // Check code patterns
+  for(var j=0;j<TRACKER_CODE_PATTERNS.length;j++){
+    if(s.indexOf(TRACKER_CODE_PATTERNS[j])!==-1)return true;
+  }
+  
   return false;
 }
 
-// Backup node for restoration
-function backupNode(node){
-  if(!node)return null;
-  var backup={
-    tagName:node.tagName?node.tagName.toLowerCase():'',
-    src:node.src||node.getAttribute('src')||'',
-    text:node.textContent||node.innerHTML||'',
-    parent:node.parentNode,
-    nextSibling:node.nextSibling,
-    attributes:{},
-    isInline:!(node.src||node.getAttribute('src')),
-    node:node
-  };
-  if(node.attributes){
-    for(var i=0;i<node.attributes.length;i++){
-      var attr=node.attributes[i];
-      if(attr.name!=='src'&&attr.name!=='type'&&attr.name!=='data-consent-blocked'&&attr.name!=='data-blocked-src'){
-        backup.attributes[attr.name]=attr.value;
-      }
-    }
-  }
-  return backup;
+function isEssential(el){
+  if(!el||!el.getAttribute)return false;
+  return el.getAttribute('data-consent')==='essential'||el.getAttribute('data-cookieconsent')==='necessary';
 }
 
-// STEP 1: Stub ALL tracking functions IMMEDIATELY (before anything else)
-window.fbq=function(){if(hasConsent()&&blocker.origFbq)return blocker.origFbq.apply(this,arguments);};
+// Store originals IMMEDIATELY
+B.originals={
+  createElement:document.createElement,
+  appendChild:Node.prototype.appendChild,
+  insertBefore:Node.prototype.insertBefore,
+  replaceChild:Node.prototype.replaceChild,
+  append:Element.prototype.append,
+  prepend:Element.prototype.prepend,
+  insertAdjacentElement:Element.prototype.insertAdjacentElement,
+  insertAdjacentHTML:Element.prototype.insertAdjacentHTML,
+  write:document.write,
+  writeln:document.writeln,
+  fetch:window.fetch,
+  XHRopen:XMLHttpRequest.prototype.open,
+  XHRsend:XMLHttpRequest.prototype.send,
+  sendBeacon:navigator.sendBeacon,
+  Image:window.Image
+};
+
+// ============================================================
+// STEP 1: STUB ALL TRACKING FUNCTIONS IMMEDIATELY
+// ============================================================
+log('Stubbing tracking functions...');
+
+// Meta/Facebook Pixel
+window.fbq=function(){log('fbq() blocked');};
 window._fbq=window.fbq;
-window.fbq.queue=[];
-window.fbq.loaded=true;
-window.fbq.version='2.0';
-window.fbq.push=window.fbq;
-window.fbq.callMethod=function(){};
-window.gtag=function(){if(hasConsent()&&blocker.origGtag)return blocker.origGtag.apply(this,arguments);};
-if(!window.dataLayer)window.dataLayer=[];
-window.dataLayer.push=function(){if(hasConsent()&&blocker.origDataLayerPush)return blocker.origDataLayerPush.apply(window.dataLayer,arguments);return 0;};
-window.ga=function(){if(hasConsent()&&blocker.origGa)return blocker.origGa.apply(this,arguments);};
-window.ga.l=Date.now();
-window.ga.q=[];
-if(!window._gaq)window._gaq=[];
-window._gaq.push=function(){if(hasConsent()&&blocker.origGaqPush)return blocker.origGaqPush.apply(window._gaq,arguments);return 0;};
-if(!window.analytics)window.analytics={};
-window.analytics.track=function(){if(hasConsent()&&blocker.origAnalyticsTrack)return blocker.origAnalyticsTrack.apply(this,arguments);};
+window.fbq.queue=[];window.fbq.loaded=true;window.fbq.version='2.0';
+window.fbq.push=window.fbq;window.fbq.callMethod=function(){};
+
+// Google Analytics / GTM
+window.gtag=function(){log('gtag() blocked');};
+window.dataLayer=window.dataLayer||[];
+var origPush=Array.prototype.push;
+window.dataLayer.push=function(){log('dataLayer.push() blocked');return 0;};
+window.ga=function(){log('ga() blocked');};
+window.ga.l=Date.now();window.ga.q=[];
+window._gaq=window._gaq||[];
+window._gaq.push=function(){log('_gaq.push() blocked');return 0;};
+
+// Segment
+window.analytics=window.analytics||{};
+window.analytics.track=function(){log('analytics.track() blocked');};
 window.analytics.page=function(){};
 window.analytics.identify=function(){};
 window.analytics.alias=function(){};
+window.analytics.ready=function(){};
+window.analytics.reset=function(){};
+
+// Mixpanel
 window.mixpanel=window.mixpanel||{};
 window.mixpanel.track=function(){};
 window.mixpanel.identify=function(){};
+window.mixpanel.people={set:function(){}};
+
+// Amplitude
 window.amplitude=window.amplitude||{};
-window.amplitude.getInstance=function(){return{logEvent:function(){}};};
-window._hsq=window._hsq||[];
-window._hsq.push=function(){};
+window.amplitude.getInstance=function(){return{logEvent:function(){},setUserId:function(){},init:function(){}};};
+
+// Hotjar
 window.hj=window.hj||function(){};
+window._hjSettings=window._hjSettings||{};
+
+// Clarity
 window.clarity=window.clarity||function(){};
 
-// STEP 2: Override document.createElement - PREVENT tracker creation
-document.createElement=function(tagName,options){
-  var el=blocker.origCreateElement.call(this,tagName,options);
-  var tag=tagName.toLowerCase();
+// HubSpot
+window._hsq=window._hsq||[];
+window._hsq.push=function(){};
+
+// Twitter
+window.twq=window.twq||function(){};
+
+// Pinterest
+window.pintrk=window.pintrk||function(){};
+
+// TikTok
+window.ttq=window.ttq||{track:function(){},page:function(){},identify:function(){}};
+
+// Snapchat
+window.snaptr=window.snaptr||function(){};
+
+// LinkedIn
+window._linkedin_data_partner_ids=[];
+
+log('All tracking functions stubbed');
+
+// ============================================================
+// STEP 2: OVERRIDE HTMLScriptElement.prototype.src
+// This catches ALL script src assignments at the prototype level
+// ============================================================
+log('Overriding HTMLScriptElement.prototype.src...');
+
+var scriptSrcDescriptor=Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,'src');
+if(scriptSrcDescriptor){
+  Object.defineProperty(HTMLScriptElement.prototype,'src',{
+    get:function(){
+      return this.getAttribute('src')||'';
+    },
+    set:function(url){
+      if(!hasConsent()&&!isEssential(this)&&isTracker(url,'')){
+        log('BLOCKED script src: '+url);
+        this.setAttribute('data-blocked-src',url);
+        this.setAttribute('data-consent-blocked','true');
+        this.type='javascript/blocked';
+        return;
+      }
+      this.setAttribute('src',url);
+    },
+    configurable:true,
+    enumerable:true
+  });
+}
+
+// ============================================================
+// STEP 3: OVERRIDE document.createElement
+// Intercept script/iframe/img creation and modify their prototypes
+// ============================================================
+log('Overriding document.createElement...');
+
+document.createElement=function(tag,opts){
+  var el=B.originals.createElement.call(document,tag,opts);
+  var t=tag.toLowerCase();
   
-  if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()){
-    var proto=tag==='script'?HTMLScriptElement.prototype:(tag==='iframe'?HTMLIFrameElement.prototype:HTMLImageElement.prototype);
+  if((t==='script'||t==='iframe'||t==='img')&&!hasConsent()){
+    // Mark for tracking
+    el._consentTracked=true;
     
-    // Override src setter - PREVENT setting tracker URLs
-    var origSrcDesc=Object.getOwnPropertyDescriptor(proto,'src');
-    if(origSrcDesc){
+    if(t==='script'){
+      // Override src property on this specific element
+      var elSrcSet=false;
       Object.defineProperty(el,'src',{
         get:function(){return this.getAttribute('src')||'';},
         set:function(url){
-          if(url&&isTracker(url,'',this)){
-            this.setAttribute('data-consent-blocked','true');
+          if(!hasConsent()&&!isEssential(this)&&isTracker(url,'')){
+            log('BLOCKED new script src: '+url);
             this.setAttribute('data-blocked-src',url);
-            if(tag==='script')this.type='javascript/blocked';
-            return; // DON'T set src - prevents loading
+            this.setAttribute('data-consent-blocked','true');
+            this.type='javascript/blocked';
+            elSrcSet=true;
+            return;
           }
           this.setAttribute('src',url);
+          elSrcSet=true;
         },
-        configurable:true,enumerable:true
+        configurable:true
+      });
+      
+      // Override text property
+      Object.defineProperty(el,'text',{
+        get:function(){return this.textContent||'';},
+        set:function(code){
+          if(!hasConsent()&&isTracker('',code)){
+            log('BLOCKED inline script text');
+            this.setAttribute('data-consent-blocked','true');
+            this.type='javascript/blocked';
+            return;
+          }
+          this.textContent=code;
+        },
+        configurable:true
       });
     }
-    
-    // Override type setter for scripts
-    if(tag==='script'){
-      var origTypeDesc=Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,'type');
-      if(origTypeDesc){
-        Object.defineProperty(el,'type',{
-          get:function(){return this.getAttribute('type')||'text/javascript';},
-          set:function(type){
-            var src=this.src||this.getAttribute('src')||'';
-            var text=this.textContent||this.innerHTML||'';
-            if(isTracker(src,text,this)){
-              this.setAttribute('data-consent-blocked','true');
-              if(src)this.setAttribute('data-blocked-src',src);
-              this.setAttribute('type','javascript/blocked');
-              return;
-            }
-            this.setAttribute('type',type||'text/javascript');
-          },
-          configurable:true,enumerable:true
-        });
-      }
-      
-      // Override textContent - PREVENT inline tracker code
-      var origTextContent=Object.getOwnPropertyDescriptor(Node.prototype,'textContent');
-      if(origTextContent){
-        Object.defineProperty(el,'textContent',{
-          get:function(){return origTextContent.get.call(this);},
-          set:function(text){
-            if(isTracker('',text,this)){
-              this.setAttribute('data-consent-blocked','true');
-              this.type='javascript/blocked';
-              return; // DON'T set textContent - prevents execution
-            }
-            origTextContent.set.call(this,text);
-          },
-          configurable:true
-        });
-      }
-      
-      // Override innerHTML - PREVENT inline tracker code
-      var origInnerHTML=Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML');
-      if(origInnerHTML){
-        Object.defineProperty(el,'innerHTML',{
-          get:function(){return origInnerHTML.get.call(this);},
-          set:function(html){
-            if(isTracker('',html,this)){
-              this.setAttribute('data-consent-blocked','true');
-              this.type='javascript/blocked';
-              return; // DON'T set innerHTML - prevents execution
-            }
-            origInnerHTML.set.call(this,html);
-          },
-          configurable:true
-        });
-      }
-    }
   }
+  
   return el;
 };
 
-// STEP 3: Override appendChild - PREVENT tracker insertion into DOM
+// ============================================================
+// STEP 4: OVERRIDE Node.prototype.appendChild
+// Block tracker nodes from being added to DOM
+// ============================================================
+log('Overriding appendChild...');
+
 Node.prototype.appendChild=function(child){
-  if(child&&child.tagName){
-    var tag=child.tagName.toLowerCase();
-    if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()){
-      var src=child.src||child.getAttribute('src')||'';
-      var text=tag==='script'?(child.textContent||child.innerHTML||''):'';
-      if(isTracker(src,text,child)){
-        var backup=backupNode(child);
-        if(backup)blocker.blockedNodes.push(backup);
+  if(child&&child.nodeType===1){
+    var tag=(child.tagName||'').toLowerCase();
+    if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()&&!isEssential(child)){
+      var src=child.getAttribute('src')||child.src||'';
+      var code=tag==='script'?(child.textContent||child.text||child.innerHTML||''):'';
+      
+      if(isTracker(src,code)){
+        log('BLOCKED appendChild: '+(src||'inline script'));
+        B.blocked.push({tag:tag,src:src,code:code,parent:this,next:null});
         child.setAttribute('data-consent-blocked','true');
-        if(src)child.setAttribute('data-blocked-src',src);
         if(tag==='script')child.type='javascript/blocked';
-        // CRITICAL: Return child WITHOUT adding to DOM - prevents execution
-        return child;
+        return child; // Return but don't append
       }
     }
   }
-  return blocker.origAppendChild.call(this,child);
+  return B.originals.appendChild.call(this,child);
 };
 
-// STEP 4: Override insertBefore - PREVENT tracker insertion
-Node.prototype.insertBefore=function(newNode,ref){
-  if(newNode&&newNode.tagName){
-    var tag=newNode.tagName.toLowerCase();
-    if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()){
-      var src=newNode.src||newNode.getAttribute('src')||'';
-      var text=tag==='script'?(newNode.textContent||newNode.innerHTML||''):'';
-      if(isTracker(src,text,newNode)){
-        var backup=backupNode(newNode);
-        if(backup)blocker.blockedNodes.push(backup);
+// ============================================================
+// STEP 5: OVERRIDE Node.prototype.insertBefore
+// ============================================================
+log('Overriding insertBefore...');
+
+Node.prototype.insertBefore=function(newNode,refNode){
+  if(newNode&&newNode.nodeType===1){
+    var tag=(newNode.tagName||'').toLowerCase();
+    if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()&&!isEssential(newNode)){
+      var src=newNode.getAttribute('src')||newNode.src||'';
+      var code=tag==='script'?(newNode.textContent||newNode.text||newNode.innerHTML||''):'';
+      
+      if(isTracker(src,code)){
+        log('BLOCKED insertBefore: '+(src||'inline script'));
+        B.blocked.push({tag:tag,src:src,code:code,parent:this,next:refNode});
         newNode.setAttribute('data-consent-blocked','true');
-        if(src)newNode.setAttribute('data-blocked-src',src);
         if(tag==='script')newNode.type='javascript/blocked';
-        // CRITICAL: Return newNode WITHOUT inserting - prevents execution
         return newNode;
       }
     }
   }
-  return blocker.origInsertBefore.call(this,newNode,ref);
+  return B.originals.insertBefore.call(this,newNode,refNode);
 };
 
-// STEP 5: Block existing scripts in DOM - PHYSICALLY REMOVE them
-function blockExisting(){
+// ============================================================
+// STEP 6: OVERRIDE Element.prototype.append/prepend
+// ============================================================
+if(Element.prototype.append){
+  Element.prototype.append=function(){
+    for(var i=0;i<arguments.length;i++){
+      var node=arguments[i];
+      if(node&&node.nodeType===1){
+        var tag=(node.tagName||'').toLowerCase();
+        if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()&&!isEssential(node)){
+          var src=node.getAttribute('src')||node.src||'';
+          var code=tag==='script'?(node.textContent||node.text||''):'';
+          if(isTracker(src,code)){
+            log('BLOCKED append: '+(src||'inline'));
+            node.setAttribute('data-consent-blocked','true');
+            if(tag==='script')node.type='javascript/blocked';
+            continue;
+          }
+        }
+      }
+      B.originals.append.call(this,node);
+    }
+  };
+}
+
+if(Element.prototype.prepend){
+  Element.prototype.prepend=function(){
+    for(var i=0;i<arguments.length;i++){
+      var node=arguments[i];
+      if(node&&node.nodeType===1){
+        var tag=(node.tagName||'').toLowerCase();
+        if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()&&!isEssential(node)){
+          var src=node.getAttribute('src')||node.src||'';
+          var code=tag==='script'?(node.textContent||node.text||''):'';
+          if(isTracker(src,code)){
+            log('BLOCKED prepend: '+(src||'inline'));
+            node.setAttribute('data-consent-blocked','true');
+            if(tag==='script')node.type='javascript/blocked';
+            continue;
+          }
+        }
+      }
+      B.originals.prepend.call(this,node);
+    }
+  };
+}
+
+// ============================================================
+// STEP 7: OVERRIDE document.write/writeln
+// Block tracker injection via document.write
+// ============================================================
+log('Overriding document.write...');
+
+document.write=function(html){
+  if(!hasConsent()&&isTracker('',html)){
+    log('BLOCKED document.write');
+    return;
+  }
+  return B.originals.write.call(document,html);
+};
+
+document.writeln=function(html){
+  if(!hasConsent()&&isTracker('',html)){
+    log('BLOCKED document.writeln');
+    return;
+  }
+  return B.originals.writeln.call(document,html);
+};
+
+// ============================================================
+// STEP 8: OVERRIDE insertAdjacentElement/insertAdjacentHTML
+// ============================================================
+if(Element.prototype.insertAdjacentElement){
+  Element.prototype.insertAdjacentElement=function(pos,el){
+    if(el&&el.nodeType===1){
+      var tag=(el.tagName||'').toLowerCase();
+      if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()&&!isEssential(el)){
+        var src=el.getAttribute('src')||el.src||'';
+        var code=tag==='script'?(el.textContent||el.text||''):'';
+        if(isTracker(src,code)){
+          log('BLOCKED insertAdjacentElement: '+(src||'inline'));
+          el.setAttribute('data-consent-blocked','true');
+          if(tag==='script')el.type='javascript/blocked';
+          return el;
+        }
+      }
+    }
+    return B.originals.insertAdjacentElement.call(this,pos,el);
+  };
+}
+
+if(Element.prototype.insertAdjacentHTML){
+  Element.prototype.insertAdjacentHTML=function(pos,html){
+    if(!hasConsent()&&isTracker('',html)){
+      log('BLOCKED insertAdjacentHTML');
+      return;
+    }
+    return B.originals.insertAdjacentHTML.call(this,pos,html);
+  };
+}
+
+// ============================================================
+// STEP 9: NETWORK INTERCEPTION
+// ============================================================
+log('Setting up network interception...');
+
+window.fetch=function(input,init){
+  if(hasConsent())return B.originals.fetch.apply(window,arguments);
+  var url=typeof input==='string'?input:(input&&input.url?input.url:'');
+  if(url&&isTracker(url,'')){
+    log('BLOCKED fetch: '+url);
+    return Promise.reject(new Error('Blocked by consent'));
+  }
+  return B.originals.fetch.apply(window,arguments);
+};
+
+XMLHttpRequest.prototype.open=function(method,url){
+  this._blockedUrl=null;
+  if(!hasConsent()&&url&&isTracker(url,'')){
+    log('BLOCKED XHR: '+url);
+    this._blockedUrl=url;
+    return;
+  }
+  return B.originals.XHRopen.apply(this,arguments);
+};
+
+XMLHttpRequest.prototype.send=function(data){
+  if(this._blockedUrl)return;
+  return B.originals.XHRsend.apply(this,arguments);
+};
+
+navigator.sendBeacon=function(url,data){
+  if(hasConsent())return B.originals.sendBeacon.apply(navigator,arguments);
+  if(url&&isTracker(url,'')){
+    log('BLOCKED sendBeacon: '+url);
+    return false;
+  }
+  return B.originals.sendBeacon.apply(navigator,arguments);
+};
+
+window.Image=function(w,h){
+  var img=new B.originals.Image(w,h);
+  var origSrc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
+  Object.defineProperty(img,'src',{
+    get:function(){return this.getAttribute('src')||'';},
+    set:function(url){
+      if(!hasConsent()&&isTracker(url,'')){
+        log('BLOCKED Image: '+url);
+        return;
+      }
+      this.setAttribute('src',url);
+    },
+    configurable:true
+  });
+  return img;
+};
+
+// ============================================================
+// STEP 10: SCAN AND BLOCK EXISTING SCRIPTS
+// ============================================================
+function blockExistingTrackers(){
   if(hasConsent())return;
+  log('Scanning for existing trackers...');
   
-  // Block external scripts
-  var scripts=document.querySelectorAll('script[src]');
+  // Block scripts
+  var scripts=document.querySelectorAll('script');
   for(var i=0;i<scripts.length;i++){
     var s=scripts[i];
     if(s.getAttribute('data-consent-blocked')==='true')continue;
-    var src=s.src||s.getAttribute('src')||'';
-    if(isTracker(src,'',s)){
-      var backup=backupNode(s);
-      if(backup)blocker.blockedNodes.push(backup);
+    if(isEssential(s))continue;
+    
+    var src=s.getAttribute('src')||s.src||'';
+    var code=s.textContent||s.text||s.innerHTML||'';
+    
+    if(isTracker(src,code)){
+      log('Removing existing tracker: '+(src||'inline'));
+      B.blocked.push({tag:'script',src:src,code:code,parent:s.parentNode,next:s.nextSibling});
+      s.setAttribute('data-consent-blocked','true');
+      s.type='javascript/blocked';
       if(s.parentNode)s.parentNode.removeChild(s);
-      else{s.setAttribute('data-consent-blocked','true');s.type='javascript/blocked';}
-    }
-  }
-  
-  // Block inline scripts
-  var inlineScripts=document.querySelectorAll('script:not([src])');
-  for(var i=0;i<inlineScripts.length;i++){
-    var s=inlineScripts[i];
-    if(s.getAttribute('data-consent-blocked')==='true')continue;
-    var text=s.textContent||s.innerHTML||'';
-    if(isTracker('',text,s)){
-      var backup=backupNode(s);
-      if(backup)blocker.blockedNodes.push(backup);
-      if(s.parentNode)s.parentNode.removeChild(s);
-      else{s.setAttribute('data-consent-blocked','true');s.type='javascript/blocked';s.textContent='';s.innerHTML='';}
     }
   }
   
   // Block iframes
-  var iframes=document.querySelectorAll('iframe[src]');
+  var iframes=document.querySelectorAll('iframe');
   for(var i=0;i<iframes.length;i++){
     var ifr=iframes[i];
     if(ifr.getAttribute('data-consent-blocked')==='true')continue;
-    var src=ifr.src||ifr.getAttribute('src')||'';
-    if(isTracker(src,'',ifr)){
-      var backup=backupNode(ifr);
-      if(backup)blocker.blockedNodes.push(backup);
+    if(isEssential(ifr))continue;
+    
+    var src=ifr.getAttribute('src')||ifr.src||'';
+    if(isTracker(src,'')){
+      log('Removing tracker iframe: '+src);
+      B.blocked.push({tag:'iframe',src:src,parent:ifr.parentNode,next:ifr.nextSibling});
+      ifr.setAttribute('data-consent-blocked','true');
       if(ifr.parentNode)ifr.parentNode.removeChild(ifr);
     }
   }
   
-  // Block tracking images
-  var imgs=document.querySelectorAll('img[src]');
+  // Block tracking pixels
+  var imgs=document.querySelectorAll('img');
   for(var i=0;i<imgs.length;i++){
     var img=imgs[i];
     if(img.getAttribute('data-consent-blocked')==='true')continue;
-    var src=img.src||img.getAttribute('src')||'';
-    if(isTracker(src,'',img)){
-      var backup=backupNode(img);
-      if(backup)blocker.blockedNodes.push(backup);
+    if(isEssential(img))continue;
+    
+    var src=img.getAttribute('src')||img.src||'';
+    if(isTracker(src,'')){
+      log('Removing tracking pixel: '+src);
+      B.blocked.push({tag:'img',src:src,parent:img.parentNode,next:img.nextSibling});
+      img.setAttribute('data-consent-blocked','true');
       if(img.parentNode)img.parentNode.removeChild(img);
     }
   }
 }
 
-// Execute blocking immediately
-blockExisting();
+// Run immediately
+blockExistingTrackers();
+
+// Run on DOM ready
 if(document.readyState==='loading'){
-  document.addEventListener('DOMContentLoaded',blockExisting);
+  document.addEventListener('DOMContentLoaded',blockExistingTrackers);
 }
-window.addEventListener('load',blockExisting);
 
-// STEP 6: Network interception
-window.fetch=function(input,init){
-  if(hasConsent())return blocker.origFetch.apply(this,arguments);
-  var url=typeof input==='string'?input:(input&&input.url?input.url:'');
-  if(url&&isTracker(url,'',null))return Promise.reject(new Error('Blocked by consent manager'));
-  return blocker.origFetch.apply(this,arguments);
-};
+// Run on load
+window.addEventListener('load',blockExistingTrackers);
 
-XMLHttpRequest.prototype.open=function(method,url){
-  if(hasConsent()){this._blocked=false;return blocker.origXHROpen.apply(this,arguments);}
-  if(url&&isTracker(url,'',null)){this._blocked=true;this._blockedUrl=url;return;}
-  this._blocked=false;
-  this._blockedUrl=url;
-  return blocker.origXHROpen.apply(this,arguments);
-};
+// ============================================================
+// STEP 11: MUTATION OBSERVER - Catch dynamic injections
+// ============================================================
+log('Setting up MutationObserver...');
 
-XMLHttpRequest.prototype.send=function(data){
-  if(this._blocked||(!hasConsent()&&this._blockedUrl&&isTracker(this._blockedUrl,'',null)))return;
-  return blocker.origXHRSend.apply(this,arguments);
-};
-
-navigator.sendBeacon=function(url,data){
-  if(hasConsent())return blocker.origSendBeacon.apply(this,arguments);
-  if(url&&isTracker(url,'',null))return false;
-  return blocker.origSendBeacon.apply(this,arguments);
-};
-
-window.Image=function(){
-  var img=new blocker.origImage();
-  var origSrcDesc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
-  if(origSrcDesc){
-    Object.defineProperty(img,'src',{
-      get:function(){return this.getAttribute('src')||'';},
-      set:function(url){
-        if(!hasConsent()&&isTracker(url,'',this))return;
-        this.setAttribute('src',url);
-      },
-      configurable:true
-    });
-  }
-  return img;
-};
-
-// STEP 7: MutationObserver - catch dynamically injected trackers
-blocker.observer=new MutationObserver(function(mutations){
+B.observer=new MutationObserver(function(mutations){
   if(hasConsent())return;
-  mutations.forEach(function(m){
-    m.addedNodes.forEach(function(node){
-      if(node.nodeType!==1||!node.tagName)return;
-      var tag=node.tagName.toLowerCase();
+  
+  for(var i=0;i<mutations.length;i++){
+    var added=mutations[i].addedNodes;
+    for(var j=0;j<added.length;j++){
+      var node=added[j];
+      if(node.nodeType!==1)continue;
+      
+      var tag=(node.tagName||'').toLowerCase();
+      
       if(tag==='script'||tag==='iframe'||tag==='img'){
-        var src=node.src||node.getAttribute('src')||'';
-        var text=tag==='script'?(node.textContent||node.innerHTML||''):'';
-        if(isTracker(src,text,node)){
-          var backup=backupNode(node);
-          if(backup)blocker.blockedNodes.push(backup);
+        if(node.getAttribute('data-consent-blocked')==='true')continue;
+        if(isEssential(node))continue;
+        
+        var src=node.getAttribute('src')||node.src||'';
+        var code=tag==='script'?(node.textContent||node.text||node.innerHTML||''):'';
+        
+        if(isTracker(src,code)){
+          log('MutationObserver caught: '+(src||'inline '+tag));
+          B.blocked.push({tag:tag,src:src,code:code,parent:node.parentNode,next:node.nextSibling});
+          node.setAttribute('data-consent-blocked','true');
+          if(tag==='script')node.type='javascript/blocked';
           if(node.parentNode)node.parentNode.removeChild(node);
-          else{node.setAttribute('data-consent-blocked','true');if(tag==='script')node.type='javascript/blocked';}
         }
       }
-    });
-  });
+      
+      // Check children
+      if(node.querySelectorAll){
+        var children=node.querySelectorAll('script,iframe,img');
+        for(var k=0;k<children.length;k++){
+          var child=children[k];
+          var ctag=(child.tagName||'').toLowerCase();
+          if(child.getAttribute('data-consent-blocked')==='true')continue;
+          if(isEssential(child))continue;
+          
+          var csrc=child.getAttribute('src')||child.src||'';
+          var ccode=ctag==='script'?(child.textContent||child.text||''):'';
+          
+          if(isTracker(csrc,ccode)){
+            log('MutationObserver caught child: '+(csrc||'inline '+ctag));
+            B.blocked.push({tag:ctag,src:csrc,code:ccode,parent:child.parentNode,next:child.nextSibling});
+            child.setAttribute('data-consent-blocked','true');
+            if(ctag==='script')child.type='javascript/blocked';
+            if(child.parentNode)child.parentNode.removeChild(child);
+          }
+        }
+      }
+    }
+  }
 });
 
-blocker.observer.observe(document.documentElement,{childList:true,subtree:true});
+B.observer.observe(document.documentElement||document,{childList:true,subtree:true});
 
-// STEP 8: Enable function - restore trackers on consent
-blocker.enable=function(){
-  if(hasConsent()){
-    // Restore blocked external scripts only (skip inline to prevent double-firing)
-    blocker.blockedNodes.forEach(function(backup){
-      if(!backup||!backup.parent||backup.isInline||!backup.src)return;
-      var el=document.createElement(backup.tagName);
-      el.src=backup.src;
-      for(var attr in backup.attributes)el.setAttribute(attr,backup.attributes[attr]);
-      if(backup.nextSibling)backup.parent.insertBefore(el,backup.nextSibling);
-      else backup.parent.appendChild(el);
-    });
-    blocker.blockedNodes=[];
-    
-    // Restore DOM methods
-    document.createElement=blocker.origCreateElement;
-    Node.prototype.appendChild=blocker.origAppendChild;
-    Node.prototype.insertBefore=blocker.origInsertBefore;
-    Node.prototype.removeChild=blocker.origRemoveChild;
-    Node.prototype.replaceChild=blocker.origReplaceChild;
-    
-    // Restore network methods
-    window.fetch=blocker.origFetch;
-    XMLHttpRequest.prototype.open=blocker.origXHROpen;
-    XMLHttpRequest.prototype.send=blocker.origXHRSend;
-    navigator.sendBeacon=blocker.origSendBeacon;
-    window.Image=blocker.origImage;
-    
-    // Stop observer
-    if(blocker.observer)blocker.observer.disconnect();
-    
-    // Restore tracking functions
-    if(blocker.origFbq){window.fbq=blocker.origFbq;window._fbq=blocker.origFbq;}
-    else{delete window.fbq;delete window._fbq;}
-    if(blocker.origGtag)window.gtag=blocker.origGtag;else delete window.gtag;
-    if(blocker.origGa)window.ga=blocker.origGa;else delete window.ga;
-    if(blocker.origDataLayerPush)window.dataLayer.push=blocker.origDataLayerPush;
-    else if(window.dataLayer)window.dataLayer.push=Array.prototype.push;
-    if(blocker.origGaqPush)window._gaq.push=blocker.origGaqPush;
-    else if(window._gaq)window._gaq.push=Array.prototype.push;
-    if(blocker.origAnalyticsTrack&&window.analytics)window.analytics.track=blocker.origAnalyticsTrack;
+// ============================================================
+// STEP 12: ENABLE FUNCTION - Restore on consent
+// ============================================================
+B.enable=function(){
+  log('Enabling trackers...');
+  
+  // Restore DOM methods
+  document.createElement=B.originals.createElement;
+  Node.prototype.appendChild=B.originals.appendChild;
+  Node.prototype.insertBefore=B.originals.insertBefore;
+  if(B.originals.append)Element.prototype.append=B.originals.append;
+  if(B.originals.prepend)Element.prototype.prepend=B.originals.prepend;
+  if(B.originals.insertAdjacentElement)Element.prototype.insertAdjacentElement=B.originals.insertAdjacentElement;
+  if(B.originals.insertAdjacentHTML)Element.prototype.insertAdjacentHTML=B.originals.insertAdjacentHTML;
+  document.write=B.originals.write;
+  document.writeln=B.originals.writeln;
+  
+  // Restore network
+  window.fetch=B.originals.fetch;
+  XMLHttpRequest.prototype.open=B.originals.XHRopen;
+  XMLHttpRequest.prototype.send=B.originals.XHRsend;
+  navigator.sendBeacon=B.originals.sendBeacon;
+  window.Image=B.originals.Image;
+  
+  // Stop observer
+  if(B.observer)B.observer.disconnect();
+  
+  // Restore HTMLScriptElement.prototype.src
+  if(scriptSrcDescriptor){
+    Object.defineProperty(HTMLScriptElement.prototype,'src',scriptSrcDescriptor);
   }
+  
+  // Remove function stubs
+  delete window.fbq;delete window._fbq;
+  delete window.gtag;
+  delete window.ga;
+  delete window.analytics;
+  delete window.mixpanel;
+  delete window.amplitude;
+  delete window.hj;
+  delete window.clarity;
+  delete window._hsq;
+  delete window.twq;
+  delete window.pintrk;
+  delete window.ttq;
+  delete window.snaptr;
+  
+  // Reload blocked external scripts
+  for(var i=0;i<B.blocked.length;i++){
+    var b=B.blocked[i];
+    if(!b.src||!b.parent)continue; // Skip inline
+    
+    var el=document.createElement(b.tag);
+    el.src=b.src;
+    el.setAttribute('data-consent-restored','true');
+    
+    try{
+      if(b.next&&b.parent.contains(b.next)){
+        b.parent.insertBefore(el,b.next);
+      }else{
+        b.parent.appendChild(el);
+      }
+      log('Restored: '+b.src);
+    }catch(e){
+      document.head.appendChild(el);
+    }
+  }
+  
+  B.blocked=[];
+  log('Trackers enabled');
 };
 
-blocker.ready=true;
-console.log('[Consent Blocker] Pre-execution blocker initialized');
+B.ready=true;
+log('Pre-execution blocker ready');
 })();`;
 }
 
@@ -429,165 +661,106 @@ function generateMainScript(siteId, allowedDomain, isPreview, config, bannerStyl
   
   return `(function(){
 'use strict';
-// ============================================================
-// MAIN CONSENT SCRIPT - Banner & Consent Management
-// ============================================================
-
-var SITE_ID='${siteId}';
 var CONSENT_KEY='${CONSENT_KEY}';
 var isPreviewMode=${isPreview ? 'true' : 'false'};
 var ALLOWED_DOMAIN='${isPreview ? '*' : allowedDomain}';
 
-// Wait for blocker to be ready
-function waitForBlocker(callback){
-  if(window._consentBlocker&&window._consentBlocker.ready){
-    callback();
-  }else{
-    setTimeout(function(){waitForBlocker(callback);},10);
-  }
-}
+function hasConsent(){return localStorage.getItem(CONSENT_KEY)==='accepted';}
 
-// Check consent
-function hasConsent(){
-  return localStorage.getItem(CONSENT_KEY)==='accepted';
-}
+// Domain check
+var host=location.hostname.toLowerCase().replace(/^www\\./,'');
+var allowed=ALLOWED_DOMAIN!=='*'?ALLOWED_DOMAIN.toLowerCase().replace(/^www\\./,''):null;
+if(allowed&&host!==allowed){console.warn('[Consent] Domain mismatch');return;}
 
-// Domain validation
-var currentHost=window.location.hostname.toLowerCase().replace(/^www\\./,'');
-var allowedHost=ALLOWED_DOMAIN!=='*'?ALLOWED_DOMAIN.toLowerCase().replace(/^www\\./,''):null;
-var domainMatches=!allowedHost||currentHost===allowedHost;
-
-if(!domainMatches){
-  console.warn('[Consent SDK] Domain mismatch');
-  return;
-}
-
-// Clear consent in preview mode
+// Clear in preview
 if(isPreviewMode){
   localStorage.removeItem(CONSENT_KEY);
-  var existing=document.getElementById('cookie-banner');
-  if(existing)existing.remove();
+  var old=document.getElementById('cookie-banner');
+  if(old)old.remove();
 }
 
-// Enable trackers (uses blocker API)
 function enableTrackers(){
-  if(window._consentBlocker&&window._consentBlocker.enable){
-    window._consentBlocker.enable();
-    console.log('[Consent SDK] Trackers enabled');
-  }
+  if(window._cb&&window._cb.enable)window._cb.enable();
 }
 
-// Show banner
 function showBanner(){
   if(!isPreviewMode&&hasConsent())return;
   if(document.getElementById('cookie-banner'))return;
   if(!document.body){setTimeout(showBanner,50);return;}
   
-  var banner=document.createElement('div');
-  banner.id='cookie-banner';
+  var b=document.createElement('div');
+  b.id='cookie-banner';
+  b.setAttribute('data-consent','essential');
   
   var pos='${position}';
-  var posStyle='';
-  if(pos==='top')posStyle='top:0;bottom:auto;left:0;right:0;';
-  else if(pos==='bottom-left')posStyle='bottom:20px;top:auto;left:20px;right:auto;';
-  else if(pos==='bottom-right')posStyle='bottom:20px;top:auto;left:auto;right:20px;';
-  else if(pos==='top-left')posStyle='top:20px;bottom:auto;left:20px;right:auto;';
-  else if(pos==='top-right')posStyle='top:20px;bottom:auto;left:auto;right:20px;';
-  else posStyle='bottom:0;top:auto;left:0;right:0;';
+  var ps='';
+  if(pos==='top')ps='top:0;left:0;right:0;';
+  else if(pos==='bottom-left')ps='bottom:20px;left:20px;';
+  else if(pos==='bottom-right')ps='bottom:20px;right:20px;';
+  else if(pos==='top-left')ps='top:20px;left:20px;';
+  else if(pos==='top-right')ps='top:20px;right:20px;';
+  else ps='bottom:0;left:0;right:0;';
   
-  var bannerCss='position:fixed;'+posStyle;
-  bannerCss+='background:${bannerStyle.backgroundColor};';
-  bannerCss+='color:${bannerStyle.textColor};';
-  bannerCss+='padding:${bannerStyle.padding};';
-  bannerCss+='z-index:999999;';
-  bannerCss+='display:flex;';
-  bannerCss+='align-items:center;';
-  bannerCss+='justify-content:space-between;';
-  bannerCss+='flex-wrap:wrap;';
-  bannerCss+='gap:15px;';
-  bannerCss+='font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
-  bannerCss+='font-size:${bannerStyle.fontSize};';
-  bannerCss+='border-radius:${bannerStyle.borderRadius};';
-  ${bannerStyle.border ? `bannerCss+='border:${bannerStyle.border.replace(/'/g, "\\'")};';` : ''}
-  ${bannerStyle.boxShadow ? `bannerCss+='box-shadow:${bannerStyle.boxShadow.replace(/'/g, "\\'")};';` : ''}
+  b.style.cssText='position:fixed;'+ps+'background:${bannerStyle.backgroundColor};color:${bannerStyle.textColor};padding:${bannerStyle.padding};z-index:2147483647;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;font-size:${bannerStyle.fontSize};border-radius:${bannerStyle.borderRadius};${bannerStyle.boxShadow ? 'box-shadow:' + bannerStyle.boxShadow + ';' : ''}${bannerStyle.border ? 'border:' + bannerStyle.border + ';' : ''}';
   
-  banner.style.cssText=bannerCss;
+  var c=document.createElement('div');
+  c.style.cssText='flex:1;min-width:250px;';
+  c.innerHTML='<strong style="display:block;margin-bottom:8px;font-size:16px;">🍪 ${title}</strong><span style="opacity:0.9;line-height:1.5;">${message}</span>';
   
-  var content=document.createElement('div');
-  content.style.cssText='flex:1;min-width:250px;';
-  content.innerHTML='<h3 style="margin:0 0 8px 0;font-size:18px;font-weight:600;">🍪 ${title}</h3><p style="margin:0;opacity:0.9;line-height:1.5;">${message}</p>';
+  var btns=document.createElement('div');
+  btns.style.cssText='display:flex;gap:10px;flex-wrap:wrap;';
   
-  var buttons=document.createElement('div');
-  buttons.style.cssText='display:flex;gap:10px;flex-wrap:wrap;';
-  
-  var acceptBtn=document.createElement('button');
-  acceptBtn.textContent='${acceptText}';
-  acceptBtn.style.cssText='background:${bannerStyle.buttonColor};color:${bannerStyle.buttonTextColor};border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:${bannerStyle.fontSize};transition:opacity 0.2s;';
-  acceptBtn.onmouseover=function(){this.style.opacity='0.9';};
-  acceptBtn.onmouseout=function(){this.style.opacity='1';};
-  acceptBtn.onclick=function(){
+  var acc=document.createElement('button');
+  acc.textContent='${acceptText}';
+  acc.style.cssText='background:${bannerStyle.buttonColor};color:${bannerStyle.buttonTextColor};border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:${bannerStyle.fontSize};';
+  acc.onclick=function(){
     localStorage.setItem(CONSENT_KEY,'accepted');
-    banner.remove();
+    b.remove();
     enableTrackers();
   };
-  buttons.appendChild(acceptBtn);
+  btns.appendChild(acc);
   
   ${showReject ? `
-  var rejectBtn=document.createElement('button');
-  rejectBtn.textContent='${rejectText}';
-  rejectBtn.style.cssText='background:transparent;color:${bannerStyle.textColor};border:2px solid ${bannerStyle.textColor};padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:${bannerStyle.fontSize};transition:opacity 0.2s;';
-  rejectBtn.onmouseover=function(){this.style.opacity='0.9';};
-  rejectBtn.onmouseout=function(){this.style.opacity='1';};
-  rejectBtn.onclick=function(){
+  var rej=document.createElement('button');
+  rej.textContent='${rejectText}';
+  rej.style.cssText='background:transparent;color:${bannerStyle.textColor};border:2px solid ${bannerStyle.textColor};padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:${bannerStyle.fontSize};';
+  rej.onclick=function(){
     localStorage.setItem(CONSENT_KEY,'rejected');
-    banner.remove();
+    b.remove();
   };
-  buttons.appendChild(rejectBtn);
+  btns.appendChild(rej);
   ` : ''}
   
-  banner.appendChild(content);
-  banner.appendChild(buttons);
-  document.body.appendChild(banner);
+  b.appendChild(c);
+  b.appendChild(btns);
+  document.body.appendChild(b);
 }
 
-// Domain verification & page tracking
-if(domainMatches){
-  fetch('${verifyCallbackUrl}?domain='+encodeURIComponent(currentHost)+'${isPreview ? '&preview=1' : ''}',{
-    method:'GET',mode:'cors',credentials:'omit'
-  }).then(function(r){return r.json();}).then(function(d){
-    if(d&&d.connected)console.log('[Consent SDK] Domain connected');
-  }).catch(function(){});
-  
-  fetch('${trackUrl}',{
-    method:'POST',mode:'cors',credentials:'omit',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({pagePath:location.pathname,pageTitle:document.title})
-  }).catch(function(){});
-}
+// API calls
+fetch('${verifyCallbackUrl}?domain='+encodeURIComponent(host)+'${isPreview ? '&preview=1' : ''}',{method:'GET',mode:'cors',credentials:'omit'}).catch(function(){});
+fetch('${trackUrl}',{method:'POST',mode:'cors',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({pagePath:location.pathname,pageTitle:document.title})}).catch(function(){});
 
-// Initialize
-waitForBlocker(function(){
-  var shouldShow=isPreviewMode||!hasConsent();
-  if(shouldShow){
+// Show banner
+function init(){
+  if(isPreviewMode||!hasConsent()){
     showBanner();
-    if(document.readyState==='loading'){
-      document.addEventListener('DOMContentLoaded',showBanner);
-    }
     setTimeout(showBanner,100);
     setTimeout(showBanner,500);
     setTimeout(showBanner,1000);
-    window.addEventListener('load',function(){setTimeout(showBanner,100);});
-    
-    if(isPreviewMode){
-      var watchdog=setInterval(function(){
-        var b=document.getElementById('cookie-banner');
-        if(!b&&document.body)showBanner();
-      },500);
-      setTimeout(function(){clearInterval(watchdog);},30000);
-    }
   }
-  console.log('[Consent SDK] Initialized');
-});
+}
+
+if(window._cb&&window._cb.ready){
+  init();
+}else{
+  var check=setInterval(function(){
+    if(window._cb&&window._cb.ready){
+      clearInterval(check);
+      init();
+    }
+  },10);
+  setTimeout(function(){clearInterval(check);init();},3000);
+}
 })();`;
 }
 
@@ -765,11 +938,9 @@ export async function GET(req, { params }) {
 
     const effectiveConfig = previewConfig || normalizedBannerConfig || {};
 
-    // Get template and merge with config
     const templateKey = effectiveConfig.template || DEFAULT_BANNER_CONFIG.template;
     const baseTemplate = BANNER_TEMPLATES[templateKey] || BANNER_TEMPLATES.minimal;
     
-    // Merge template styles with config overrides
     const bannerStyle = {
       backgroundColor: effectiveConfig.backgroundColor || baseTemplate.style.backgroundColor || '#667eea',
       textColor: effectiveConfig.textColor || baseTemplate.style.textColor || '#ffffff',
@@ -794,15 +965,12 @@ export async function GET(req, { params }) {
     const verifyCallbackUrl = `${baseUrl}/api/sites/${finalSiteId}/verify-callback`;
     const trackUrl = `${baseUrl}/api/sites/${finalSiteId}/track`;
 
-    // Generate split architecture: inline blocker + main script
     const inlineBlocker = generateInlineBlocker(finalSiteId, allowedDomain || '*', isPreview);
     const mainScript = generateMainScript(finalSiteId, allowedDomain || '*', isPreview, effectiveConfig, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl);
     
-    // Check if user wants just the inline blocker code
     const returnInlineBlocker = searchParams.get("inline") === "1";
     
     if (returnInlineBlocker) {
-      // Return just the inline blocker code (for pasting in <head>)
       return new Response(inlineBlocker, {
         headers: {
           "Content-Type": "application/javascript; charset=utf-8",
@@ -812,9 +980,6 @@ export async function GET(req, { params }) {
       });
     }
     
-    // Return combined script (inline blocker + main script)
-    // This ensures it works even if inline blocker wasn't loaded separately
-    // The blocker runs first, then the main script initializes
     const script = inlineBlocker + "\n\n" + mainScript;
 
     return new Response(script, {
@@ -828,21 +993,19 @@ export async function GET(req, { params }) {
   } catch (error) {
     console.error("Script generation error:", error);
     const fallbackScript = `(function(){
-console.log('[Consent SDK] Using fallback');
-var CONSENT_KEY='cookie_consent_fallback';
-function showBanner(){
-  if(localStorage.getItem(CONSENT_KEY)==='accepted')return;
-  if(document.getElementById('cookie-banner'))return;
-  if(!document.body){setTimeout(showBanner,100);return;}
+var K='cookie_consent_fallback';
+function show(){
+  if(localStorage.getItem(K)==='accepted')return;
+  if(document.getElementById('cb'))return;
+  if(!document.body){setTimeout(show,100);return;}
   var b=document.createElement('div');
-  b.id='cookie-banner';
-  b.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#667eea;color:#fff;padding:20px;z-index:999999;display:flex;align-items:center;justify-content:space-between;font-family:sans-serif;';
-  b.innerHTML='<div style="flex:1;"><h3 style="margin:0 0 8px 0;">🍪 We use cookies</h3><p style="margin:0;font-size:14px;">This site uses tracking cookies.</p></div><div><button id="cb-accept" style="background:#fff;color:#667eea;border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;">Accept</button></div>';
+  b.id='cb';
+  b.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#667eea;color:#fff;padding:20px;z-index:2147483647;display:flex;align-items:center;justify-content:space-between;font-family:sans-serif;';
+  b.innerHTML='<div><strong>🍪 Cookies</strong><p style="margin:5px 0 0;font-size:14px;">This site uses cookies.</p></div><button id="cba" style="background:#fff;color:#667eea;border:none;padding:12px 24px;border-radius:6px;cursor:pointer;font-weight:bold;">Accept</button>';
   document.body.appendChild(b);
-  document.getElementById('cb-accept').onclick=function(){localStorage.setItem(CONSENT_KEY,'accepted');b.remove();};
+  document.getElementById('cba').onclick=function(){localStorage.setItem(K,'accepted');b.remove();};
 }
-showBanner();
-setTimeout(showBanner,500);
+show();
 })();`;
     return new Response(fallbackScript, {
       headers: {
