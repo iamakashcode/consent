@@ -3,18 +3,18 @@ import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES } from "@/lib/banner-templates"
 import { hasVerificationColumns } from "@/lib/db-utils";
 import { isSubscriptionActive } from "@/lib/subscription";
 
-// Generate minimal inline blocker (runs first, blocks immediately)
+// Generate aggressive inline blocker - blocks trackers BEFORE they execute
 function generateInlineBlocker(siteId, allowedDomain, isPreview) {
   const CONSENT_KEY = `cookie_consent_${siteId}`;
   
   return `(function(){
 'use strict';
 // ============================================================
-// MINIMAL INLINE BLOCKER - RUNS FIRST, BLOCKS IMMEDIATELY
-// Paste this code in <head> BEFORE any other scripts
+// AGGRESSIVE PRE-EXECUTION BLOCKER
+// Blocks trackers BEFORE they can execute - DOM manipulation at its finest
 // ============================================================
 
-// Global blocker API - exposed to main script
+// Global blocker API
 window._consentBlocker=window._consentBlocker||{};
 var blocker=window._consentBlocker;
 blocker.CONSENT_KEY='${CONSENT_KEY}';
@@ -28,40 +28,42 @@ blocker.origAnalyticsTrack=window.analytics&&window.analytics.track;
 blocker.origCreateElement=document.createElement;
 blocker.origAppendChild=Node.prototype.appendChild;
 blocker.origInsertBefore=Node.prototype.insertBefore;
+blocker.origRemoveChild=Node.prototype.removeChild;
+blocker.origReplaceChild=Node.prototype.replaceChild;
 blocker.origFetch=window.fetch;
 blocker.origXHROpen=XMLHttpRequest.prototype.open;
 blocker.origXHRSend=XMLHttpRequest.prototype.send;
 blocker.origSendBeacon=navigator.sendBeacon;
 blocker.origImage=window.Image;
 
-// Check consent (LIVE - never cached)
+// Live consent check
 function hasConsent(){
   return localStorage.getItem(blocker.CONSENT_KEY)==='accepted';
 }
 
-// Check if essential
+// Essential check
 function isEssential(node){
   return node&&node.getAttribute&&node.getAttribute('data-consent')==='essential';
 }
 
-// Universal tracker detection
-var TRACKER_DOMAINS=['google','facebook','meta','doubleclick','tiktok','twitter','linkedin','hotjar','clarity','segment','mixpanel','amplitude','ads','tagmanager','analytics','tracking','pixel','beacon','collect','metrics','insight','telemetry','monitor','gtm','ga','gtag','fbevents'];
+// Comprehensive tracker detection
+var TRACKER_DOMAINS=['google','facebook','meta','doubleclick','tiktok','twitter','linkedin','hotjar','clarity','segment','mixpanel','amplitude','ads','tagmanager','analytics','tracking','pixel','beacon','collect','metrics','insight','telemetry','monitor','gtm','ga','gtag','fbevents','googletagmanager','google-analytics','facebook.net','connect.facebook','fbevents','analytics.js','gtag.js','ga.js'];
 function isTracker(url,text,node){
   if(isEssential(node))return false;
   var str=((url||'')+(text||'')).toLowerCase();
   if(!str)return false;
-  if(/tracking|analytics|pixel|collect|beacon|tag|ads|metrics|insight|telemetry|event|monitor/i.test(str))return true;
+  if(/tracking|analytics|pixel|collect|beacon|tag|ads|metrics|insight|telemetry|event|monitor|gtm|ga|gtag|fbq|_gaq|dataLayer/i.test(str))return true;
   for(var i=0;i<TRACKER_DOMAINS.length;i++)if(str.indexOf(TRACKER_DOMAINS[i])>-1)return true;
-  var patterns=['fbq(','_fbq','gtag(','ga(','_gaq','dataLayer','analytics.track','analytics.page','analytics.identify','mixpanel.track','amplitude','navigator.sendBeacon','new Image().src','_hsq','hj(','clarity('];
+  var patterns=['fbq(','_fbq','gtag(','ga(','_gaq','dataLayer','analytics.track','analytics.page','analytics.identify','mixpanel.track','amplitude','navigator.sendBeacon','new Image().src','_hsq','hj(','clarity(','window.fbq','window.gtag','window.ga','window.dataLayer'];
   for(var j=0;j<patterns.length;j++)if(str.indexOf(patterns[j])>-1)return true;
-  if(url&&/[\\/]track|[\\/]event|[\\/]collect|[\\/]pixel|[\\/]beacon|[\\/]analytics|[\\/]metrics/i.test(url))return true;
+  if(url&&/[\\/]track|[\\/]event|[\\/]collect|[\\/]pixel|[\\/]beacon|[\\/]analytics|[\\/]metrics|[\\/]gtm|[\\/]ga/i.test(url))return true;
   return false;
 }
 
-// Backup node
+// Backup node for restoration
 function backupNode(node){
   if(!node)return null;
-  return{
+  var backup={
     tagName:node.tagName?node.tagName.toLowerCase():'',
     src:node.src||node.getAttribute('src')||'',
     text:node.textContent||node.innerHTML||'',
@@ -71,36 +73,59 @@ function backupNode(node){
     isInline:!(node.src||node.getAttribute('src')),
     node:node
   };
+  if(node.attributes){
+    for(var i=0;i<node.attributes.length;i++){
+      var attr=node.attributes[i];
+      if(attr.name!=='src'&&attr.name!=='type'&&attr.name!=='data-consent-blocked'&&attr.name!=='data-blocked-src'){
+        backup.attributes[attr.name]=attr.value;
+      }
+    }
+  }
+  return backup;
 }
 
-// Stub all tracking functions IMMEDIATELY
+// STEP 1: Stub ALL tracking functions IMMEDIATELY (before anything else)
 window.fbq=function(){if(hasConsent()&&blocker.origFbq)return blocker.origFbq.apply(this,arguments);};
 window._fbq=window.fbq;
-window.fbq.queue=[];window.fbq.loaded=true;window.fbq.version='2.0';window.fbq.push=window.fbq;window.fbq.callMethod=function(){};
+window.fbq.queue=[];
+window.fbq.loaded=true;
+window.fbq.version='2.0';
+window.fbq.push=window.fbq;
+window.fbq.callMethod=function(){};
 window.gtag=function(){if(hasConsent()&&blocker.origGtag)return blocker.origGtag.apply(this,arguments);};
 if(!window.dataLayer)window.dataLayer=[];
 window.dataLayer.push=function(){if(hasConsent()&&blocker.origDataLayerPush)return blocker.origDataLayerPush.apply(window.dataLayer,arguments);return 0;};
 window.ga=function(){if(hasConsent()&&blocker.origGa)return blocker.origGa.apply(this,arguments);};
-window.ga.l=Date.now();window.ga.q=[];
+window.ga.l=Date.now();
+window.ga.q=[];
 if(!window._gaq)window._gaq=[];
 window._gaq.push=function(){if(hasConsent()&&blocker.origGaqPush)return blocker.origGaqPush.apply(window._gaq,arguments);return 0;};
 if(!window.analytics)window.analytics={};
 window.analytics.track=function(){if(hasConsent()&&blocker.origAnalyticsTrack)return blocker.origAnalyticsTrack.apply(this,arguments);};
-window.analytics.page=function(){};window.analytics.identify=function(){};window.analytics.alias=function(){};
-window.mixpanel=window.mixpanel||{};window.mixpanel.track=function(){};window.mixpanel.identify=function(){};
-window.amplitude=window.amplitude||{};window.amplitude.getInstance=function(){return{logEvent:function(){}};};
-window._hsq=window._hsq||[];window._hsq.push=function(){};
+window.analytics.page=function(){};
+window.analytics.identify=function(){};
+window.analytics.alias=function(){};
+window.mixpanel=window.mixpanel||{};
+window.mixpanel.track=function(){};
+window.mixpanel.identify=function(){};
+window.amplitude=window.amplitude||{};
+window.amplitude.getInstance=function(){return{logEvent:function(){}};};
+window._hsq=window._hsq||[];
+window._hsq.push=function(){};
 window.hj=window.hj||function(){};
 window.clarity=window.clarity||function(){};
 
-// Override createElement
+// STEP 2: Override document.createElement - PREVENT tracker creation
 document.createElement=function(tagName,options){
   var el=blocker.origCreateElement.call(this,tagName,options);
   var tag=tagName.toLowerCase();
+  
   if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()){
     var proto=tag==='script'?HTMLScriptElement.prototype:(tag==='iframe'?HTMLIFrameElement.prototype:HTMLImageElement.prototype);
-    var origSrc=Object.getOwnPropertyDescriptor(proto,'src');
-    if(origSrc){
+    
+    // Override src setter - PREVENT setting tracker URLs
+    var origSrcDesc=Object.getOwnPropertyDescriptor(proto,'src');
+    if(origSrcDesc){
       Object.defineProperty(el,'src',{
         get:function(){return this.getAttribute('src')||'';},
         set:function(url){
@@ -108,16 +133,18 @@ document.createElement=function(tagName,options){
             this.setAttribute('data-consent-blocked','true');
             this.setAttribute('data-blocked-src',url);
             if(tag==='script')this.type='javascript/blocked';
-            return;
+            return; // DON'T set src - prevents loading
           }
           this.setAttribute('src',url);
         },
         configurable:true,enumerable:true
       });
     }
+    
+    // Override type setter for scripts
     if(tag==='script'){
-      var origType=Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,'type');
-      if(origType){
+      var origTypeDesc=Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,'type');
+      if(origTypeDesc){
         Object.defineProperty(el,'type',{
           get:function(){return this.getAttribute('type')||'text/javascript';},
           set:function(type){
@@ -134,12 +161,46 @@ document.createElement=function(tagName,options){
           configurable:true,enumerable:true
         });
       }
+      
+      // Override textContent - PREVENT inline tracker code
+      var origTextContent=Object.getOwnPropertyDescriptor(Node.prototype,'textContent');
+      if(origTextContent){
+        Object.defineProperty(el,'textContent',{
+          get:function(){return origTextContent.get.call(this);},
+          set:function(text){
+            if(isTracker('',text,this)){
+              this.setAttribute('data-consent-blocked','true');
+              this.type='javascript/blocked';
+              return; // DON'T set textContent - prevents execution
+            }
+            origTextContent.set.call(this,text);
+          },
+          configurable:true
+        });
+      }
+      
+      // Override innerHTML - PREVENT inline tracker code
+      var origInnerHTML=Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML');
+      if(origInnerHTML){
+        Object.defineProperty(el,'innerHTML',{
+          get:function(){return origInnerHTML.get.call(this);},
+          set:function(html){
+            if(isTracker('',html,this)){
+              this.setAttribute('data-consent-blocked','true');
+              this.type='javascript/blocked';
+              return; // DON'T set innerHTML - prevents execution
+            }
+            origInnerHTML.set.call(this,html);
+          },
+          configurable:true
+        });
+      }
     }
   }
   return el;
 };
 
-// Override appendChild/insertBefore
+// STEP 3: Override appendChild - PREVENT tracker insertion into DOM
 Node.prototype.appendChild=function(child){
   if(child&&child.tagName){
     var tag=child.tagName.toLowerCase();
@@ -152,6 +213,7 @@ Node.prototype.appendChild=function(child){
         child.setAttribute('data-consent-blocked','true');
         if(src)child.setAttribute('data-blocked-src',src);
         if(tag==='script')child.type='javascript/blocked';
+        // CRITICAL: Return child WITHOUT adding to DOM - prevents execution
         return child;
       }
     }
@@ -159,6 +221,7 @@ Node.prototype.appendChild=function(child){
   return blocker.origAppendChild.call(this,child);
 };
 
+// STEP 4: Override insertBefore - PREVENT tracker insertion
 Node.prototype.insertBefore=function(newNode,ref){
   if(newNode&&newNode.tagName){
     var tag=newNode.tagName.toLowerCase();
@@ -171,6 +234,7 @@ Node.prototype.insertBefore=function(newNode,ref){
         newNode.setAttribute('data-consent-blocked','true');
         if(src)newNode.setAttribute('data-blocked-src',src);
         if(tag==='script')newNode.type='javascript/blocked';
+        // CRITICAL: Return newNode WITHOUT inserting - prevents execution
         return newNode;
       }
     }
@@ -178,22 +242,39 @@ Node.prototype.insertBefore=function(newNode,ref){
   return blocker.origInsertBefore.call(this,newNode,ref);
 };
 
-// Block existing scripts in DOM
+// STEP 5: Block existing scripts in DOM - PHYSICALLY REMOVE them
 function blockExisting(){
   if(hasConsent())return;
-  var scripts=document.querySelectorAll('script[src],script:not([src])');
+  
+  // Block external scripts
+  var scripts=document.querySelectorAll('script[src]');
   for(var i=0;i<scripts.length;i++){
     var s=scripts[i];
     if(s.getAttribute('data-consent-blocked')==='true')continue;
     var src=s.src||s.getAttribute('src')||'';
-    var text=s.textContent||s.innerHTML||'';
-    if(isTracker(src,text,s)){
+    if(isTracker(src,'',s)){
       var backup=backupNode(s);
       if(backup)blocker.blockedNodes.push(backup);
       if(s.parentNode)s.parentNode.removeChild(s);
       else{s.setAttribute('data-consent-blocked','true');s.type='javascript/blocked';}
     }
   }
+  
+  // Block inline scripts
+  var inlineScripts=document.querySelectorAll('script:not([src])');
+  for(var i=0;i<inlineScripts.length;i++){
+    var s=inlineScripts[i];
+    if(s.getAttribute('data-consent-blocked')==='true')continue;
+    var text=s.textContent||s.innerHTML||'';
+    if(isTracker('',text,s)){
+      var backup=backupNode(s);
+      if(backup)blocker.blockedNodes.push(backup);
+      if(s.parentNode)s.parentNode.removeChild(s);
+      else{s.setAttribute('data-consent-blocked','true');s.type='javascript/blocked';s.textContent='';s.innerHTML='';}
+    }
+  }
+  
+  // Block iframes
   var iframes=document.querySelectorAll('iframe[src]');
   for(var i=0;i<iframes.length;i++){
     var ifr=iframes[i];
@@ -205,6 +286,8 @@ function blockExisting(){
       if(ifr.parentNode)ifr.parentNode.removeChild(ifr);
     }
   }
+  
+  // Block tracking images
   var imgs=document.querySelectorAll('img[src]');
   for(var i=0;i<imgs.length;i++){
     var img=imgs[i];
@@ -218,18 +301,26 @@ function blockExisting(){
   }
 }
 
-// Network interception
+// Execute blocking immediately
+blockExisting();
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',blockExisting);
+}
+window.addEventListener('load',blockExisting);
+
+// STEP 6: Network interception
 window.fetch=function(input,init){
   if(hasConsent())return blocker.origFetch.apply(this,arguments);
   var url=typeof input==='string'?input:(input&&input.url?input.url:'');
-  if(url&&isTracker(url,'',null))return Promise.reject(new Error('Blocked'));
+  if(url&&isTracker(url,'',null))return Promise.reject(new Error('Blocked by consent manager'));
   return blocker.origFetch.apply(this,arguments);
 };
 
 XMLHttpRequest.prototype.open=function(method,url){
   if(hasConsent()){this._blocked=false;return blocker.origXHROpen.apply(this,arguments);}
   if(url&&isTracker(url,'',null)){this._blocked=true;this._blockedUrl=url;return;}
-  this._blocked=false;this._blockedUrl=url;
+  this._blocked=false;
+  this._blockedUrl=url;
   return blocker.origXHROpen.apply(this,arguments);
 };
 
@@ -246,8 +337,8 @@ navigator.sendBeacon=function(url,data){
 
 window.Image=function(){
   var img=new blocker.origImage();
-  var origSrc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
-  if(origSrc){
+  var origSrcDesc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
+  if(origSrcDesc){
     Object.defineProperty(img,'src',{
       get:function(){return this.getAttribute('src')||'';},
       set:function(url){
@@ -260,7 +351,7 @@ window.Image=function(){
   return img;
 };
 
-// MutationObserver
+// STEP 7: MutationObserver - catch dynamically injected trackers
 blocker.observer=new MutationObserver(function(mutations){
   if(hasConsent())return;
   mutations.forEach(function(m){
@@ -283,16 +374,10 @@ blocker.observer=new MutationObserver(function(mutations){
 
 blocker.observer.observe(document.documentElement,{childList:true,subtree:true});
 
-// Execute blocking immediately
-blockExisting();
-if(document.readyState==='loading'){
-  document.addEventListener('DOMContentLoaded',blockExisting);
-}
-window.addEventListener('load',blockExisting);
-
-// Expose enable function to main script
+// STEP 8: Enable function - restore trackers on consent
 blocker.enable=function(){
   if(hasConsent()){
+    // Restore blocked external scripts only (skip inline to prevent double-firing)
     blocker.blockedNodes.forEach(function(backup){
       if(!backup||!backup.parent||backup.isInline||!backup.src)return;
       var el=document.createElement(backup.tagName);
@@ -302,15 +387,25 @@ blocker.enable=function(){
       else backup.parent.appendChild(el);
     });
     blocker.blockedNodes=[];
+    
+    // Restore DOM methods
     document.createElement=blocker.origCreateElement;
     Node.prototype.appendChild=blocker.origAppendChild;
     Node.prototype.insertBefore=blocker.origInsertBefore;
+    Node.prototype.removeChild=blocker.origRemoveChild;
+    Node.prototype.replaceChild=blocker.origReplaceChild;
+    
+    // Restore network methods
     window.fetch=blocker.origFetch;
     XMLHttpRequest.prototype.open=blocker.origXHROpen;
     XMLHttpRequest.prototype.send=blocker.origXHRSend;
     navigator.sendBeacon=blocker.origSendBeacon;
     window.Image=blocker.origImage;
+    
+    // Stop observer
     if(blocker.observer)blocker.observer.disconnect();
+    
+    // Restore tracking functions
     if(blocker.origFbq){window.fbq=blocker.origFbq;window._fbq=blocker.origFbq;}
     else{delete window.fbq;delete window._fbq;}
     if(blocker.origGtag)window.gtag=blocker.origGtag;else delete window.gtag;
@@ -324,7 +419,7 @@ blocker.enable=function(){
 };
 
 blocker.ready=true;
-console.log('[Consent Blocker] Initialized');
+console.log('[Consent Blocker] Pre-execution blocker initialized');
 })();`;
 }
 
@@ -693,37 +788,6 @@ export async function GET(req, { params }) {
     const acceptText = (effectiveConfig.acceptButtonText || effectiveConfig.acceptText || DEFAULT_BANNER_CONFIG.acceptButtonText).replace(/'/g, "\\'").replace(/"/g, '\\"');
     const rejectText = (effectiveConfig.rejectButtonText || effectiveConfig.rejectText || DEFAULT_BANNER_CONFIG.rejectButtonText).replace(/'/g, "\\'").replace(/"/g, '\\"');
     const showReject = effectiveConfig.showRejectButton !== false;
-
-    // Comprehensive tracker domains list including Meta Pixel
-    const trackerDomains = [
-      "google-analytics.com",
-      "www.google-analytics.com",
-      "googletagmanager.com",
-      "www.googletagmanager.com",
-      "gtag.js",
-      "analytics.js",
-      "ga.js",
-      "facebook.net",
-      "connect.facebook.net",
-      "www.facebook.com/tr",
-      "facebook.com/tr",
-      "fbevents.js",
-      "doubleclick.net",
-      "googleadservices.com",
-      "googlesyndication.com",
-      "licdn.com",
-      "snap.licdn.com",
-      "twitter.com",
-      "analytics.twitter.com",
-      "hotjar.com",
-      "clarity.ms",
-      "omniture.com",
-      "adobe.com",
-      "segment.io",
-      "segment.com",
-      "mixpanel.com",
-      "amplitude.com"
-    ];
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
       (req.headers.get("origin") || `http://${req.headers.get("host")}`);
