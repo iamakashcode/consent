@@ -138,7 +138,7 @@ window._gaq.push=function(){log('_gaq.push() blocked');return 0;};
 
 window.analytics=window.analytics||{track:noop,page:noop,identify:noop,alias:noop,ready:noop,reset:noop};
 window.mixpanel=window.mixpanel||{track:noop,identify:noop,people:{set:noop}};
-window.amplitude=window.amplitude||{getInstance:function(){return{logEvent:noop,setUserId:noop,init:noop}};};
+window.amplitude=window.amplitude||{getInstance:function(){return{logEvent:noop,setUserId:noop,init:noop}}};
 window.hj=window.hj||noop;
 window.clarity=window.clarity||noop;
 window._hsq=window._hsq||[];
@@ -521,7 +521,9 @@ function hasConsent(){
 // Domain check
 var host=location.hostname.toLowerCase().replace(/^www\\./,'');
 var allowed=ALLOWED_DOMAIN!=='*'?ALLOWED_DOMAIN.toLowerCase().replace(/^www\\./,''):null;
-if(allowed&&host!==allowed){console.warn('[Consent] Domain mismatch');return;}
+if(allowed&&host!==allowed&&!isPreviewMode){
+  console.warn('[Consent] Domain mismatch: '+host+' !== '+allowed);
+}
 
 // Clear in preview
 if(isPreviewMode){
@@ -686,8 +688,8 @@ export async function GET(req, { params }) {
       domain = "*";
     }
 
-    // Check subscription status
-    if (siteId && !isPreview) {
+    // Check subscription status (allow unverified domains to load script)
+    if (siteId && !isPreview && siteVerified) {
       let subscriptionStatus = await isSubscriptionActive(siteId);
       
       if (!subscriptionStatus.isActive && subscriptionStatus.subscription?.status === "pending" && 
@@ -829,8 +831,9 @@ export async function GET(req, { params }) {
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
       (req.headers.get("origin") || `http://${req.headers.get("host")}`);
-    const verifyCallbackUrl = `${baseUrl}/api/sites/${finalSiteId}/verify-callback`;
-    const trackUrl = `${baseUrl}/api/sites/${finalSiteId}/track`;
+    const actualSiteId = siteId || finalSiteId;
+    const verifyCallbackUrl = `${baseUrl}/api/sites/${actualSiteId}/verify-callback`;
+    const trackUrl = `${baseUrl}/api/sites/${actualSiteId}/track`;
 
     const inlineBlocker = generateInlineBlocker(finalSiteId, allowedDomain || '*', isPreview);
     const mainScript = generateMainScript(finalSiteId, allowedDomain || '*', isPreview, effectiveConfig, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl);

@@ -81,28 +81,11 @@ export async function GET(req, { params }) {
     }
 
     if (!requestDomain) {
-      console.error("[Verify Callback] Could not determine domain. Headers:", {
+      console.warn("[Verify Callback] Could not determine domain, will fallback to stored domain", {
         referer: req.headers.get("referer"),
         origin: req.headers.get("origin"),
         domainParam,
         url: req.url,
-      });
-      return new Response(JSON.stringify({ 
-        connected: false,
-        error: "Could not determine domain from request",
-        debug: {
-          referer: req.headers.get("referer"),
-          origin: req.headers.get("origin"),
-          domainParam,
-        }
-      }), {
-        status: 400,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
       });
     }
 
@@ -155,38 +138,35 @@ export async function GET(req, { params }) {
       });
     }
 
-    // Check subscription status for this site - block if inactive
+    // Check subscription status for this site (do not block verification)
     const subscriptionStatus = await isSubscriptionActive(site.id);
     if (!subscriptionStatus.isActive) {
-      console.warn(`[Verify Callback] Subscription inactive for site ${site.id}: ${subscriptionStatus.reason}`);
-      return new Response(JSON.stringify({ 
-        connected: false,
-        error: "Subscription inactive",
-        message: `Subscription for this domain is inactive: ${subscriptionStatus.reason}. Please renew to continue.`,
-      }), {
-        status: 403,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
-      });
+      console.warn(`[Verify Callback] Subscription inactive for site ${site.id}: ${subscriptionStatus.reason} - allowing verification`);
     }
 
+    const normalizeDomain = (domain) =>
+      (domain || "")
+        .toLowerCase()
+        .replace(/^www\./, "")
+        .split("/")[0];
+
     // Clean the stored domain for comparison
-    const storedDomain = site.domain.toLowerCase().replace(/^www\./, "");
+    const storedDomain = normalizeDomain(site.domain);
+    const requestDomainNormalized = normalizeDomain(requestDomain) || storedDomain;
 
     // Verify the domain matches
-    console.log(`[Verify Callback] Comparing domains - Request: "${requestDomain}", Stored: "${storedDomain}"`);
-    if (requestDomain !== storedDomain) {
-      console.warn(`[Verify Callback] Domain mismatch: ${requestDomain} !== ${storedDomain}`);
+    console.log(`[Verify Callback] Comparing domains - Request: "${requestDomainNormalized}", Stored: "${storedDomain}"`);
+    const domainMatches =
+      requestDomainNormalized === storedDomain ||
+      requestDomainNormalized.endsWith("." + storedDomain);
+    if (!domainMatches) {
+      console.warn(`[Verify Callback] Domain mismatch: ${requestDomainNormalized} !== ${storedDomain}`);
       return new Response(JSON.stringify({ 
         connected: false, 
         error: "Domain mismatch",
-        requestDomain,
+        requestDomain: requestDomainNormalized,
         storedDomain,
-        message: `Domain ${requestDomain} does not match stored domain ${storedDomain}`,
+        message: `Domain ${requestDomainNormalized} does not match stored domain ${storedDomain}`,
       }), {
         status: 400,
         headers: {
