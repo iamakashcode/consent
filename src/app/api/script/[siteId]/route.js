@@ -14,72 +14,84 @@ function generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiDomai
 // This MUST execute before ANY other code, even before config
 // ============================================================
 (function(){
-  var noop=function(){};
+  // CRITICAL: Create proper fbq stub function with all properties (Meta Pixel expects this)
+  var fbqStub=function(){
+    // Block all fbq calls
+    return;
+  };
+  // Set up all fbq properties that Meta Pixel expects
+  fbqStub.queue=[];
+  fbqStub.loaded=false;
+  fbqStub.version='2.0';
+  fbqStub.push=function(){return;};
+  fbqStub.callMethod=function(){return;};
+  fbqStub.track=function(){return;};
+  fbqStub.trackCustom=function(){return;};
+  fbqStub.trackSingle=function(){return;};
+  fbqStub.init=function(){return;};
+  fbqStub.set=function(){return;};
+  fbqStub.delete=function(){return;};
+  
   // Override fbq IMMEDIATELY - even if Meta Pixel already loaded
   try{
-    if(window.fbq){
-      // Meta Pixel might have already initialized - override it
-      window.fbq=noop;
-      window.fbq.queue=[];
-      window.fbq.loaded=false;
-      window.fbq.version='2.0';
-      window.fbq.push=noop;
-      window.fbq.callMethod=noop;
-      window.fbq.track=noop;
-      window.fbq.trackCustom=noop;
-      window.fbq.trackSingle=noop;
-      window.fbq.init=noop;
-      window.fbq.set=noop;
-      window.fbq.delete=noop;
-    }else{
-      window.fbq=noop;
-    }
+    // Force delete first
+    try{delete window.fbq;}catch(e){}
+    // Set our stub
+    window.fbq=fbqStub;
+    // Make it non-configurable so Meta Pixel can't override it
     Object.defineProperty(window,'fbq',{
-      value:window.fbq,
+      value:fbqStub,
       writable:false,
       configurable:false,
       enumerable:true
     });
   }catch(e){
-    window.fbq=noop;
+    // Fallback: just set it directly
+    window.fbq=fbqStub;
   }
   
-  // Override _fbq
+  // Override _fbq (Meta Pixel also uses this)
+  var _fbqStub=function(){return;};
   try{
-    window._fbq=noop;
+    try{delete window._fbq;}catch(e){}
+    window._fbq=_fbqStub;
     Object.defineProperty(window,'_fbq',{
-      value:noop,
+      value:_fbqStub,
       writable:false,
       configurable:false,
       enumerable:true
     });
   }catch(e){
-    window._fbq=noop;
+    window._fbq=_fbqStub;
   }
   
   // Override gtag, ga, dataLayer
+  var gtagStub=function(){return;};
   try{
-    window.gtag=noop;
+    try{delete window.gtag;}catch(e){}
+    window.gtag=gtagStub;
     Object.defineProperty(window,'gtag',{
-      value:noop,
+      value:gtagStub,
       writable:false,
       configurable:false,
       enumerable:true
     });
   }catch(e){
-    window.gtag=noop;
+    window.gtag=gtagStub;
   }
   
+  var gaStub=function(){return;};
   try{
-    window.ga=noop;
+    try{delete window.ga;}catch(e){}
+    window.ga=gaStub;
     Object.defineProperty(window,'ga',{
-      value:noop,
+      value:gaStub,
       writable:false,
       configurable:false,
       enumerable:true
     });
   }catch(e){
-    window.ga=noop;
+    window.ga=gaStub;
   }
   
   window.dataLayer=window.dataLayer||[];
@@ -93,10 +105,31 @@ function generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiDomai
     window.dataLayer.push=function(){return 0;};
   }
   
-  // CRITICAL: Check if Meta Pixel already executed (too late warning)
-  if(window.fbq&&typeof window.fbq==='function'&&window.fbq.toString().indexOf('blocked')===-1){
-    console.warn('[ConsentBlock] WARNING: Meta Pixel may have already executed. Ensure this script loads FIRST in <head>');
+  // CRITICAL: Override fbq even if it was already set by Meta Pixel
+  // Check if Meta Pixel already initialized and force override
+  if(window.fbq&&window.fbq!==fbqStub){
+    try{
+      // Meta Pixel might have set up fbq - destroy it
+      if(window.fbq.queue){
+        window.fbq.queue.length=0;
+      }
+      // Force override
+      try{delete window.fbq;}catch(e){}
+      window.fbq=fbqStub;
+      Object.defineProperty(window,'fbq',{
+        value:fbqStub,
+        writable:false,
+        configurable:false,
+        enumerable:true
+      });
+      console.warn('[ConsentBlock] Overrode existing Meta Pixel fbq');
+    }catch(e){
+      window.fbq=fbqStub;
+    }
   }
+  
+  // Store original call for restoration later (will be used after hasConsent is defined)
+  B._origCall=Function.prototype.call;
 })();
 
 /* ======================================================
@@ -199,6 +232,20 @@ function isEssential(el){
    LAYER 1 — PRE-EXECUTION BLOCKER (SAFE)
 ====================================================== */
 
+// Intercept Function.prototype.call to catch fbq('track', ...) calls
+// This catches cases where code calls fbq('track', 'PageView') directly
+if(B._origCall&&!hasConsent()){
+  Function.prototype.call=function(){
+    // Check if this function is fbq or _fbq
+    if(this===window.fbq||this===window._fbq){
+      // Block fbq calls - return undefined to prevent tracking
+      return undefined;
+    }
+    return B._origCall.apply(this,arguments);
+  };
+  log('Function.prototype.call intercepted for fbq blocking');
+}
+
 var B=window._cb=window._cb||{};
 B.key=CONSENT_KEY;
 B.blocked=[];
@@ -298,121 +345,8 @@ if(B._scriptSrcDesc){
   });
 }
 
-// Global stubs (safe) - Stub IMMEDIATELY and make ALL non-configurable (CookieYes-style)
-// CRITICAL: Override even if trackers already set these (CookieYes-style)
-var noop=function(){log('tracker blocked');};
-// Force override fbq even if it exists
-try{
-  delete window.fbq;
-}catch(e){}
-try{
-  Object.defineProperty(window,'fbq',{
-    value:noop,
-    writable:false,
-    configurable:false,
-    enumerable:true
-  });
-}catch(e){
-  try{
-    window.fbq=noop;
-    Object.freeze(window.fbq);
-  }catch(e2){
-    window.fbq=noop;
-  }
-}
-// Force override _fbq
-try{
-  delete window._fbq;
-}catch(e){}
-try{
-  Object.defineProperty(window,'_fbq',{
-    value:noop,
-    writable:false,
-    configurable:false,
-    enumerable:true
-  });
-}catch(e){
-  try{
-    window._fbq=noop;
-    Object.freeze(window._fbq);
-  }catch(e2){
-    window._fbq=noop;
-  }
-}
-// Set up fbq properties (on the stub)
-if(window.fbq){
-  try{
-    window.fbq.queue=[];
-    window.fbq.loaded=true;
-    window.fbq.version='2.0';
-    window.fbq.push=noop;
-    window.fbq.callMethod=noop;
-    window.fbq.track=noop;
-    window.fbq.trackCustom=noop;
-    window.fbq.trackSingle=noop;
-    window.fbq.init=noop;
-    window.fbq.set=noop;
-    window.fbq.delete=noop;
-  }catch(e){}
-}
-
-// Make gtag, ga, dataLayer non-configurable (CookieYes-style)
-// Force override even if already exists
-try{
-  delete window.gtag;
-}catch(e){}
-try{
-  Object.defineProperty(window,'gtag',{
-    value:noop,
-    writable:false,
-    configurable:false,
-    enumerable:true
-  });
-}catch(e){
-  try{
-    window.gtag=noop;
-    Object.freeze(window.gtag);
-  }catch(e2){
-    window.gtag=noop;
-  }
-}
-try{
-  delete window.ga;
-}catch(e){}
-try{
-  Object.defineProperty(window,'ga',{
-    value:noop,
-    writable:false,
-    configurable:false,
-    enumerable:true
-  });
-}catch(e){
-  try{
-    window.ga=noop;
-    Object.freeze(window.ga);
-  }catch(e2){
-    window.ga=noop;
-  }
-}
-// Override dataLayer even if it exists
-if(!window.dataLayer||!Array.isArray(window.dataLayer)){
-  window.dataLayer=[];
-}
-// Force override push method
-try{
-  Object.defineProperty(window.dataLayer,'push',{
-    value:function(){log('dataLayer.push() blocked');return 0;},
-    writable:false,
-    configurable:false
-  });
-}catch(e){
-  try{
-    window.dataLayer.push=function(){log('dataLayer.push() blocked');return 0;};
-    Object.freeze(window.dataLayer.push);
-  }catch(e2){
-    window.dataLayer.push=function(){log('dataLayer.push() blocked');return 0;};
-  }
-}
+// NOTE: fbq, _fbq, gtag, ga, and dataLayer are already properly stubbed at the very first line above
+// Do NOT override them here - the initial stub is correct and non-configurable
 window._gaq=window._gaq||[];
 try{
   Object.defineProperty(window._gaq,'push',{
@@ -747,6 +681,11 @@ window.__enableConsentTrackers=function(){
   window.eval=_eval;
   window.Function=_Function;
   window.postMessage=_postMessage;
+  
+  // Restore Function.prototype.call
+  if(B._origCall){
+    Function.prototype.call=B._origCall;
+  }
   
   // Disconnect MutationObserver
   if(B.observer){
