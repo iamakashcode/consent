@@ -9,8 +9,95 @@ function generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiDomai
   
   return `(function(){
 'use strict';
-// IMMEDIATE EXECUTION - Run before any other scripts (CookieYes-style)
-// This IIFE executes synchronously when script loads
+// ============================================================
+// CRITICAL: STUB TRACKERS AT ABSOLUTE FIRST LINE (CookieYes-style)
+// This MUST execute before ANY other code, even before config
+// ============================================================
+(function(){
+  var noop=function(){};
+  // Override fbq IMMEDIATELY - even if Meta Pixel already loaded
+  try{
+    if(window.fbq){
+      // Meta Pixel might have already initialized - override it
+      window.fbq=noop;
+      window.fbq.queue=[];
+      window.fbq.loaded=false;
+      window.fbq.version='2.0';
+      window.fbq.push=noop;
+      window.fbq.callMethod=noop;
+      window.fbq.track=noop;
+      window.fbq.trackCustom=noop;
+      window.fbq.trackSingle=noop;
+      window.fbq.init=noop;
+      window.fbq.set=noop;
+      window.fbq.delete=noop;
+    }else{
+      window.fbq=noop;
+    }
+    Object.defineProperty(window,'fbq',{
+      value:window.fbq,
+      writable:false,
+      configurable:false,
+      enumerable:true
+    });
+  }catch(e){
+    window.fbq=noop;
+  }
+  
+  // Override _fbq
+  try{
+    window._fbq=noop;
+    Object.defineProperty(window,'_fbq',{
+      value:noop,
+      writable:false,
+      configurable:false,
+      enumerable:true
+    });
+  }catch(e){
+    window._fbq=noop;
+  }
+  
+  // Override gtag, ga, dataLayer
+  try{
+    window.gtag=noop;
+    Object.defineProperty(window,'gtag',{
+      value:noop,
+      writable:false,
+      configurable:false,
+      enumerable:true
+    });
+  }catch(e){
+    window.gtag=noop;
+  }
+  
+  try{
+    window.ga=noop;
+    Object.defineProperty(window,'ga',{
+      value:noop,
+      writable:false,
+      configurable:false,
+      enumerable:true
+    });
+  }catch(e){
+    window.ga=noop;
+  }
+  
+  window.dataLayer=window.dataLayer||[];
+  try{
+    Object.defineProperty(window.dataLayer,'push',{
+      value:function(){return 0;},
+      writable:false,
+      configurable:false
+    });
+  }catch(e){
+    window.dataLayer.push=function(){return 0;};
+  }
+  
+  // CRITICAL: Check if Meta Pixel already executed (too late warning)
+  if(window.fbq&&typeof window.fbq==='function'&&window.fbq.toString().indexOf('blocked')===-1){
+    console.warn('[ConsentBlock] WARNING: Meta Pixel may have already executed. Ensure this script loads FIRST in <head>');
+  }
+})();
 
 /* ======================================================
    CONFIG
@@ -728,7 +815,7 @@ window.__enableConsentTrackers=function(){
   log('Trackers enabled');
 };
 
-// Block existing scripts immediately
+// Block existing scripts immediately - CRITICAL for Meta Pixel
 function blockExistingTrackers(){
   if(hasConsent())return;
   if(!document||!document.getElementsByTagName)return; // Safety check
@@ -743,7 +830,28 @@ function blockExistingTrackers(){
     var src=s.getAttribute('src')||s.src||'';
     var code=s.textContent||s.text||s.innerHTML||'';
     
-    if(isTracker(src,code)){
+    // CRITICAL: Check for Meta Pixel specifically
+    var isMetaPixel=src.indexOf('facebook.net')!==-1||
+                    src.indexOf('fbevents.js')!==-1||
+                    src.indexOf('connect.facebook')!==-1||
+                    code.indexOf('fbq')!==-1||
+                    code.indexOf('facebook')!==-1||
+                    isTracker(src,code);
+    
+    if(isMetaPixel){
+      log('BLOCKING Meta Pixel script: '+(src||'inline'));
+      // Immediately clear and remove
+      try{
+        s.type='javascript/blocked';
+        s.src='';
+        s.textContent='';
+        s.innerHTML='';
+        s.removeAttribute('src');
+      }catch(e){}
+      B.blocked.push({tag:'script',src:src,code:code,parent:s.parentNode,next:s.nextSibling});
+      s.dataset.consentBlocked='true';
+      toRemove.push(s);
+    }else if(isTracker(src,code)){
       log('Removing existing tracker: '+(src||'inline'));
       B.blocked.push({tag:'script',src:src,code:code,parent:s.parentNode,next:s.nextSibling});
       s.dataset.consentBlocked='true';
@@ -753,12 +861,57 @@ function blockExistingTrackers(){
     }
   }
   
+  // PHYSICALLY REMOVE immediately (don't wait)
   for(var j=0;j<toRemove.length;j++){
     var r=toRemove[j];
     if(r.parentNode){
-      try{r.parentNode.removeChild(r);}catch(e){}
+      try{
+        r.parentNode.removeChild(r);
+        log('Removed tracker script from DOM');
+      }catch(e){
+        log('Error removing script: '+e.message);
+      }
     }
   }
+  
+  // CRITICAL: Override fbq AGAIN after removing scripts (in case it was set)
+  if(!hasConsent()){
+    try{
+      var noop=function(){};
+      // Force override - even if Meta Pixel already initialized
+      window.fbq=noop;
+      window._fbq=noop;
+      // Set up fbq object properties to prevent Meta Pixel from using them
+      if(typeof window.fbq==='function'){
+        try{
+          window.fbq.queue=[];
+          window.fbq.loaded=false;
+          window.fbq.version='2.0';
+          window.fbq.push=noop;
+          window.fbq.callMethod=noop;
+          window.fbq.track=noop;
+          window.fbq.trackCustom=noop;
+          window.fbq.trackSingle=noop;
+          window.fbq.init=noop;
+          window.fbq.set=noop;
+          window.fbq.delete=noop;
+        }catch(e){}
+      }
+      // Make non-configurable
+      try{
+        Object.defineProperty(window,'fbq',{
+          value:window.fbq,
+          writable:false,
+          configurable:false,
+          enumerable:true
+        });
+      }catch(e){}
+      log('Re-overrode fbq after script removal');
+    }catch(e){
+      log('Error re-overriding fbq: '+e.message);
+    }
+  }
+}
   
   // Block iframes and tracking pixels
   var iframes=document.querySelectorAll('iframe');

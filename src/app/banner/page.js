@@ -281,9 +281,13 @@ function BannerContent() {
     if (!selectedSite) return "";
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
     return [
+      "<!-- CRITICAL: Place this script FIRST in <head>, BEFORE any Meta Pixel, Google Analytics, or other tracker scripts -->",
       "<!-- Start ConsentFlow banner -->",
       `<script id="consentflow" src="${baseUrl}/api/script/${selectedSite.siteId}?domain=${encodeURIComponent(selectedSite.domain)}"></script>`,
       "<!-- End ConsentFlow banner -->",
+      "<!-- Example: Place ConsentFlow script BEFORE Meta Pixel -->",
+      "<!-- <script id=\"consentflow\" src=\"...\"></script> -->",
+      "<!-- <script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){...} }(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');</script> -->",
     ].join("\n");
   };
 
