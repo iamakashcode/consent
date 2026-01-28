@@ -112,8 +112,10 @@ function isEssential(el){
 var B=window._cb=window._cb||{};
 B.key=CONSENT_KEY;
 B.blocked=[];
+B._currentScriptDesc=null;
+B._scriptSrcDesc=null;
 
-// Store originals
+// Store originals IMMEDIATELY (before any overrides)
 var _setAttribute=Element.prototype.setAttribute;
 var _createElement=document.createElement;
 var _appendChild=Node.prototype.appendChild;
@@ -123,8 +125,90 @@ var _XHRopen=XMLHttpRequest.prototype.open;
 var _XHRsend=XMLHttpRequest.prototype.send;
 var _sendBeacon=navigator.sendBeacon;
 var _Image=window.Image;
+var _defineProperty=Object.defineProperty;
+var _defineProperties=Object.defineProperties;
+var _eval=window.eval;
+var _Function=window.Function;
+var _postMessage=window.postMessage;
+var _write=document.write;
+var _writeln=document.writeln;
+var _append=Element.prototype.append;
+var _prepend=Element.prototype.prepend;
+var _insertAdjacentElement=Element.prototype.insertAdjacentElement;
+var _insertAdjacentHTML=Element.prototype.insertAdjacentHTML;
 
-// Global stubs (safe) - Stub IMMEDIATELY and make non-configurable
+// ============================================================
+// STEP 0: OVERRIDE Object.defineProperty FIRST (CookieYes-style)
+// This prevents trackers from redefining our stubs
+// ============================================================
+Object.defineProperty=function(obj,prop,desc){
+  // Block attempts to redefine tracking functions on window
+  if((obj===window||obj===globalThis)&&!hasConsent()){
+    var blockedProps=['fbq','_fbq','gtag','ga','dataLayer','_gaq','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
+    if(blockedProps.indexOf(prop)!==-1){
+      log('BLOCKED defineProperty: '+prop);
+      return obj; // Silently fail
+    }
+  }
+  return _defineProperty.apply(Object,arguments);
+};
+
+Object.defineProperties=function(obj,props){
+  if((obj===window||obj===globalThis)&&!hasConsent()){
+    var blockedProps=['fbq','_fbq','gtag','ga','dataLayer','_gaq','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
+    for(var p in props){
+      if(blockedProps.indexOf(p)!==-1){
+        log('BLOCKED defineProperties: '+p);
+        delete props[p];
+      }
+    }
+  }
+  return _defineProperties.apply(Object,arguments);
+};
+
+// Override document.currentScript to prevent self-detection
+B._currentScriptDesc=Object.getOwnPropertyDescriptor(Document.prototype,'currentScript');
+if(B._currentScriptDesc&&B._currentScriptDesc.get){
+  Object.defineProperty(Document.prototype,'currentScript',{
+    get:function(){
+      var script=B._currentScriptDesc.get.call(this);
+      if(script&&!hasConsent()){
+        var src=script.src||script.getAttribute('src')||'';
+        var code=script.textContent||script.text||script.innerHTML||'';
+        if(isTracker(src,code)){
+          log('BLOCKED currentScript access');
+          return null;
+        }
+      }
+      return script;
+    },
+    configurable:true
+  });
+}
+
+// Override HTMLScriptElement.prototype.src at prototype level (CookieYes-style)
+B._scriptSrcDesc=Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,'src');
+if(B._scriptSrcDesc){
+  Object.defineProperty(HTMLScriptElement.prototype,'src',{
+    get:function(){
+      return this.getAttribute('src')||'';
+    },
+    set:function(url){
+      if(!hasConsent()&&isTrackerUrl(url)&&!isEssential(this)){
+        log('BLOCKED script src (prototype): '+url);
+        this.setAttribute('data-blocked-src',url);
+        this.setAttribute('data-consent-blocked','true');
+        this.type='javascript/blocked';
+        return;
+      }
+      this.setAttribute('src',url);
+    },
+    configurable:true,
+    enumerable:true
+  });
+}
+
+// Global stubs (safe) - Stub IMMEDIATELY and make ALL non-configurable (CookieYes-style)
 var noop=function(){log('tracker blocked');};
 try{
   Object.defineProperty(window,'fbq',{
@@ -163,12 +247,47 @@ if(window.fbq){
   }catch(e){}
 }
 
-window.gtag=window.gtag||noop;
-window.ga=window.ga||noop;
+// Make gtag, ga, dataLayer non-configurable (CookieYes-style)
+try{
+  Object.defineProperty(window,'gtag',{
+    value:noop,
+    writable:false,
+    configurable:false,
+    enumerable:true
+  });
+}catch(e){
+  window.gtag=noop;
+}
+try{
+  Object.defineProperty(window,'ga',{
+    value:noop,
+    writable:false,
+    configurable:false,
+    enumerable:true
+  });
+}catch(e){
+  window.ga=noop;
+}
 window.dataLayer=window.dataLayer||[];
-window.dataLayer.push=function(){log('dataLayer.push() blocked');return 0;};
+try{
+  Object.defineProperty(window.dataLayer,'push',{
+    value:function(){log('dataLayer.push() blocked');return 0;},
+    writable:false,
+    configurable:false
+  });
+}catch(e){
+  window.dataLayer.push=function(){log('dataLayer.push() blocked');return 0;};
+}
 window._gaq=window._gaq||[];
-window._gaq.push=function(){log('_gaq.push() blocked');return 0;};
+try{
+  Object.defineProperty(window._gaq,'push',{
+    value:function(){log('_gaq.push() blocked');return 0;},
+    writable:false,
+    configurable:false
+  });
+}catch(e){
+  window._gaq.push=function(){log('_gaq.push() blocked');return 0;};
+}
 
 window.analytics=window.analytics||{track:noop,page:noop,identify:noop,alias:noop,ready:noop,reset:noop};
 window.mixpanel=window.mixpanel||{track:noop,identify:noop,people:{set:noop}};
@@ -287,20 +406,161 @@ Node.prototype.insertBefore=function(newNode,refNode){
   return _insertBefore.call(this,newNode,refNode);
 };
 
+// Block append/prepend (CookieYes-style)
+if(Element.prototype.append){
+  Element.prototype.append=function(){
+    for(var i=0;i<arguments.length;i++){
+      var node=arguments[i];
+      if(node&&node.nodeType===1){
+        var tag=(node.tagName||'').toLowerCase();
+        if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()&&!isEssential(node)){
+          var src=node.getAttribute('src')||node.src||'';
+          var code=tag==='script'?(node.textContent||node.text||''):'';
+          if(isTracker(src,code)){
+            log('BLOCKED append: '+(src||'inline'));
+            node.setAttribute('data-consent-blocked','true');
+            if(tag==='script')node.type='javascript/blocked';
+            continue;
+          }
+        }
+      }
+      _append.call(this,node);
+    }
+  };
+}
+
+if(Element.prototype.prepend){
+  Element.prototype.prepend=function(){
+    for(var i=0;i<arguments.length;i++){
+      var node=arguments[i];
+      if(node&&node.nodeType===1){
+        var tag=(node.tagName||'').toLowerCase();
+        if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()&&!isEssential(node)){
+          var src=node.getAttribute('src')||node.src||'';
+          var code=tag==='script'?(node.textContent||node.text||''):'';
+          if(isTracker(src,code)){
+            log('BLOCKED prepend: '+(src||'inline'));
+            node.setAttribute('data-consent-blocked','true');
+            if(tag==='script')node.type='javascript/blocked';
+            continue;
+          }
+        }
+      }
+      _prepend.call(this,node);
+    }
+  };
+}
+
+if(Element.prototype.insertAdjacentElement){
+  Element.prototype.insertAdjacentElement=function(pos,el){
+    if(el&&el.nodeType===1){
+      var tag=(el.tagName||'').toLowerCase();
+      if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()&&!isEssential(el)){
+        var src=el.getAttribute('src')||el.src||'';
+        var code=tag==='script'?(el.textContent||el.text||''):'';
+        if(isTracker(src,code)){
+          log('BLOCKED insertAdjacentElement: '+(src||'inline'));
+          el.setAttribute('data-consent-blocked','true');
+          if(tag==='script')el.type='javascript/blocked';
+          return el;
+        }
+      }
+    }
+    return _insertAdjacentElement.call(this,pos,el);
+  };
+}
+
+if(Element.prototype.insertAdjacentHTML){
+  Element.prototype.insertAdjacentHTML=function(pos,html){
+    if(!hasConsent()&&isTracker('',html)){
+      log('BLOCKED insertAdjacentHTML');
+      return;
+    }
+    return _insertAdjacentHTML.call(this,pos,html);
+  };
+}
+
+// Block document.write/writeln (CookieYes-style)
+document.write=function(html){
+  if(!hasConsent()&&isTracker('',html)){
+    log('BLOCKED document.write');
+    return;
+  }
+  return _write.call(document,html);
+};
+
+document.writeln=function(html){
+  if(!hasConsent()&&isTracker('',html)){
+    log('BLOCKED document.writeln');
+    return;
+  }
+  return _writeln.call(document,html);
+};
+
+// Block eval and Function constructor (CookieYes-style)
+window.eval=function(code){
+  if(!hasConsent()&&isTracker('',code)){
+    log('BLOCKED eval');
+    return undefined;
+  }
+  return _eval.apply(window,arguments);
+};
+
+window.Function=function(){
+  if(!hasConsent()){
+    var code=Array.prototype.join.call(arguments,' ');
+    if(isTracker('',code)){
+      log('BLOCKED Function constructor');
+      return function(){};
+    }
+  }
+  return _Function.apply(window,arguments);
+};
+
+// Block postMessage from trackers (CookieYes-style)
+window.postMessage=function(msg,targetOrigin){
+  if(!hasConsent()&&msg&&typeof msg==='string'){
+    var msgLower=msg.toLowerCase();
+    if(msgLower.indexOf('fbq')!==-1||msgLower.indexOf('facebook')!==-1||
+       msgLower.indexOf('gtag')!==-1||msgLower.indexOf('analytics')!==-1){
+      log('BLOCKED postMessage: '+msg.substring(0,50));
+      return;
+    }
+  }
+  return _postMessage.apply(window,arguments);
+};
+
 // Enable function
 window.__enableConsentTrackers=function(){
   log('Enabling trackers...');
   
   // Restore originals
+  Object.defineProperty=_defineProperty;
+  Object.defineProperties=_defineProperties;
+  if(B._currentScriptDesc){
+    Object.defineProperty(Document.prototype,'currentScript',B._currentScriptDesc);
+  }
+  if(B._scriptSrcDesc){
+    Object.defineProperty(HTMLScriptElement.prototype,'src',B._scriptSrcDesc);
+  }
   Element.prototype.setAttribute=_setAttribute;
   document.createElement=_createElement;
   Node.prototype.appendChild=_appendChild;
   Node.prototype.insertBefore=_insertBefore;
+  if(_append)Element.prototype.append=_append;
+  if(_prepend)Element.prototype.prepend=_prepend;
+  if(_insertAdjacentElement)Element.prototype.insertAdjacentElement=_insertAdjacentElement;
+  if(_insertAdjacentHTML)Element.prototype.insertAdjacentHTML=_insertAdjacentHTML;
+  document.write=_write;
+  document.writeln=_writeln;
   window.fetch=_fetch;
   XMLHttpRequest.prototype.open=_XHRopen;
   XMLHttpRequest.prototype.send=_XHRsend;
   navigator.sendBeacon=_sendBeacon;
   window.Image=_Image;
+  window.eval=_eval;
+  window.Function=_Function;
+  window.postMessage=_postMessage;
   
   // Remove stubs (handle non-configurable properties gracefully)
   var propsToRemove=['fbq','_fbq','gtag','ga','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
