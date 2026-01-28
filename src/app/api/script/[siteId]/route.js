@@ -50,7 +50,13 @@ var TRACKER_PATTERNS=[
 ];
 
 var TRACKER_CODE_PATTERNS=[
-  'fbq(','fbq.push','_fbq','gtag(','gtag.push','ga(','ga.push','_gaq.push','dataLayer.push','analytics.track','analytics.page','mixpanel.track','amplitude.','hj(','clarity(','pintrk(','twq(','snaptr(','ttq.','_linkedin'
+  'fbq(','fbq.push','_fbq','fbq.init','fbq.track','fbq.trackcustom','fbq.tracksingle','fbq.set','fbq.callmethod',
+  'gtag(','gtag.push','ga(','ga.push','_gaq.push','dataLayer.push','dataLayer.push(','gtagjs',
+  'analytics.track','analytics.page','analytics.identify','analytics.alias',
+  'mixpanel.track','mixpanel.identify','amplitude.','amplitude.getInstance',
+  'hj(','hj.track','clarity(','clarity.identify',
+  'pintrk(','pintrk.track','twq(','twq.track','snaptr(','snaptr.track','ttq.','ttq.track','ttq.page',
+  '_linkedin','linkedininsight','_linkedin_data_partner_ids'
 ];
 
 function isTracker(url,code){
@@ -91,19 +97,110 @@ B.originals={
   XHRopen:XMLHttpRequest.prototype.open,
   XHRsend:XMLHttpRequest.prototype.send,
   sendBeacon:navigator.sendBeacon,
-  Image:window.Image
+  Image:window.Image,
+  eval:window.eval,
+  Function:window.Function,
+  postMessage:window.postMessage,
+  addEventListener:EventTarget.prototype.addEventListener,
+  defineProperty:Object.defineProperty,
+  defineProperties:Object.defineProperties
 };
 
 // ============================================================
+// STEP 0: OVERRIDE Object.defineProperty FIRST
+// Prevent trackers from redefining our stubs
+// ============================================================
+log('Overriding Object.defineProperty...');
+var origDefineProperty=Object.defineProperty;
+Object.defineProperty=function(obj,prop,desc){
+  // Block attempts to redefine tracking functions
+  if(obj===window||obj===globalThis){
+    var blockedProps=['fbq','_fbq','gtag','ga','dataLayer','_gaq','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
+    if(blockedProps.indexOf(prop)!==-1&&!hasConsent()){
+      log('BLOCKED defineProperty: '+prop);
+      return obj; // Silently fail
+    }
+  }
+  return origDefineProperty.apply(Object,arguments);
+};
+
+// Override Object.defineProperties too
+var origDefineProperties=Object.defineProperties;
+Object.defineProperties=function(obj,props){
+  if(obj===window||obj===globalThis){
+    var blockedProps=['fbq','_fbq','gtag','ga','dataLayer','_gaq','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
+    for(var p in props){
+      if(blockedProps.indexOf(p)!==-1&&!hasConsent()){
+        log('BLOCKED defineProperties: '+p);
+        delete props[p];
+      }
+    }
+  }
+  return origDefineProperties.apply(Object,arguments);
+};
+
+// Override document.currentScript to prevent self-detection
+B.origCurrentScript=Object.getOwnPropertyDescriptor(Document.prototype,'currentScript');
+if(B.origCurrentScript){
+  Object.defineProperty(Document.prototype,'currentScript',{
+    get:function(){
+      var script=B.origCurrentScript.get.call(this);
+      if(script&&!hasConsent()){
+        var src=script.src||script.getAttribute('src')||'';
+        var code=script.textContent||script.text||script.innerHTML||'';
+        if(isTracker(src,code)){
+          log('BLOCKED currentScript access');
+          return null;
+        }
+      }
+      return script;
+    },
+    configurable:true
+  });
+}
+
+// ============================================================
 // STEP 1: STUB ALL TRACKING FUNCTIONS IMMEDIATELY
+// Make them NON-CONFIGURABLE so trackers can't redefine them
 // ============================================================
 log('Stubbing tracking functions...');
 
-// Meta/Facebook Pixel
-window.fbq=function(){log('fbq() blocked');};
-window._fbq=window.fbq;
-window.fbq.queue=[];window.fbq.loaded=true;window.fbq.version='2.0';
-window.fbq.push=window.fbq;window.fbq.callMethod=function(){};
+// Meta/Facebook Pixel - Make it NON-CONFIGURABLE
+try{
+  Object.defineProperty(window,'fbq',{
+    value:function(){log('fbq() blocked');},
+    writable:false,
+    configurable:false,
+    enumerable:true
+  });
+}catch(e){
+  window.fbq=function(){log('fbq() blocked');};
+}
+try{
+  Object.defineProperty(window,'_fbq',{
+    value:window.fbq,
+    writable:false,
+    configurable:false,
+    enumerable:true
+  });
+}catch(e){
+  window._fbq=window.fbq;
+}
+// Set up fbq properties
+if(window.fbq){
+  window.fbq.queue=[];
+  window.fbq.loaded=true;
+  window.fbq.version='2.0';
+  window.fbq.push=window.fbq;
+  window.fbq.callMethod=function(){};
+  window.fbq.track=function(){};
+  window.fbq.trackCustom=function(){};
+  window.fbq.trackSingle=function(){};
+  window.fbq.init=function(){};
+  window.fbq.disablePushState=function(){};
+  window.fbq.set=function(){};
+  window.fbq.delete=function(){};
+}
 
 // Google Analytics / GTM
 window.gtag=function(){log('gtag() blocked');};
@@ -168,8 +265,8 @@ log('All tracking functions stubbed');
 // ============================================================
 log('Overriding HTMLScriptElement.prototype.src...');
 
-var scriptSrcDescriptor=Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,'src');
-if(scriptSrcDescriptor){
+B.scriptSrcDescriptor=Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,'src');
+if(B.scriptSrcDescriptor){
   Object.defineProperty(HTMLScriptElement.prototype,'src',{
     get:function(){
       return this.getAttribute('src')||'';
@@ -260,7 +357,15 @@ Node.prototype.appendChild=function(child){
         log('BLOCKED appendChild: '+(src||'inline script'));
         B.blocked.push({tag:tag,src:src,code:code,parent:this,next:null});
         child.setAttribute('data-consent-blocked','true');
-        if(tag==='script')child.type='javascript/blocked';
+        if(tag==='script'){
+          child.type='javascript/blocked';
+          // Prevent execution by clearing content
+          try{
+            child.src='';
+            child.textContent='';
+            child.innerHTML='';
+          }catch(e){}
+        }
         return child; // Return but don't append
       }
     }
@@ -394,6 +499,33 @@ if(Element.prototype.insertAdjacentHTML){
 }
 
 // ============================================================
+// STEP 8.5: BLOCK eval AND Function CONSTRUCTOR
+// Prevent trackers from executing code via eval
+// ============================================================
+log('Blocking eval and Function...');
+
+var origEval=window.eval;
+window.eval=function(code){
+  if(!hasConsent()&&isTracker('',code)){
+    log('BLOCKED eval');
+    return undefined;
+  }
+  return origEval.apply(window,arguments);
+};
+
+var origFunction=window.Function;
+window.Function=function(){
+  if(!hasConsent()){
+    var code=Array.prototype.join.call(arguments,' ');
+    if(isTracker('',code)){
+      log('BLOCKED Function constructor');
+      return function(){};
+    }
+  }
+  return origFunction.apply(window,arguments);
+};
+
+// ============================================================
 // STEP 9: NETWORK INTERCEPTION
 // ============================================================
 log('Setting up network interception...');
@@ -404,6 +536,14 @@ window.fetch=function(input,init){
   if(url&&isTracker(url,'')){
     log('BLOCKED fetch: '+url);
     return Promise.reject(new Error('Blocked by consent'));
+  }
+  // Also check Request object
+  if(input&&input.url){
+    url=input.url;
+    if(url&&isTracker(url,'')){
+      log('BLOCKED fetch (Request): '+url);
+      return Promise.reject(new Error('Blocked by consent'));
+    }
   }
   return B.originals.fetch.apply(window,arguments);
 };
@@ -451,13 +591,15 @@ window.Image=function(w,h){
 
 // ============================================================
 // STEP 10: SCAN AND BLOCK EXISTING SCRIPTS
+// Do this IMMEDIATELY and SYNCHRONOUSLY
 // ============================================================
 function blockExistingTrackers(){
   if(hasConsent())return;
   log('Scanning for existing trackers...');
   
-  // Block scripts
-  var scripts=document.querySelectorAll('script');
+  // Block scripts - Use getElementsByTagName for faster synchronous access
+  var scripts=document.getElementsByTagName('script');
+  var toRemove=[];
   for(var i=0;i<scripts.length;i++){
     var s=scripts[i];
     if(s.getAttribute('data-consent-blocked')==='true')continue;
@@ -471,7 +613,22 @@ function blockExistingTrackers(){
       B.blocked.push({tag:'script',src:src,code:code,parent:s.parentNode,next:s.nextSibling});
       s.setAttribute('data-consent-blocked','true');
       s.type='javascript/blocked';
-      if(s.parentNode)s.parentNode.removeChild(s);
+      // Stop script execution immediately
+      try{
+        s.src='';
+        s.textContent='';
+        s.innerHTML='';
+      }catch(e){}
+      toRemove.push(s);
+    }
+  }
+  // Remove all at once
+  for(var j=0;j<toRemove.length;j++){
+    var r=toRemove[j];
+    if(r.parentNode){
+      try{
+        r.parentNode.removeChild(r);
+      }catch(e){}
     }
   }
   
@@ -508,16 +665,63 @@ function blockExistingTrackers(){
   }
 }
 
-// Run immediately
+// Run immediately - CRITICAL for pre-execution blocking
 blockExistingTrackers();
+
+// Run multiple times to catch scripts that load at different times
+setTimeout(blockExistingTrackers,0);
+setTimeout(blockExistingTrackers,10);
+setTimeout(blockExistingTrackers,50);
+setTimeout(blockExistingTrackers,100);
 
 // Run on DOM ready
 if(document.readyState==='loading'){
   document.addEventListener('DOMContentLoaded',blockExistingTrackers);
+  // Also run immediately if DOM is already loading
+  setTimeout(blockExistingTrackers,0);
 }
 
 // Run on load
 window.addEventListener('load',blockExistingTrackers);
+
+// ============================================================
+// STEP 10.5: BLOCK postMessage FROM TRACKERS
+// Facebook and others use postMessage to communicate
+// ============================================================
+log('Blocking tracker postMessage...');
+
+var origPostMessage=window.postMessage;
+window.postMessage=function(msg,targetOrigin){
+  if(!hasConsent()&&msg&&typeof msg==='string'){
+    var msgLower=msg.toLowerCase();
+    if(msgLower.indexOf('fbq')!==-1||msgLower.indexOf('facebook')!==-1||
+       msgLower.indexOf('gtag')!==-1||msgLower.indexOf('analytics')!==-1){
+      log('BLOCKED postMessage: '+msg.substring(0,50));
+      return;
+    }
+  }
+  return origPostMessage.apply(window,arguments);
+};
+
+var origAddEventListener=EventTarget.prototype.addEventListener;
+EventTarget.prototype.addEventListener=function(type,listener,options){
+  // Block message listeners from trackers
+  if(type==='message'&&!hasConsent()){
+    var wrapped=function(e){
+      if(e.data&&typeof e.data==='string'){
+        var dataLower=e.data.toLowerCase();
+        if(dataLower.indexOf('fbq')!==-1||dataLower.indexOf('facebook')!==-1||
+           dataLower.indexOf('gtag')!==-1||dataLower.indexOf('analytics')!==-1){
+          log('BLOCKED message event');
+          return;
+        }
+      }
+      if(listener)return listener.call(this,e);
+    };
+    return origAddEventListener.call(this,type,wrapped,options);
+  }
+  return origAddEventListener.apply(this,arguments);
+};
 
 // ============================================================
 // STEP 11: MUTATION OBSERVER - Catch dynamic injections
@@ -584,6 +788,15 @@ B.observer.observe(document.documentElement||document,{childList:true,subtree:tr
 B.enable=function(){
   log('Enabling trackers...');
   
+  // Restore Object.defineProperty first
+  Object.defineProperty=B.originals.defineProperty;
+  Object.defineProperties=B.originals.defineProperties;
+  
+  // Restore document.currentScript
+  if(B.origCurrentScript){
+    Object.defineProperty(Document.prototype,'currentScript',B.origCurrentScript);
+  }
+  
   // Restore DOM methods
   document.createElement=B.originals.createElement;
   Node.prototype.appendChild=B.originals.appendChild;
@@ -602,28 +815,38 @@ B.enable=function(){
   navigator.sendBeacon=B.originals.sendBeacon;
   window.Image=B.originals.Image;
   
+  // Restore eval and Function
+  window.eval=B.originals.eval;
+  window.Function=B.originals.Function;
+  
+  // Restore postMessage and addEventListener
+  window.postMessage=B.originals.postMessage;
+  EventTarget.prototype.addEventListener=B.originals.addEventListener;
+  
   // Stop observer
   if(B.observer)B.observer.disconnect();
   
   // Restore HTMLScriptElement.prototype.src
-  if(scriptSrcDescriptor){
-    Object.defineProperty(HTMLScriptElement.prototype,'src',scriptSrcDescriptor);
+  if(B.scriptSrcDescriptor){
+    Object.defineProperty(HTMLScriptElement.prototype,'src',B.scriptSrcDescriptor);
   }
   
-  // Remove function stubs
-  delete window.fbq;delete window._fbq;
-  delete window.gtag;
-  delete window.ga;
-  delete window.analytics;
-  delete window.mixpanel;
-  delete window.amplitude;
-  delete window.hj;
-  delete window.clarity;
-  delete window._hsq;
-  delete window.twq;
-  delete window.pintrk;
-  delete window.ttq;
-  delete window.snaptr;
+  // Remove function stubs - now that defineProperty is restored, we can delete
+  try{
+    delete window.fbq;delete window._fbq;
+    delete window.gtag;
+    delete window.ga;
+    delete window.analytics;
+    delete window.mixpanel;
+    delete window.amplitude;
+    delete window.hj;
+    delete window.clarity;
+    delete window._hsq;
+    delete window.twq;
+    delete window.pintrk;
+    delete window.ttq;
+    delete window.snaptr;
+  }catch(e){}
   
   // Reload blocked external scripts
   for(var i=0;i<B.blocked.length;i++){
