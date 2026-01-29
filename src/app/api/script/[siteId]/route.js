@@ -4,138 +4,21 @@ import { hasVerificationColumns } from "@/lib/db-utils";
 import { isSubscriptionActive } from "@/lib/subscription";
 
 // Generate AGGRESSIVE pre-execution blocker
+// Fixed generateInlineBlocker function
 function generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiDomain) {
   const CONSENT_KEY = `cookie_consent_${siteId}`;
   
   return `(function(){
 'use strict';
-// ============================================================
-// CRITICAL: STUB TRACKERS AT ABSOLUTE FIRST LINE (CookieYes-style)
-// This MUST execute before ANY other code, even before config
-// ============================================================
-(function(){
-  // CRITICAL: Create proper fbq stub function with all properties (Meta Pixel expects this)
-  var fbqStub=function(){
-    // Block all fbq calls
-    return;
-  };
-  // Set up all fbq properties that Meta Pixel expects
-  fbqStub.queue=[];
-  fbqStub.loaded=false;
-  fbqStub.version='2.0';
-  fbqStub.push=function(){return;};
-  fbqStub.callMethod=function(){return;};
-  fbqStub.track=function(){return;};
-  fbqStub.trackCustom=function(){return;};
-  fbqStub.trackSingle=function(){return;};
-  fbqStub.init=function(){return;};
-  fbqStub.set=function(){return;};
-  fbqStub.delete=function(){return;};
-  
-  // Override fbq IMMEDIATELY - even if Meta Pixel already loaded
-  try{
-    // Force delete first
-    try{delete window.fbq;}catch(e){}
-    // Set our stub
-    window.fbq=fbqStub;
-    // Make it non-configurable so Meta Pixel can't override it
-    Object.defineProperty(window,'fbq',{
-      value:fbqStub,
-      writable:false,
-      configurable:false,
-      enumerable:true
-    });
-  }catch(e){
-    // Fallback: just set it directly
-    window.fbq=fbqStub;
-  }
-  
-  // Override _fbq (Meta Pixel also uses this)
-  var _fbqStub=function(){return;};
-  try{
-    try{delete window._fbq;}catch(e){}
-    window._fbq=_fbqStub;
-    Object.defineProperty(window,'_fbq',{
-      value:_fbqStub,
-      writable:false,
-      configurable:false,
-      enumerable:true
-    });
-  }catch(e){
-    window._fbq=_fbqStub;
-  }
-  
-  // Override gtag, ga, dataLayer
-  var gtagStub=function(){return;};
-  try{
-    try{delete window.gtag;}catch(e){}
-    window.gtag=gtagStub;
-    Object.defineProperty(window,'gtag',{
-      value:gtagStub,
-      writable:false,
-      configurable:false,
-      enumerable:true
-    });
-  }catch(e){
-    window.gtag=gtagStub;
-  }
-  
-  var gaStub=function(){return;};
-  try{
-    try{delete window.ga;}catch(e){}
-    window.ga=gaStub;
-    Object.defineProperty(window,'ga',{
-      value:gaStub,
-      writable:false,
-      configurable:false,
-      enumerable:true
-    });
-  }catch(e){
-    window.ga=gaStub;
-  }
-  
-  window.dataLayer=window.dataLayer||[];
-  try{
-    Object.defineProperty(window.dataLayer,'push',{
-      value:function(){return 0;},
-      writable:false,
-      configurable:false
-    });
-  }catch(e){
-    window.dataLayer.push=function(){return 0;};
-  }
-  
-  // CRITICAL: Override fbq even if it was already set by Meta Pixel
-  // Check if Meta Pixel already initialized and force override
-  if(window.fbq&&window.fbq!==fbqStub){
-    try{
-      // Meta Pixel might have set up fbq - destroy it
-      if(window.fbq.queue){
-        window.fbq.queue.length=0;
-      }
-      // Force override
-      try{delete window.fbq;}catch(e){}
-      window.fbq=fbqStub;
-      Object.defineProperty(window,'fbq',{
-        value:fbqStub,
-        writable:false,
-        configurable:false,
-        enumerable:true
-      });
-      console.warn('[ConsentBlock] Overrode existing Meta Pixel fbq');
-    }catch(e){
-      window.fbq=fbqStub;
-    }
-  }
-  
-  // Store original call for restoration later (will be used after hasConsent is defined)
-  B._origCall=Function.prototype.call;
-})();
+
+/* ======================================================
+   CRITICAL: Define noop FIRST (before anything else)
+====================================================== */
+var noop=function(){return undefined;};
 
 /* ======================================================
    CONFIG
 ====================================================== */
-
 var SITE_ID='${siteId}';
 var CONSENT_KEY='${CONSENT_KEY}';
 var DEBUG=true;
@@ -165,9 +48,9 @@ var TRACKER_PATTERNS=[
 
 var TRACKER_CODE_PATTERNS=[
   'fbq(','fbq.push','_fbq','fbq.init','fbq.track','fbq.trackcustom','fbq.tracksingle','fbq.set','fbq.callmethod','fbq.queue','fbevents','facebook pixel','meta pixel',
-  'gtag(','gtag.push','ga(','ga.push','_gaq.push','dataLayer.push','dataLayer.push(',
+  'gtag(','gtag.push','ga(','ga.push','_gaq.push','datalayer.push',
   'analytics.track','analytics.page','analytics.identify','analytics.alias',
-  'mixpanel.track','mixpanel.identify','amplitude.','amplitude.getInstance',
+  'mixpanel.track','mixpanel.identify','amplitude.','amplitude.getinstance',
   'hj(','hj.track','clarity(','clarity.identify',
   'pintrk(','pintrk.track','twq(','twq.track','snaptr(','snaptr.track','ttq.','ttq.track','ttq.page',
   '_linkedin','linkedininsight','_linkedin_data_partner_ids'
@@ -176,7 +59,6 @@ var TRACKER_CODE_PATTERNS=[
 /* ======================================================
    HELPERS
 ====================================================== */
-
 function log(msg){if(DEBUG)console.log('[ConsentBlock]',msg);}
 
 function hasConsent(){
@@ -216,7 +98,6 @@ function isFirstParty(url){
     var host=u.hostname.toLowerCase().replace(/^www\\./,'');
     var currentHost=location.hostname.toLowerCase().replace(/^www\\./,'');
     var consentHost='${consentApiDomain || ''}';
-    // Allow first-party and consent API domain
     return host===currentHost||(consentHost&&host===consentHost)||host.endsWith('.'+currentHost);
   }catch(e){
     return false;
@@ -229,30 +110,15 @@ function isEssential(el){
 }
 
 /* ======================================================
-   LAYER 1 — PRE-EXECUTION BLOCKER (SAFE)
+   INITIALIZE BLOCKER OBJECT & STORE ORIGINALS
 ====================================================== */
-
-// Intercept Function.prototype.call to catch fbq('track', ...) calls
-// This catches cases where code calls fbq('track', 'PageView') directly
-if(B._origCall&&!hasConsent()){
-  Function.prototype.call=function(){
-    // Check if this function is fbq or _fbq
-    if(this===window.fbq||this===window._fbq){
-      // Block fbq calls - return undefined to prevent tracking
-      return undefined;
-    }
-    return B._origCall.apply(this,arguments);
-  };
-  log('Function.prototype.call intercepted for fbq blocking');
-}
-
 var B=window._cb=window._cb||{};
 B.key=CONSENT_KEY;
 B.blocked=[];
 B._currentScriptDesc=null;
 B._scriptSrcDesc=null;
 
-// Store originals IMMEDIATELY (before any overrides)
+// Store ALL originals IMMEDIATELY before any overrides
 var _setAttribute=Element.prototype.setAttribute;
 var _createElement=document.createElement;
 var _appendChild=Node.prototype.appendChild;
@@ -273,18 +139,167 @@ var _append=Element.prototype.append;
 var _prepend=Element.prototype.prepend;
 var _insertAdjacentElement=Element.prototype.insertAdjacentElement;
 var _insertAdjacentHTML=Element.prototype.insertAdjacentHTML;
+var _origCall=Function.prototype.call;
 
-// ============================================================
-// STEP 0: OVERRIDE Object.defineProperty FIRST (CookieYes-style)
-// This prevents trackers from redefining our stubs
-// ============================================================
+// Store for later restoration
+B._origCall=_origCall;
+
+/* ======================================================
+   STEP 1: CREATE PROPER TRACKER STUBS (CookieYes-style)
+   This must happen BEFORE any tracker scripts load
+====================================================== */
+
+// Create fbq stub with ALL required properties
+var fbqStub=function(){
+  log('fbq() call blocked');
+  return undefined;
+};
+fbqStub.queue=[];
+fbqStub.loaded=false;
+fbqStub.version='2.0';
+fbqStub.push=noop;
+fbqStub.callMethod=noop;
+fbqStub.track=noop;
+fbqStub.trackCustom=noop;
+fbqStub.trackSingle=noop;
+fbqStub.init=noop;
+fbqStub.set=noop;
+fbqStub['delete']=noop;
+
+// Set fbq as non-configurable
+try{
+  delete window.fbq;
+}catch(e){}
+window.fbq=fbqStub;
+try{
+  Object.defineProperty(window,'fbq',{
+    value:fbqStub,
+    writable:false,
+    configurable:false,
+    enumerable:true
+  });
+}catch(e){
+  // Already set - that's okay
+}
+
+// Set _fbq
+var _fbqStub=noop;
+try{
+  delete window._fbq;
+}catch(e){}
+window._fbq=_fbqStub;
+try{
+  Object.defineProperty(window,'_fbq',{
+    value:_fbqStub,
+    writable:false,
+    configurable:false,
+    enumerable:true
+  });
+}catch(e){}
+
+// Set gtag
+var gtagStub=function(){
+  log('gtag() call blocked');
+  return undefined;
+};
+try{
+  delete window.gtag;
+}catch(e){}
+window.gtag=gtagStub;
+try{
+  Object.defineProperty(window,'gtag',{
+    value:gtagStub,
+    writable:false,
+    configurable:false,
+    enumerable:true
+  });
+}catch(e){}
+
+// Set ga
+var gaStub=noop;
+try{
+  delete window.ga;
+}catch(e){}
+window.ga=gaStub;
+try{
+  Object.defineProperty(window,'ga',{
+    value:gaStub,
+    writable:false,
+    configurable:false,
+    enumerable:true
+  });
+}catch(e){}
+
+// Set dataLayer with blocked push
+window.dataLayer=window.dataLayer||[];
+try{
+  Object.defineProperty(window.dataLayer,'push',{
+    value:function(){
+      log('dataLayer.push() blocked');
+      return 0;
+    },
+    writable:false,
+    configurable:false
+  });
+}catch(e){
+  window.dataLayer.push=function(){
+    log('dataLayer.push() blocked');
+    return 0;
+  };
+}
+
+// Set other tracker stubs
+window._gaq=window._gaq||[];
+try{
+  Object.defineProperty(window._gaq,'push',{
+    value:function(){log('_gaq.push() blocked');return 0;},
+    writable:false,
+    configurable:false
+  });
+}catch(e){
+  window._gaq.push=function(){log('_gaq.push() blocked');return 0;};
+}
+
+window.analytics={track:noop,page:noop,identify:noop,alias:noop,ready:noop,reset:noop};
+window.mixpanel={track:noop,identify:noop,people:{set:noop}};
+window.amplitude={getInstance:function(){return{logEvent:noop,setUserId:noop,init:noop};}};
+window.hj=noop;
+window.clarity=noop;
+window._hsq=[];
+window._hsq.push=noop;
+window.twq=noop;
+window.pintrk=noop;
+window.ttq={track:noop,page:noop,identify:noop};
+window.snaptr=noop;
+
+log('Global tracker stubs initialized');
+
+/* ======================================================
+   STEP 2: INTERCEPT Function.prototype.call
+   This catches fbq('track', 'PageView') style calls
+====================================================== */
+if(!hasConsent()){
+  Function.prototype.call=function(){
+    // Check if this function is a blocked tracker
+    if(this===window.fbq||this===window._fbq||this===window.gtag||this===window.ga){
+      log('Function.call blocked for tracker');
+      return undefined;
+    }
+    return _origCall.apply(this,arguments);
+  };
+  log('Function.prototype.call intercepted');
+}
+
+/* ======================================================
+   STEP 3: OVERRIDE Object.defineProperty
+   Prevents trackers from redefining our stubs
+====================================================== */
 Object.defineProperty=function(obj,prop,desc){
-  // Block attempts to redefine tracking functions on window
   if((obj===window||obj===globalThis)&&!hasConsent()){
     var blockedProps=['fbq','_fbq','gtag','ga','dataLayer','_gaq','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
     if(blockedProps.indexOf(prop)!==-1){
       log('BLOCKED defineProperty: '+prop);
-      return obj; // Silently fail
+      return obj;
     }
   }
   return _defineProperty.apply(Object,arguments);
@@ -303,7 +318,11 @@ Object.defineProperties=function(obj,props){
   return _defineProperties.apply(Object,arguments);
 };
 
-// Override document.currentScript to prevent self-detection
+/* ======================================================
+   STEP 4: OVERRIDE SCRIPT CREATION & INSERTION
+====================================================== */
+
+// Override document.currentScript
 B._currentScriptDesc=Object.getOwnPropertyDescriptor(Document.prototype,'currentScript');
 if(B._currentScriptDesc&&B._currentScriptDesc.get){
   Object.defineProperty(Document.prototype,'currentScript',{
@@ -323,7 +342,7 @@ if(B._currentScriptDesc&&B._currentScriptDesc.get){
   });
 }
 
-// Override HTMLScriptElement.prototype.src at prototype level (CookieYes-style)
+// Override HTMLScriptElement.prototype.src
 B._scriptSrcDesc=Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,'src');
 if(B._scriptSrcDesc){
   Object.defineProperty(HTMLScriptElement.prototype,'src',{
@@ -345,85 +364,7 @@ if(B._scriptSrcDesc){
   });
 }
 
-// NOTE: fbq, _fbq, gtag, ga, and dataLayer are already properly stubbed at the very first line above
-// Do NOT override them here - the initial stub is correct and non-configurable
-window._gaq=window._gaq||[];
-try{
-  Object.defineProperty(window._gaq,'push',{
-    value:function(){log('_gaq.push() blocked');return 0;},
-    writable:false,
-    configurable:false
-  });
-}catch(e){
-  window._gaq.push=function(){log('_gaq.push() blocked');return 0;};
-}
-
-window.analytics=window.analytics||{track:noop,page:noop,identify:noop,alias:noop,ready:noop,reset:noop};
-window.mixpanel=window.mixpanel||{track:noop,identify:noop,people:{set:noop}};
-window.amplitude=window.amplitude||{getInstance:function(){return{logEvent:noop,setUserId:noop,init:noop}}};
-window.hj=window.hj||noop;
-window.clarity=window.clarity||noop;
-window._hsq=window._hsq||[];
-window._hsq.push=noop;
-window.twq=window.twq||noop;
-window.pintrk=window.pintrk||noop;
-window.ttq=window.ttq||{track:noop,page:noop,identify:noop};
-window.snaptr=window.snaptr||noop;
-
-log('Global stubs initialized');
-
-// CRITICAL: Override any trackers that might have already initialized (CookieYes-style)
-// Check if trackers already exist and force override them
-(function overrideExistingTrackers(){
-  // Meta Pixel - check if already initialized
-  if(window.fbq&&typeof window.fbq==='function'&&window.fbq!==noop){
-    try{
-      log('Overriding existing fbq');
-      delete window.fbq;
-      Object.defineProperty(window,'fbq',{
-        value:noop,
-        writable:false,
-        configurable:false,
-        enumerable:true
-      });
-    }catch(e){
-      window.fbq=noop;
-    }
-  }
-  
-  // Google Analytics - check if already initialized
-  if(window.gtag&&typeof window.gtag==='function'&&window.gtag!==noop){
-    try{
-      log('Overriding existing gtag');
-      delete window.gtag;
-      Object.defineProperty(window,'gtag',{
-        value:noop,
-        writable:false,
-        configurable:false,
-        enumerable:true
-      });
-    }catch(e){
-      window.gtag=noop;
-    }
-  }
-  
-  // dataLayer - override push if it exists
-  if(window.dataLayer&&Array.isArray(window.dataLayer)){
-    try{
-      var origPush=window.dataLayer.push;
-      if(origPush&&origPush.toString().indexOf('blocked')===-1){
-        log('Overriding existing dataLayer.push');
-        Object.defineProperty(window.dataLayer,'push',{
-          value:function(){log('dataLayer.push() blocked');return 0;},
-          writable:false,
-          configurable:false
-        });
-      }
-    }catch(e){}
-  }
-})();
-
-// Block <script src=""> via setAttribute
+// Override Element.prototype.setAttribute
 Element.prototype.setAttribute=function(name,value){
   if(!hasConsent()&&this.tagName==='SCRIPT'&&name==='src'&&isTrackerUrl(value)&&!isEssential(this)){
     log('BLOCKED setAttribute src: '+value);
@@ -436,13 +377,14 @@ Element.prototype.setAttribute=function(name,value){
   return _setAttribute.call(this,name,value);
 };
 
-// Block dynamically created scripts
+// Override document.createElement
 document.createElement=function(tag,opts){
   var el=_createElement.call(document,tag,opts);
-  var t=tag.toLowerCase();
+  var t=(tag||'').toLowerCase();
   
   if(t==='script'&&!hasConsent()){
-    // Override src setter
+    // Override src setter on this specific element
+    var srcDesc=Object.getOwnPropertyDescriptor(el,'src')||{};
     Object.defineProperty(el,'src',{
       set:function(url){
         if(!hasConsent()&&isTrackerUrl(url)&&!isEssential(el)){
@@ -450,6 +392,7 @@ document.createElement=function(tag,opts){
           el.type='javascript/blocked';
           el.dataset.blockedSrc=url;
           el.dataset.consentBlocked='true';
+          B.blocked.push({tag:'script',src:url,parent:null,next:null});
           return;
         }
         _setAttribute.call(el,'src',url);
@@ -464,9 +407,10 @@ document.createElement=function(tag,opts){
       Object.defineProperty(el,'textContent',{
         set:function(code){
           if(!hasConsent()&&isTrackerCode(code)&&!isEssential(el)){
-            log('BLOCKED inline script');
+            log('BLOCKED inline script code');
             el.type='javascript/blocked';
             el.dataset.consentBlocked='true';
+            B.blocked.push({tag:'script',code:code,parent:null,next:null});
             return;
           }
           if(origTextContent.set)origTextContent.set.call(this,code);
@@ -480,11 +424,11 @@ document.createElement=function(tag,opts){
   return el;
 };
 
-// Block appendChild
+// Override Node.prototype.appendChild
 Node.prototype.appendChild=function(child){
-  if(child&&child.nodeType===1){
+  if(child&&child.nodeType===1&&!hasConsent()){
     var tag=(child.tagName||'').toLowerCase();
-    if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()&&!isEssential(child)){
+    if((tag==='script'||tag==='iframe'||tag==='img')&&!isEssential(child)){
       var src=child.getAttribute('src')||child.src||child.dataset.blockedSrc||'';
       var code=tag==='script'?(child.textContent||child.text||child.innerHTML||''):'';
       
@@ -494,20 +438,25 @@ Node.prototype.appendChild=function(child){
         child.dataset.consentBlocked='true';
         if(tag==='script'){
           child.type='javascript/blocked';
-          try{child.src='';child.textContent='';child.innerHTML='';}catch(e){}
+          try{
+            child.removeAttribute('src');
+            child.textContent='';
+            child.innerHTML='';
+          }catch(e){}
         }
-        return child; // Return but don't append
+        // Return child but don't actually append
+        return child;
       }
     }
   }
   return _appendChild.call(this,child);
 };
 
-// Block insertBefore
+// Override Node.prototype.insertBefore
 Node.prototype.insertBefore=function(newNode,refNode){
-  if(newNode&&newNode.nodeType===1){
+  if(newNode&&newNode.nodeType===1&&!hasConsent()){
     var tag=(newNode.tagName||'').toLowerCase();
-    if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()&&!isEssential(newNode)){
+    if((tag==='script'||tag==='iframe'||tag==='img')&&!isEssential(newNode)){
       var src=newNode.getAttribute('src')||newNode.src||newNode.dataset.blockedSrc||'';
       var code=tag==='script'?(newNode.textContent||newNode.text||newNode.innerHTML||''):'';
       
@@ -517,7 +466,11 @@ Node.prototype.insertBefore=function(newNode,refNode){
         newNode.dataset.consentBlocked='true';
         if(tag==='script'){
           newNode.type='javascript/blocked';
-          try{newNode.src='';newNode.textContent='';newNode.innerHTML='';}catch(e){}
+          try{
+            newNode.removeAttribute('src');
+            newNode.textContent='';
+            newNode.innerHTML='';
+          }catch(e){}
         }
         return newNode;
       }
@@ -526,14 +479,17 @@ Node.prototype.insertBefore=function(newNode,refNode){
   return _insertBefore.call(this,newNode,refNode);
 };
 
-// Block append/prepend (CookieYes-style)
+// Override other insertion methods
 if(Element.prototype.append){
   Element.prototype.append=function(){
+    if(hasConsent()){
+      return _append.apply(this,arguments);
+    }
     for(var i=0;i<arguments.length;i++){
       var node=arguments[i];
       if(node&&node.nodeType===1){
         var tag=(node.tagName||'').toLowerCase();
-        if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()&&!isEssential(node)){
+        if((tag==='script'||tag==='iframe'||tag==='img')&&!isEssential(node)){
           var src=node.getAttribute('src')||node.src||'';
           var code=tag==='script'?(node.textContent||node.text||''):'';
           if(isTracker(src,code)){
@@ -551,11 +507,14 @@ if(Element.prototype.append){
 
 if(Element.prototype.prepend){
   Element.prototype.prepend=function(){
+    if(hasConsent()){
+      return _prepend.apply(this,arguments);
+    }
     for(var i=0;i<arguments.length;i++){
       var node=arguments[i];
       if(node&&node.nodeType===1){
         var tag=(node.tagName||'').toLowerCase();
-        if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()&&!isEssential(node)){
+        if((tag==='script'||tag==='iframe'||tag==='img')&&!isEssential(node)){
           var src=node.getAttribute('src')||node.src||'';
           var code=tag==='script'?(node.textContent||node.text||''):'';
           if(isTracker(src,code)){
@@ -571,352 +530,91 @@ if(Element.prototype.prepend){
   };
 }
 
-if(Element.prototype.insertAdjacentElement){
-  Element.prototype.insertAdjacentElement=function(pos,el){
-    if(el&&el.nodeType===1){
-      var tag=(el.tagName||'').toLowerCase();
-      if((tag==='script'||tag==='iframe'||tag==='img')&&!hasConsent()&&!isEssential(el)){
-        var src=el.getAttribute('src')||el.src||'';
-        var code=tag==='script'?(el.textContent||el.text||''):'';
-        if(isTracker(src,code)){
-          log('BLOCKED insertAdjacentElement: '+(src||'inline'));
-          el.setAttribute('data-consent-blocked','true');
-          if(tag==='script')el.type='javascript/blocked';
-          return el;
-        }
-      }
-    }
-    return _insertAdjacentElement.call(this,pos,el);
-  };
-}
-
-if(Element.prototype.insertAdjacentHTML){
-  Element.prototype.insertAdjacentHTML=function(pos,html){
-    if(!hasConsent()&&isTracker('',html)){
-      log('BLOCKED insertAdjacentHTML');
-      return;
-    }
-    return _insertAdjacentHTML.call(this,pos,html);
-  };
-}
-
-// Block document.write/writeln (CookieYes-style)
-document.write=function(html){
-  if(!hasConsent()&&isTracker('',html)){
-    log('BLOCKED document.write');
-    return;
-  }
-  return _write.call(document,html);
-};
-
-document.writeln=function(html){
-  if(!hasConsent()&&isTracker('',html)){
-    log('BLOCKED document.writeln');
-    return;
-  }
-  return _writeln.call(document,html);
-};
-
-// Block eval and Function constructor (CookieYes-style)
-window.eval=function(code){
-  if(!hasConsent()&&isTracker('',code)){
-    log('BLOCKED eval');
-    return undefined;
-  }
-  return _eval.apply(window,arguments);
-};
-
-window.Function=function(){
-  if(!hasConsent()){
-    var code=Array.prototype.join.call(arguments,' ');
-    if(isTracker('',code)){
-      log('BLOCKED Function constructor');
-      return function(){};
-    }
-  }
-  return _Function.apply(window,arguments);
-};
-
-// Block postMessage from trackers (CookieYes-style)
-window.postMessage=function(msg,targetOrigin){
-  if(!hasConsent()&&msg&&typeof msg==='string'){
-    var msgLower=msg.toLowerCase();
-    if(msgLower.indexOf('fbq')!==-1||msgLower.indexOf('facebook')!==-1||
-       msgLower.indexOf('gtag')!==-1||msgLower.indexOf('analytics')!==-1){
-      log('BLOCKED postMessage: '+msg.substring(0,50));
-      return;
-    }
-  }
-  return _postMessage.apply(window,arguments);
-};
-
-// Enable function
-window.__enableConsentTrackers=function(){
-  log('Enabling trackers...');
-  
-  // Restore originals
-  Object.defineProperty=_defineProperty;
-  Object.defineProperties=_defineProperties;
-  if(B._currentScriptDesc){
-    Object.defineProperty(Document.prototype,'currentScript',B._currentScriptDesc);
-  }
-  if(B._scriptSrcDesc){
-    Object.defineProperty(HTMLScriptElement.prototype,'src',B._scriptSrcDesc);
-  }
-  Element.prototype.setAttribute=_setAttribute;
-  document.createElement=_createElement;
-  Node.prototype.appendChild=_appendChild;
-  Node.prototype.insertBefore=_insertBefore;
-  if(_append)Element.prototype.append=_append;
-  if(_prepend)Element.prototype.prepend=_prepend;
-  if(_insertAdjacentElement)Element.prototype.insertAdjacentElement=_insertAdjacentElement;
-  if(_insertAdjacentHTML)Element.prototype.insertAdjacentHTML=_insertAdjacentHTML;
-  document.write=_write;
-  document.writeln=_writeln;
-  window.fetch=_fetch;
-  XMLHttpRequest.prototype.open=_XHRopen;
-  XMLHttpRequest.prototype.send=_XHRsend;
-  navigator.sendBeacon=_sendBeacon;
-  window.Image=_Image;
-  window.eval=_eval;
-  window.Function=_Function;
-  window.postMessage=_postMessage;
-  
-  // Restore Function.prototype.call
-  if(B._origCall){
-    Function.prototype.call=B._origCall;
-  }
-  
-  // Disconnect MutationObserver
-  if(B.observer){
-    try{
-      B.observer.disconnect();
-      log('MutationObserver disconnected');
-    }catch(e){}
-  }
-  
-  // Remove stubs (handle non-configurable properties gracefully)
-  var propsToRemove=['fbq','_fbq','gtag','ga','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
-  for(var i=0;i<propsToRemove.length;i++){
-    var prop=propsToRemove[i];
-    try{
-      var deleted=delete window[prop];
-      if(!deleted){
-        // Property is non-configurable, try to set to undefined
-        try{
-          window[prop]=undefined;
-        }catch(e2){
-          // Can't delete or set - that's okay, trackers will override on load
-        }
-      }
-    }catch(e){
-      // Ignore errors - property might not exist or be non-configurable
-    }
-  }
-  
-  // Restore blocked external scripts
-  document.querySelectorAll('script[data-blocked-src]').forEach(function(s){
-    if(!s.dataset.blockedSrc)return;
-    var n=document.createElement('script');
-    n.src=s.dataset.blockedSrc;
-    n.setAttribute('data-consent-restored','true');
-    try{
-      if(s.nextSibling&&s.parentNode.contains(s.nextSibling)){
-        s.parentNode.insertBefore(n,s.nextSibling);
-      }else{
-        s.parentNode.appendChild(n);
-      }
-      log('Restored: '+s.dataset.blockedSrc);
-    }catch(e){
-      document.head.appendChild(n);
-    }
-  });
-  
-  // Also restore from B.blocked
-  for(var i=0;i<B.blocked.length;i++){
-    var b=B.blocked[i];
-    if(!b.src||!b.parent)continue;
-    var el=document.createElement(b.tag);
-    el.src=b.src;
-    el.setAttribute('data-consent-restored','true');
-    try{
-      if(b.next&&b.parent.contains(b.next)){
-        b.parent.insertBefore(el,b.next);
-      }else{
-        b.parent.appendChild(el);
-      }
-    }catch(e){
-      document.head.appendChild(el);
-    }
-  }
-  
-  B.blocked=[];
-  log('Trackers enabled');
-};
-
-// Block existing scripts immediately - CRITICAL for Meta Pixel
+/* ======================================================
+   STEP 5: BLOCK EXISTING SCRIPTS IN DOM
+====================================================== */
 function blockExistingTrackers(){
   if(hasConsent())return;
-  if(!document||!document.getElementsByTagName)return; // Safety check
+  
+  // Wait for document to exist
+  if(typeof document==='undefined'||!document.getElementsByTagName){
+    setTimeout(blockExistingTrackers,10);
+    return;
+  }
   
   var scripts=document.getElementsByTagName('script');
-  var toRemove=[];
+  var blocked=0;
+  
   for(var i=0;i<scripts.length;i++){
     var s=scripts[i];
-    if(s.dataset.consentBlocked==='true')continue;
+    
+    // Skip if already processed or essential
+    if(s.dataset&&s.dataset.consentBlocked==='true')continue;
     if(isEssential(s))continue;
     
     var src=s.getAttribute('src')||s.src||'';
     var code=s.textContent||s.text||s.innerHTML||'';
     
-    // CRITICAL: Check for Meta Pixel specifically
-    var isMetaPixel=src.indexOf('facebook.net')!==-1||
-                    src.indexOf('fbevents.js')!==-1||
-                    src.indexOf('connect.facebook')!==-1||
-                    code.indexOf('fbq')!==-1||
-                    code.indexOf('facebook')!==-1||
-                    isTracker(src,code);
-    
-    if(isMetaPixel){
-      log('BLOCKING Meta Pixel script: '+(src||'inline'));
-      // Immediately clear and remove
+    if(isTracker(src,code)){
+      log('BLOCKED existing script: '+(src||'inline'));
+      
+      // Store for later
+      B.blocked.push({
+        tag:'script',
+        src:src,
+        code:code,
+        parent:s.parentNode,
+        next:s.nextSibling
+      });
+      
+      // Mark as blocked
+      s.setAttribute('data-consent-blocked','true');
+      s.type='javascript/blocked';
+      
+      // Clear content to prevent execution
       try{
-        s.type='javascript/blocked';
-        s.src='';
+        s.removeAttribute('src');
         s.textContent='';
         s.innerHTML='';
-        s.removeAttribute('src');
       }catch(e){}
-      B.blocked.push({tag:'script',src:src,code:code,parent:s.parentNode,next:s.nextSibling});
-      s.dataset.consentBlocked='true';
-      toRemove.push(s);
-    }else if(isTracker(src,code)){
-      log('Removing existing tracker: '+(src||'inline'));
-      B.blocked.push({tag:'script',src:src,code:code,parent:s.parentNode,next:s.nextSibling});
-      s.dataset.consentBlocked='true';
-      s.type='javascript/blocked';
-      try{s.src='';s.textContent='';s.innerHTML='';}catch(e){}
-      toRemove.push(s);
+      
+      blocked++;
     }
   }
   
-  // PHYSICALLY REMOVE immediately (don't wait)
-  for(var j=0;j<toRemove.length;j++){
-    var r=toRemove[j];
-    if(r.parentNode){
-      try{
-        r.parentNode.removeChild(r);
-        log('Removed tracker script from DOM');
-      }catch(e){
-        log('Error removing script: '+e.message);
-      }
-    }
-  }
-  
-  // CRITICAL: Override fbq AGAIN after removing scripts (in case it was set)
-  if(!hasConsent()){
-    try{
-      var noop=function(){};
-      // Force override - even if Meta Pixel already initialized
-      window.fbq=noop;
-      window._fbq=noop;
-      // Set up fbq object properties to prevent Meta Pixel from using them
-      if(typeof window.fbq==='function'){
-        try{
-          window.fbq.queue=[];
-          window.fbq.loaded=false;
-          window.fbq.version='2.0';
-          window.fbq.push=noop;
-          window.fbq.callMethod=noop;
-          window.fbq.track=noop;
-          window.fbq.trackCustom=noop;
-          window.fbq.trackSingle=noop;
-          window.fbq.init=noop;
-          window.fbq.set=noop;
-          window.fbq.delete=noop;
-        }catch(e){}
-      }
-      // Make non-configurable
-      try{
-        Object.defineProperty(window,'fbq',{
-          value:window.fbq,
-          writable:false,
-          configurable:false,
-          enumerable:true
-        });
-      }catch(e){}
-      log('Re-overrode fbq after script removal');
-    }catch(e){
-      log('Error re-overriding fbq: '+e.message);
-    }
-  }
-}
-  
-  // Block iframes and tracking pixels
-  var iframes=document.querySelectorAll('iframe');
-  for(var i=0;i<iframes.length;i++){
-    var ifr=iframes[i];
-    if(ifr.dataset.consentBlocked==='true'||isEssential(ifr))continue;
-    var src=ifr.getAttribute('src')||ifr.src||'';
-    if(isTrackerUrl(src)){
-      log('Removing tracker iframe: '+src);
-      ifr.dataset.consentBlocked='true';
-      if(ifr.parentNode)ifr.parentNode.removeChild(ifr);
-    }
-  }
-  
-  var imgs=document.querySelectorAll('img');
-  for(var i=0;i<imgs.length;i++){
-    var img=imgs[i];
-    if(img.dataset.consentBlocked==='true'||isEssential(img))continue;
-    var src=img.getAttribute('src')||img.src||'';
-    if(isTrackerUrl(src)){
-      log('Removing tracking pixel: '+src);
-      img.dataset.consentBlocked='true';
-      if(img.parentNode)img.parentNode.removeChild(img);
-    }
+  if(blocked>0){
+    log('Blocked '+blocked+' existing tracker script(s)');
   }
 }
 
-// Run immediately - CRITICAL for pre-execution blocking
-// Execute synchronously before any other scripts can run
-(function runBlocking(){
-  try{
-    blockExistingTrackers();
-  }catch(e){
-    log('Error in initial block: '+e.message);
-  }
-})();
-
-// Run multiple times to catch scripts at different stages
-setTimeout(function(){try{blockExistingTrackers();}catch(e){}},0);
-setTimeout(function(){try{blockExistingTrackers();}catch(e){}},1);
-setTimeout(function(){try{blockExistingTrackers();}catch(e){}},5);
-setTimeout(function(){try{blockExistingTrackers();}catch(e){}},10);
-setTimeout(function(){try{blockExistingTrackers();}catch(e){}},50);
-setTimeout(function(){try{blockExistingTrackers();}catch(e){}},100);
-
-if(document.readyState==='loading'){
-  document.addEventListener('DOMContentLoaded',function(){try{blockExistingTrackers();}catch(e){}});
+// Run blocking at multiple stages
+if(typeof document!=='undefined'){
+  blockExistingTrackers();
 }
-window.addEventListener('load',function(){try{blockExistingTrackers();}catch(e){}});
+
+// Run again after small delays to catch late-loading scripts
+setTimeout(blockExistingTrackers,0);
+setTimeout(blockExistingTrackers,1);
+setTimeout(blockExistingTrackers,10);
+setTimeout(blockExistingTrackers,50);
+setTimeout(blockExistingTrackers,100);
+
+// Run on DOM ready
+if(typeof document!=='undefined'){
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',blockExistingTrackers);
+  }
+}
 
 /* ======================================================
-   LAYER 2 — POST-LOAD ENFORCEMENT
+   STEP 6: MUTATION OBSERVER FOR DYNAMIC CONTENT
 ====================================================== */
-
-// Set up MutationObserver IMMEDIATELY (don't wait for consent check)
-// This catches trackers injected during script execution
-B.observer=null;
-(function setupObserver(){
-  if(hasConsent())return;
-  
-  // MutationObserver
+if(typeof MutationObserver!=='undefined'&&!hasConsent()){
   B.observer=new MutationObserver(function(mutations){
     mutations.forEach(function(m){
       m.addedNodes.forEach(function(node){
         if(node.nodeType!==1)return;
-        if(node.getAttribute&&node.getAttribute('data-consent')==='essential')return;
+        if(isEssential(node))return;
         if(node.dataset&&node.dataset.consentBlocked==='true')return;
         
         var tag=(node.tagName||'').toLowerCase();
@@ -925,51 +623,50 @@ B.observer=null;
           var src=node.getAttribute('src')||node.src||'';
           var code=tag==='script'?(node.textContent||node.text||node.innerHTML||''):'';
           
-          if(isTracker(src,code)&&!isEssential(node)){
+          if(isTracker(src,code)){
             log('MutationObserver caught: '+(src||'inline '+tag));
             node.dataset.consentBlocked='true';
+            
             if(tag==='script'){
               node.type='javascript/blocked';
-              try{node.src='';node.textContent='';node.innerHTML='';}catch(e){}
+              try{
+                node.removeAttribute('src');
+                node.textContent='';
+                node.innerHTML='';
+              }catch(e){}
             }
-            if(node.parentNode)node.parentNode.removeChild(node);
-          }
-        }
-        
-        // Check children
-        if(node.querySelectorAll){
-          var children=node.querySelectorAll('script,iframe,img');
-          for(var k=0;k<children.length;k++){
-            var child=children[k];
-            if(child.dataset.consentBlocked==='true'||isEssential(child))continue;
-            var ctag=(child.tagName||'').toLowerCase();
-            var csrc=child.getAttribute('src')||child.src||'';
-            var ccode=ctag==='script'?(child.textContent||child.text||''):'';
-            if(isTracker(csrc,ccode)){
-              log('MutationObserver caught child: '+(csrc||'inline '+ctag));
-              child.dataset.consentBlocked='true';
-              if(ctag==='script'){
-                child.type='javascript/blocked';
-                try{child.src='';child.textContent='';child.innerHTML='';}catch(e){}
-              }
-              if(child.parentNode)child.parentNode.removeChild(child);
+            
+            // Remove from DOM
+            if(node.parentNode){
+              node.parentNode.removeChild(node);
             }
+            
+            B.blocked.push({tag:tag,src:src,code:code,parent:node.parentNode,next:null});
           }
         }
       });
     });
   });
   
-  try{
-    B.observer.observe(document.documentElement||document,{childList:true,subtree:true});
-    log('MutationObserver started');
-  }catch(e){
-    log('MutationObserver error: '+e.message);
+  // Start observing
+  if(typeof document!=='undefined'&&document.documentElement){
+    try{
+      B.observer.observe(document.documentElement,{
+        childList:true,
+        subtree:true
+      });
+      log('MutationObserver started');
+    }catch(e){
+      log('MutationObserver error: '+e.message);
+    }
   }
-})();
+}
 
+/* ======================================================
+   STEP 7: BLOCK NETWORK REQUESTS
+====================================================== */
 if(!hasConsent()){
-  // fetch interception (third-party only)
+  // Block fetch
   window.fetch=function(input,init){
     if(hasConsent())return _fetch.apply(window,arguments);
     var url=typeof input==='string'?input:(input&&input.url?input.url:'');
@@ -980,7 +677,7 @@ if(!hasConsent()){
     return _fetch.apply(window,arguments);
   };
   
-  // XHR interception
+  // Block XMLHttpRequest
   XMLHttpRequest.prototype.open=function(method,url){
     this._blockedUrl=null;
     if(!hasConsent()&&url&&isTrackerUrl(url)&&!isFirstParty(url)){
@@ -992,11 +689,14 @@ if(!hasConsent()){
   };
   
   XMLHttpRequest.prototype.send=function(data){
-    if(this._blockedUrl)return;
+    if(this._blockedUrl){
+      log('Skipped XHR send (blocked URL)');
+      return;
+    }
     return _XHRsend.apply(this,arguments);
   };
   
-  // sendBeacon interception
+  // Block sendBeacon
   navigator.sendBeacon=function(url,data){
     if(hasConsent())return _sendBeacon.apply(navigator,arguments);
     if(url&&isTrackerUrl(url)&&!isFirstParty(url)){
@@ -1006,422 +706,102 @@ if(!hasConsent()){
     return _sendBeacon.apply(navigator,arguments);
   };
   
-  // Image pixel blocking
+  // Block Image pixels
   window.Image=function(w,h){
     var img=new _Image(w,h);
-    var origSrcSet=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
+    var origSrcDesc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
     Object.defineProperty(img,'src',{
       set:function(url){
         if(!hasConsent()&&isTrackerUrl(url)&&!isFirstParty(url)){
-          log('BLOCKED Image: '+url);
+          log('BLOCKED Image pixel: '+url);
           return;
         }
-        if(origSrcSet&&origSrcSet.set)origSrcSet.set.call(this,url);
+        if(origSrcDesc&&origSrcDesc.set){
+          origSrcDesc.set.call(this,url);
+        }else{
+          this.setAttribute('src',url);
+        }
       },
-      get:function(){return this.getAttribute('src')||'';},
+      get:function(){
+        return this.getAttribute('src')||'';
+      },
       configurable:true
     });
     return img;
   };
 }
 
+/* ======================================================
+   STEP 8: ENABLE TRACKERS FUNCTION
+====================================================== */
+window.__enableConsentTrackers=function(){
+  log('Enabling trackers...');
+  
+  // Restore all originals
+  Object.defineProperty=_defineProperty;
+  Object.defineProperties=_defineProperties;
+  Element.prototype.setAttribute=_setAttribute;
+  document.createElement=_createElement;
+  Node.prototype.appendChild=_appendChild;
+  Node.prototype.insertBefore=_insertBefore;
+  if(_append)Element.prototype.append=_append;
+  if(_prepend)Element.prototype.prepend=_prepend;
+  window.fetch=_fetch;
+  XMLHttpRequest.prototype.open=_XHRopen;
+  XMLHttpRequest.prototype.send=_XHRsend;
+  navigator.sendBeacon=_sendBeacon;
+  window.Image=_Image;
+  Function.prototype.call=_origCall;
+  
+  // Disconnect observer
+  if(B.observer){
+    try{
+      B.observer.disconnect();
+      log('MutationObserver disconnected');
+    }catch(e){}
+  }
+  
+  // Delete tracker stubs
+  var propsToRemove=['fbq','_fbq','gtag','ga','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
+  for(var i=0;i<propsToRemove.length;i++){
+    try{
+      delete window[propsToRemove[i]];
+    }catch(e){
+      try{
+        window[propsToRemove[i]]=undefined;
+      }catch(e2){}
+    }
+  }
+  
+  // Restore blocked scripts
+  for(var i=0;i<B.blocked.length;i++){
+    var b=B.blocked[i];
+    if(!b.src&&!b.code)continue;
+    
+    var el=document.createElement(b.tag||'script');
+    if(b.src)el.src=b.src;
+    if(b.code)el.textContent=b.code;
+    el.setAttribute('data-consent-restored','true');
+    
+    try{
+      if(b.parent&&b.next&&b.parent.contains(b.next)){
+        b.parent.insertBefore(el,b.next);
+      }else if(b.parent){
+        b.parent.appendChild(el);
+      }else{
+        document.head.appendChild(el);
+      }
+      log('Restored: '+(b.src||'inline script'));
+    }catch(e){
+      document.head.appendChild(el);
+    }
+  }
+  
+  B.blocked=[];
+  log('Trackers enabled');
+};
+
 B.ready=true;
-log('Pre-execution blocker ready');
+log('Pre-execution blocker ready. Consent: '+hasConsent());
 })();`;
-}
-
-// Generate main script (banner, consent management)
-function generateMainScript(siteId, allowedDomain, isPreview, config, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl) {
-  const CONSENT_KEY = `cookie_consent_${siteId}`;
-  
-  return `(function(){
-'use strict';
-var CONSENT_KEY='${CONSENT_KEY}';
-var isPreviewMode=${isPreview ? 'true' : 'false'};
-var ALLOWED_DOMAIN='${isPreview ? '*' : allowedDomain}';
-
-function hasConsent(){
-  try{
-    return localStorage.getItem(CONSENT_KEY)==='accepted';
-  }catch(e){
-    return false;
-  }
-}
-
-// Domain check
-var host=location.hostname.toLowerCase().replace(/^www\\./,'');
-var allowed=ALLOWED_DOMAIN!=='*'?ALLOWED_DOMAIN.toLowerCase().replace(/^www\\./,''):null;
-if(allowed&&host!==allowed&&!isPreviewMode){
-  console.warn('[Consent] Domain mismatch: '+host+' !== '+allowed);
-}
-
-// Clear in preview
-if(isPreviewMode){
-  try{localStorage.removeItem(CONSENT_KEY);}catch(e){}
-  var old=document.getElementById('cookie-banner');
-  if(old)old.remove();
-}
-
-function enableTrackers(){
-  if(window.__enableConsentTrackers)window.__enableConsentTrackers();
-}
-
-function showBanner(){
-  if(!isPreviewMode&&hasConsent())return;
-  if(document.getElementById('cookie-banner'))return;
-  if(!document.body){setTimeout(showBanner,50);return;}
-  
-  var b=document.createElement('div');
-  b.id='cookie-banner';
-  b.setAttribute('data-consent','essential');
-  
-  var pos='${position}';
-  var ps='';
-  if(pos==='top')ps='top:0;left:0;right:0;';
-  else if(pos==='bottom-left')ps='bottom:20px;left:20px;';
-  else if(pos==='bottom-right')ps='bottom:20px;right:20px;';
-  else if(pos==='top-left')ps='top:20px;left:20px;';
-  else if(pos==='top-right')ps='top:20px;right:20px;';
-  else ps='bottom:0;left:0;right:0;';
-  
-  b.style.cssText='position:fixed;'+ps+'background:${bannerStyle.backgroundColor};color:${bannerStyle.textColor};padding:${bannerStyle.padding};z-index:2147483647;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;font-size:${bannerStyle.fontSize};border-radius:${bannerStyle.borderRadius};${bannerStyle.boxShadow ? 'box-shadow:' + bannerStyle.boxShadow + ';' : ''}${bannerStyle.border ? 'border:' + bannerStyle.border + ';' : ''}';
-  
-  var c=document.createElement('div');
-  c.style.cssText='flex:1;min-width:250px;';
-  c.innerHTML='<strong style="display:block;margin-bottom:8px;font-size:16px;">🍪 ${title}</strong><span style="opacity:0.9;line-height:1.5;">${message}</span>';
-  
-  var btns=document.createElement('div');
-  btns.style.cssText='display:flex;gap:10px;flex-wrap:wrap;';
-  
-  var acc=document.createElement('button');
-  acc.textContent='${acceptText}';
-  acc.style.cssText='background:${bannerStyle.buttonColor};color:${bannerStyle.buttonTextColor};border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:${bannerStyle.fontSize};';
-  acc.onclick=function(){
-    try{localStorage.setItem(CONSENT_KEY,'accepted');}catch(e){}
-    b.remove();
-    enableTrackers();
-  };
-  btns.appendChild(acc);
-  
-  ${showReject ? `
-  var rej=document.createElement('button');
-  rej.textContent='${rejectText}';
-  rej.style.cssText='background:transparent;color:${bannerStyle.textColor};border:2px solid ${bannerStyle.textColor};padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:${bannerStyle.fontSize};';
-  rej.onclick=function(){
-    try{localStorage.setItem(CONSENT_KEY,'rejected');}catch(e){}
-    b.remove();
-  };
-  btns.appendChild(rej);
-  ` : ''}
-  
-  b.appendChild(c);
-  b.appendChild(btns);
-  document.body.appendChild(b);
-}
-
-// API calls
-fetch('${verifyCallbackUrl}?domain='+encodeURIComponent(host)+'${isPreview ? '&preview=1' : ''}',{method:'GET',mode:'cors',credentials:'omit'}).catch(function(){});
-fetch('${trackUrl}',{method:'POST',mode:'cors',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({pagePath:location.pathname,pageTitle:document.title})}).catch(function(){});
-
-// Show banner
-function init(){
-  if(isPreviewMode||!hasConsent()){
-    showBanner();
-    setTimeout(showBanner,100);
-    setTimeout(showBanner,500);
-    setTimeout(showBanner,1000);
-  }
-}
-
-if(window._cb&&window._cb.ready){
-  init();
-}else{
-  var check=setInterval(function(){
-    if(window._cb&&window._cb.ready){
-      clearInterval(check);
-      init();
-    }
-  },10);
-  setTimeout(function(){clearInterval(check);init();},3000);
-}
-})();`;
-}
-
-export async function GET(req, { params }) {
-  try {
-    const resolvedParams = await params;
-    const { siteId } = resolvedParams || {};
-    const { searchParams } = new URL(req.url);
-    const domainParam = searchParams.get("domain");
-    const isPreview = searchParams.get("preview") === "1";
-    const previewConfigParam = searchParams.get("config");
-
-    let domain = domainParam || "";
-    
-    let bannerConfig = null;
-    let siteVerified = false;
-    let allowedDomain = null;
-    let userId = null;
-    
-    if (siteId) {
-      const verificationColumns = await hasVerificationColumns();
-      try {
-        const site = await prisma.site.findUnique({
-          where: { siteId },
-          select: {
-            domain: true,
-            bannerConfig: true,
-            userId: true,
-            ...(verificationColumns.allExist ? { isVerified: true } : {}),
-          },
-        });
-        if (site) {
-          if (!domain) {
-            domain = site.domain;
-          }
-          bannerConfig = site.bannerConfig;
-          userId = site.userId;
-          if (verificationColumns.allExist) {
-            siteVerified = site.isVerified || false;
-          } else {
-            const v = site?.bannerConfig?._verification;
-            siteVerified = (v && v.isVerified) || false;
-          }
-          allowedDomain = site.domain;
-        }
-      } catch (error) {
-        const site = await prisma.site.findUnique({
-          where: { siteId },
-          select: { domain: true, bannerConfig: true },
-        });
-        if (site) {
-          if (!domain) domain = site.domain;
-          bannerConfig = site.bannerConfig;
-          userId = site.userId;
-          const v = site?.bannerConfig?._verification;
-          siteVerified = (v && v.isVerified) || false;
-          allowedDomain = site.domain;
-        }
-      }
-    }
-    
-    if (!domain && siteId) {
-      try {
-        const decoded = Buffer.from(siteId, "base64").toString("utf-8");
-        if (decoded && !decoded.includes("-")) {
-          domain = decoded;
-        }
-      } catch (e) {}
-    }
-    
-    if (!domain) {
-      domain = "*";
-    }
-
-    // Check subscription status (allow unverified domains to load script)
-    if (siteId && !isPreview && siteVerified) {
-      let subscriptionStatus = await isSubscriptionActive(siteId);
-      
-      if (!subscriptionStatus.isActive && subscriptionStatus.subscription?.status === "pending" && 
-          (subscriptionStatus.subscription?.paddleTransactionId || subscriptionStatus.subscription?.paddleSubscriptionId)) {
-        try {
-          const syncSubscriptionId = subscriptionStatus.subscription.paddleSubscriptionId || subscriptionStatus.subscription.paddleTransactionId;
-          if (syncSubscriptionId) {
-            const { fetchPaddleSubscription } = await import("@/lib/paddle");
-            const { startUserTrial } = await import("@/lib/subscription");
-            
-            try {
-              const paddleSub = await fetchPaddleSubscription(syncSubscriptionId);
-              if (paddleSub) {
-                const paddleStatus = paddleSub.status;
-                if (paddleStatus === "active" || paddleStatus === "trialing") {
-                  const site = await prisma.site.findUnique({
-                    where: { id: subscriptionStatus.subscription.siteId },
-                    include: { user: true },
-                  });
-                  
-                  if (site) {
-                    await startUserTrial(site.userId);
-                    await prisma.subscription.update({
-                      where: { id: subscriptionStatus.subscription.id },
-                      data: {
-                        status: paddleStatus === "trialing" ? "trial" : "active",
-                        paddleSubscriptionId: paddleSub.id || subscriptionStatus.subscription.paddleSubscriptionId,
-                        currentPeriodStart: paddleSub.current_billing_period?.starts_at 
-                          ? new Date(paddleSub.current_billing_period.starts_at)
-                          : new Date(),
-                        currentPeriodEnd: paddleSub.current_billing_period?.ends_at
-                          ? new Date(paddleSub.current_billing_period.ends_at)
-                          : (() => {
-                              const end = new Date();
-                              end.setMonth(end.getMonth() + 1);
-                              return end;
-                            })(),
-                        updatedAt: new Date(),
-                      },
-                    });
-                    subscriptionStatus = await isSubscriptionActive(siteId);
-                  }
-                }
-              }
-            } catch (syncError) {
-              console.warn(`[Script] Could not sync subscription from Paddle:`, syncError.message);
-            }
-          }
-        } catch (error) {
-          console.warn(`[Script] Error during subscription sync:`, error.message);
-        }
-      }
-      
-      if (!subscriptionStatus.isActive) {
-        const blockedScript = `(function(){console.error('[Consent SDK] Access denied: Subscription inactive for this domain. ${subscriptionStatus.reason}');})();`;
-        return new Response(blockedScript, {
-          headers: {
-            "Content-Type": "application/javascript; charset=utf-8",
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Access-Control-Allow-Origin": "*",
-          },
-        });
-      }
-      
-      const { checkPageViewLimit } = await import("@/lib/subscription");
-      const pageViewCheck = await checkPageViewLimit(siteId);
-      if (pageViewCheck.exceeded && pageViewCheck.limit !== Infinity) {
-        const blockedScript = `(function(){console.error('[Consent SDK] Access denied: Page view limit exceeded.');})();`;
-        return new Response(blockedScript, {
-          headers: {
-            "Content-Type": "application/javascript; charset=utf-8",
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Access-Control-Allow-Origin": "*",
-          },
-        });
-      }
-    }
-    
-    const finalSiteId = siteId || Buffer.from(domain).toString("base64").replace(/[+/=]/g, "").substring(0, 20);
-
-    let normalizedBannerConfig = bannerConfig;
-    if (typeof normalizedBannerConfig === "string") {
-      try {
-        normalizedBannerConfig = JSON.parse(normalizedBannerConfig);
-      } catch {
-        normalizedBannerConfig = null;
-      }
-    }
-
-    let previewConfig = null;
-    if (isPreview && previewConfigParam) {
-      try {
-        const decoded = Buffer.from(decodeURIComponent(previewConfigParam), "base64").toString("utf-8");
-        previewConfig = JSON.parse(decoded);
-      } catch {
-        previewConfig = null;
-      }
-    }
-
-    const effectiveConfig = previewConfig || normalizedBannerConfig || {};
-
-    const templateKey = effectiveConfig.template || DEFAULT_BANNER_CONFIG.template;
-    const baseTemplate = BANNER_TEMPLATES[templateKey] || BANNER_TEMPLATES.minimal;
-    
-    const bannerStyle = {
-      backgroundColor: effectiveConfig.backgroundColor || baseTemplate.style.backgroundColor || '#667eea',
-      textColor: effectiveConfig.textColor || baseTemplate.style.textColor || '#ffffff',
-      buttonColor: effectiveConfig.buttonColor || baseTemplate.style.buttonColor || '#ffffff',
-      buttonTextColor: effectiveConfig.buttonTextColor || baseTemplate.style.buttonTextColor || '#667eea',
-      borderRadius: effectiveConfig.borderRadius || baseTemplate.style.borderRadius || '8px',
-      padding: effectiveConfig.padding || baseTemplate.style.padding || '20px',
-      fontSize: effectiveConfig.fontSize || baseTemplate.style.fontSize || '14px',
-      border: effectiveConfig.border || baseTemplate.style.border || '',
-      boxShadow: effectiveConfig.boxShadow || baseTemplate.style.boxShadow || '',
-    };
-
-    const position = effectiveConfig.position || baseTemplate.position || DEFAULT_BANNER_CONFIG.position;
-    const title = (effectiveConfig.title || DEFAULT_BANNER_CONFIG.title)
-      .replace(/'/g, "\\'")
-      .replace(/"/g, '\\"')
-      .replace(/`/g, "\\`")
-      .replace(/\$\{/g, "\\${");
-    const message = (effectiveConfig.message || effectiveConfig.description || DEFAULT_BANNER_CONFIG.message)
-      .replace(/'/g, "\\'")
-      .replace(/"/g, '\\"')
-      .replace(/`/g, "\\`")
-      .replace(/\$\{/g, "\\${");
-    const acceptText = (effectiveConfig.acceptButtonText || effectiveConfig.acceptText || DEFAULT_BANNER_CONFIG.acceptButtonText)
-      .replace(/'/g, "\\'")
-      .replace(/"/g, '\\"')
-      .replace(/`/g, "\\`")
-      .replace(/\$\{/g, "\\${");
-    const rejectText = (effectiveConfig.rejectButtonText || effectiveConfig.rejectText || DEFAULT_BANNER_CONFIG.rejectButtonText)
-      .replace(/'/g, "\\'")
-      .replace(/"/g, '\\"')
-      .replace(/`/g, "\\`")
-      .replace(/\$\{/g, "\\${");
-    const showReject = effectiveConfig.showRejectButton !== false;
-
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-      (req.headers.get("origin") || `http://${req.headers.get("host")}`);
-    const actualSiteId = siteId || finalSiteId;
-    const verifyCallbackUrl = `${baseUrl}/api/sites/${actualSiteId}/verify-callback`;
-    const trackUrl = `${baseUrl}/api/sites/${actualSiteId}/track`;
-    
-    // Extract consent API hostname for first-party detection
-    let consentApiHostname = '';
-    try {
-      const consentUrl = new URL(baseUrl);
-      consentApiHostname = consentUrl.hostname.replace(/^www\./, '');
-    } catch (e) {
-      consentApiHostname = '';
-    }
-    
-    const inlineBlocker = generateInlineBlocker(finalSiteId, allowedDomain || '*', isPreview, consentApiHostname);
-    const mainScript = generateMainScript(finalSiteId, allowedDomain || '*', isPreview, effectiveConfig, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl);
-    
-    const returnInlineBlocker = searchParams.get("inline") === "1";
-    
-    if (returnInlineBlocker) {
-      return new Response(inlineBlocker, {
-        headers: {
-          "Content-Type": "application/javascript; charset=utf-8",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          "Access-Control-Allow-Origin": "*",
-        },
-      });
-    }
-    
-    const script = inlineBlocker + "\n\n" + mainScript;
-
-    return new Response(script, {
-      headers: {
-        "Content-Type": "application/javascript; charset=utf-8",
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET",
-      },
-    });
-  } catch (error) {
-    console.error("Script generation error:", error);
-    const fallbackScript = `(function(){
-var K='cookie_consent_fallback';
-function show(){
-  if(localStorage.getItem(K)==='accepted')return;
-  if(document.getElementById('cb'))return;
-  if(!document.body){setTimeout(show,100);return;}
-  var b=document.createElement('div');
-  b.id='cb';
-  b.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#667eea;color:#fff;padding:20px;z-index:2147483647;display:flex;align-items:center;justify-content:space-between;font-family:sans-serif;';
-  b.innerHTML='<div><strong>🍪 Cookies</strong><p style="margin:5px 0 0;font-size:14px;">This site uses cookies.</p></div><button id="cba" style="background:#fff;color:#667eea;border:none;padding:12px 24px;border-radius:6px;cursor:pointer;font-weight:bold;">Accept</button>';
-  document.body.appendChild(b);
-  document.getElementById('cba').onclick=function(){localStorage.setItem(K,'accepted');b.remove();};
-}
-show();
-})();`;
-    return new Response(fallbackScript, {
-      headers: {
-        "Content-Type": "application/javascript; charset=utf-8",
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Access-Control-Allow-Origin": "*",
-      },
-    });
-  }
 }
