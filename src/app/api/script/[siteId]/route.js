@@ -61,6 +61,7 @@ var TRACKER_CODE_PATTERNS=[
 function log(msg){if(DEBUG)console.log('[ConsentBlock]',msg);}
 
 function hasConsent(){
+  if(window.__consentGiven===true)return true;
   try{
     return localStorage.getItem(CONSENT_KEY)==='accepted';
   }catch(e){
@@ -756,49 +757,20 @@ window.__enableConsentTrackers=function(){
     log('Enable skipped: consent not accepted');
     return;
   }
+  window.__consentGiven=true;
   log('Enabling trackers...');
   
-  // Restore all originals
-  Object.defineProperty=_defineProperty;
-  Object.defineProperties=_defineProperties;
-  
-  // Restore document.currentScript
-  if(B._currentScriptDesc){
-    try{
-      Object.defineProperty(Document.prototype,'currentScript',B._currentScriptDesc);
-    }catch(e){}
-  }
-  
-  // Restore HTMLScriptElement.prototype.src
-  if(B._scriptSrcDesc){
-    try{
-      Object.defineProperty(HTMLScriptElement.prototype,'src',B._scriptSrcDesc);
-    }catch(e){}
-  }
-  
-  Element.prototype.setAttribute=_setAttribute;
-  document.createElement=_createElement;
-  Node.prototype.appendChild=_appendChild;
-  Node.prototype.insertBefore=_insertBefore;
-  if(_append)Element.prototype.append=_append;
-  if(_prepend)Element.prototype.prepend=_prepend;
-  window.fetch=_fetch;
-  XMLHttpRequest.prototype.open=_XHRopen;
-  XMLHttpRequest.prototype.send=_XHRsend;
-  navigator.sendBeacon=_sendBeacon;
-  window.Image=_Image;
-  Function.prototype.call=_origCall;
-  
-  // Disconnect observer
+  // STEP 1: Disconnect MutationObserver FIRST so it does not interfere with restoration
   if(B.observer){
     try{
       B.observer.disconnect();
-      log('MutationObserver disconnected');
+      B.observer=null;
+      log('MutationObserver disconnected (first step)');
     }catch(e){}
   }
   
-  // CRITICAL: Restore dataLayer.push and _gaq.push BEFORE deleting stubs
-  // If defineProperty fails (read-only), replace the whole array so push works
+  // STEP 2: Restore dataLayer.push and _gaq.push IMMEDIATELY - before any script restoration
+  // GTM and ga() need native push() to be functional before their scripts load
   if(window.dataLayer&&Array.isArray(window.dataLayer)){
     var dataLayerPush=B._origDataLayerPush===Array.prototype.push?Array.prototype.push:B._origDataLayerPush;
     var restored=false;
@@ -810,7 +782,7 @@ window.__enableConsentTrackers=function(){
         enumerable:true
       });
       restored=true;
-      log('Restored dataLayer.push');
+      log('Restored dataLayer.push (before script load)');
     }catch(e){}
     if(!restored){
       try{
@@ -825,7 +797,6 @@ window.__enableConsentTrackers=function(){
       log('Restored dataLayer (new array with native push)');
     }
   }
-  
   if(window._gaq&&Array.isArray(window._gaq)){
     var gaqPush=B._origGaqPush===Array.prototype.push?Array.prototype.push:B._origGaqPush;
     var restoredGaq=false;
@@ -837,25 +808,43 @@ window.__enableConsentTrackers=function(){
         enumerable:true
       });
       restoredGaq=true;
-      log('Restored _gaq.push');
+      log('Restored _gaq.push (before script load)');
     }catch(e){}
     if(!restoredGaq){
       try{
         window._gaq.push=gaqPush;
         restoredGaq=true;
-        log('Restored _gaq.push (direct)');
       }catch(e2){}
     }
     if(!restoredGaq){
       var existingGaq=[].slice.call(window._gaq);
       window._gaq=existingGaq;
-      log('Restored _gaq (new array with native push)');
     }
   }
   
-  // Replace main tracker stubs with queueing proxies so calls made before restored
-  // scripts load are replayed once the real fbq/gtag/ga are defined (fixes trackers
-  // not enabling until reload).
+  // STEP 3: Restore all other originals (APIs, DOM, etc.)
+  Object.defineProperty=_defineProperty;
+  Object.defineProperties=_defineProperties;
+  if(B._currentScriptDesc){
+    try{ Object.defineProperty(Document.prototype,'currentScript',B._currentScriptDesc); }catch(e){}
+  }
+  if(B._scriptSrcDesc){
+    try{ Object.defineProperty(HTMLScriptElement.prototype,'src',B._scriptSrcDesc); }catch(e){}
+  }
+  Element.prototype.setAttribute=_setAttribute;
+  document.createElement=_createElement;
+  Node.prototype.appendChild=_appendChild;
+  Node.prototype.insertBefore=_insertBefore;
+  if(_append)Element.prototype.append=_append;
+  if(_prepend)Element.prototype.prepend=_prepend;
+  window.fetch=_fetch;
+  XMLHttpRequest.prototype.open=_XHRopen;
+  XMLHttpRequest.prototype.send=_XHRsend;
+  navigator.sendBeacon=_sendBeacon;
+  window.Image=_Image;
+  Function.prototype.call=_origCall;
+  
+  // STEP 4: Replace main tracker stubs with queueing proxies
   B._fbqQueue=[]; B._gtagQueue=[]; B._gaQueue=[];
   B._fbqProxy=function(){ B._fbqQueue.push([].slice.call(arguments)); };
   B._gtagProxy=function(){ B._gtagQueue.push([].slice.call(arguments)); };
@@ -864,13 +853,12 @@ window.__enableConsentTrackers=function(){
   try{ window.gtag=B._gtagProxy; }catch(e){}
   try{ window.ga=B._gaProxy; }catch(e){}
   log('Installed queueing proxies for fbq, gtag, ga');
-  // Clear other stubs so real scripts can define them when they load
   var otherProps=['analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
   for(var i=0;i<otherProps.length;i++){
     try{ delete window[otherProps[i]]; }catch(e){ try{ window[otherProps[i]]=undefined; }catch(e2){} }
   }
   
-  // Collect all script URLs to restore: from B.blocked and from DOM (data-blocked-src)
+  // STEP 5: Collect script URLs to restore
   var toRestore=[];
   for(var i=0;i<B.blocked.length;i++){
     var b=B.blocked[i];
@@ -885,56 +873,72 @@ window.__enableConsentTrackers=function(){
     }
   }
   
-  // Restore every blocked external script
+  // STEP 6: Restore scripts with async=true and load/error listeners for reliable init
+  var head=document.head||document.documentElement;
   for(var k=0;k<toRestore.length;k++){
     var r=toRestore[k];
     var el=document.createElement('script');
     el.src=r.src;
     el.setAttribute('data-consent-restored','true');
-    el.async=false;
+    el.async=true;
+    (function(src){
+      el.onload=function(){ log('Restored script loaded: '+src); };
+      el.onerror=function(){ log('Restored script failed: '+src); };
+    })(r.src);
     try{
       if(r.parent&&r.next&&r.parent.contains&&r.parent.contains(r.next)){
         r.parent.insertBefore(el,r.next);
       }else if(r.parent&&r.parent.appendChild){
         r.parent.appendChild(el);
       }else{
-        (document.head||document.documentElement).appendChild(el);
+        head.appendChild(el);
       }
-      log('Restored script: '+r.src);
+      log('Restored script (async): '+r.src);
     }catch(e){
-      (document.head||document.documentElement).appendChild(el);
+      head.appendChild(el);
     }
   }
-  
   B.blocked=[];
   
-  // Replay queued fbq/gtag/ga calls once real implementations load (restored scripts load async)
+  // STEP 7: Replay queues when real fbq/gtag/ga load (30s timeout, 100ms interval, manual trigger)
   var replayStart=Date.now();
-  var replayMax=10000;
-  var replayIv=setInterval(function(){
-    var now=Date.now();
-    if(now-replayStart>replayMax){
-      clearInterval(replayIv);
-      return;
-    }
+  var replayMax=30000;
+  var replayIv;
+  function doReplay(){
     var didReplay=false;
     if(window.fbq&&window.fbq!==B._fbqProxy&&B._fbqQueue.length){
+      log('Real fbq detected - replaying '+B._fbqQueue.length+' queued call(s)');
       while(B._fbqQueue.length){ try{ window.fbq.apply(null,B._fbqQueue.shift()); }catch(e){} }
       didReplay=true;
     }
     if(window.gtag&&window.gtag!==B._gtagProxy&&B._gtagQueue.length){
+      log('Real gtag detected - replaying '+B._gtagQueue.length+' queued call(s)');
       while(B._gtagQueue.length){ try{ window.gtag.apply(null,B._gtagQueue.shift()); }catch(e){} }
       didReplay=true;
     }
     if(window.ga&&window.ga!==B._gaProxy&&B._gaQueue.length){
+      log('Real ga detected - replaying '+B._gaQueue.length+' queued call(s)');
       while(B._gaQueue.length){ try{ window.ga.apply(null,B._gaQueue.shift()); }catch(e){} }
       didReplay=true;
     }
-    if(didReplay)log('Replayed queued tracker calls');
+    return didReplay;
+  }
+  window.__replayConsentQueues=function(){
+    log('Manual __replayConsentQueues called');
+    return doReplay();
+  };
+  replayIv=setInterval(function(){
+    var now=Date.now();
+    if(now-replayStart>replayMax){
+      clearInterval(replayIv);
+      log('Replay interval ended after 30s');
+      return;
+    }
+    doReplay();
     if(B._fbqQueue.length===0&&B._gtagQueue.length===0&&B._gaQueue.length===0){
       clearInterval(replayIv);
     }
-  },50);
+  },100);
   
   log('Trackers enabled - trackers can now initialize');
   }catch(err){
@@ -997,6 +1001,8 @@ function hasConsent(){
 
 function setConsent(value){
   try{
+    if(value==='accepted')window.__consentGiven=true;
+    else if(value==='rejected')window.__consentGiven=false;
     localStorage.setItem(CONSENT_KEY,value);
   }catch(e){
     console.error('[ConsentFlow] Failed to set consent:',e);
