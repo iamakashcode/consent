@@ -816,31 +816,78 @@ window.__enableConsentTrackers=function(){
   var scriptsToLoad=toRestore.length;
   var scriptsLoaded=0;
   
+  var trackerInitTriggered=false;
   function triggerTrackerInit(){
     scriptsLoaded++;
-    if(scriptsLoaded>=scriptsToLoad&&scriptsToLoad>0){
-      setTimeout(function(){
+    if(scriptsLoaded>=scriptsToLoad&&scriptsToLoad>0&&!trackerInitTriggered){
+      trackerInitTriggered=true;
+      var attempts=0;
+      var maxAttempts=25;
+      var fbqFired=false;
+      var gtagFired=false;
+      var gaFired=false;
+      var gtmFired=false;
+      
+      var attemptInterval=setInterval(function(){
+        attempts++;
+        var firedAny=false;
+        
         if(window.dataLayer&&Array.isArray(window.dataLayer)){
           try{
-            window.dataLayer.push({'event':'consent-granted'});
-            window.dataLayer.push({'event':'gtm.js','gtm.start':Date.now()});
-            log('✓ Triggered GTM/dataLayer initialization');
+            if(attempts===1){
+              window.dataLayer.push({'event':'consent-granted'});
+              window.dataLayer.push({'event':'gtm.js','gtm.start':Date.now()});
+              gtmFired=true;
+              log('✓ Triggered GTM/dataLayer');
+            }
+            firedAny=true;
           }catch(e){}
         }
+        
         if(window.gtag&&typeof window.gtag==='function'){
           try{
-            window.gtag('js',new Date());
-            log('✓ Triggered gtag initialization');
+            if(!gtagFired){
+              window.gtag('js',new Date());
+              gtagFired=true;
+              log('✓ Triggered gtag');
+            }
+            firedAny=true;
           }catch(e){}
         }
+        
         if(window.fbq&&typeof window.fbq==='function'){
           try{
-            window.fbq('track','PageView');
-            log('✓ Triggered fbq PageView');
+            if(!fbqFired||attempts<=5){
+              window.fbq('track','PageView');
+              if(!fbqFired){
+                fbqFired=true;
+                log('✓ Triggered fbq PageView');
+              }
+            }
+            firedAny=true;
+          }catch(e){
+            if(attempts>=10&&!fbqFired){
+              log('⚠ fbq not ready after 10 attempts');
+            }
+          }
+        }
+        
+        if(window.ga&&typeof window.ga==='function'){
+          try{
+            if(!gaFired){
+              window.ga('send','pageview');
+              gaFired=true;
+              log('✓ Triggered ga pageview');
+            }
+            firedAny=true;
           }catch(e){}
         }
-        log('✓ All trackers initialized and firing');
-      },100);
+        
+        if(attempts>=maxAttempts){
+          clearInterval(attemptInterval);
+          log('✓ Tracker initialization attempts complete');
+        }
+      },150);
     }
   }
   
@@ -872,7 +919,9 @@ window.__enableConsentTrackers=function(){
   }
   
   if(scriptsToLoad===0){
-    triggerTrackerInit();
+    setTimeout(function(){
+      triggerTrackerInit();
+    },100);
   }
   
   B.blocked=[];
