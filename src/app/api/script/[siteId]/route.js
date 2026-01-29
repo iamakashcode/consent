@@ -11,6 +11,21 @@ function generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiDomai
 'use strict';
 
 /* ======================================================
+   DOMAIN VALIDATION - CRITICAL: Must be FIRST before anything else
+====================================================== */
+var ALLOWED_DOMAIN='${allowedDomain || ''}';
+var IS_PREVIEW=${isPreview ? 'true' : 'false'};
+
+if(IS_PREVIEW!=='true'&&ALLOWED_DOMAIN){
+  var currentHost=(location.hostname||'').toLowerCase().replace(/^www\\./,'');
+  var allowedHost=ALLOWED_DOMAIN.toLowerCase().replace(/^www\\./,'');
+  if(currentHost&&allowedHost&&currentHost!==allowedHost&&!currentHost.endsWith('.'+allowedHost)){
+    console.error('[ConsentFlow] DOMAIN MISMATCH: Script configured for "'+allowedHost+'" but running on "'+currentHost+'". Script disabled.');
+    return;
+  }
+}
+
+/* ======================================================
    CRITICAL: Define noop FIRST (before anything else)
 ====================================================== */
 var noop=function(){return undefined;};
@@ -1143,13 +1158,15 @@ function generateMainScript(siteId, allowedDomain, isPreview, config, bannerStyl
    CONSENT BANNER & DOMAIN VERIFICATION
 ====================================================== */
 
+(function(){
 var CONSENT_KEY='${CONSENT_KEY}';
 var currentHost=location.hostname.toLowerCase().replace(/^www\\./,'');
 var allowedHost='${allowedDomain || ''}'.toLowerCase().replace(/^www\\./,'');
 var isPreview=${isPreview ? 'true' : 'false'};
 
 if(!isPreview&&allowedHost&&currentHost!==allowedHost&&!currentHost.endsWith('.'+allowedHost)){
-  console.warn('[ConsentFlow] Domain mismatch: '+currentHost+' !== '+allowedHost);
+  console.error('[ConsentFlow] DOMAIN MISMATCH: Script configured for "'+allowedHost+'" but running on "'+currentHost+'". Banner disabled.');
+  return;
 }
 
 function hasConsent(){
@@ -1325,6 +1342,7 @@ var maxVerificationAttempts=5;
       console.log('[ConsentFlow] User rejected consent');
     };
   }` : ''}
+})();
 })();
 `;
 }
