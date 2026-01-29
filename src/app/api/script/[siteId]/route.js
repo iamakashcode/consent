@@ -165,7 +165,7 @@ fbqStub.init=noop;
 fbqStub.set=noop;
 fbqStub['delete']=noop;
 
-// Set fbq as non-configurable
+// Set fbq - MUST be configurable so we can delete when user accepts consent
 try{
   delete window.fbq;
 }catch(e){}
@@ -174,7 +174,7 @@ try{
   Object.defineProperty(window,'fbq',{
     value:fbqStub,
     writable:false,
-    configurable:false,
+    configurable:true,
     enumerable:true
   });
 }catch(e){
@@ -191,7 +191,7 @@ try{
   Object.defineProperty(window,'_fbq',{
     value:_fbqStub,
     writable:false,
-    configurable:false,
+    configurable:true,
     enumerable:true
   });
 }catch(e){}
@@ -209,7 +209,7 @@ try{
   Object.defineProperty(window,'gtag',{
     value:gtagStub,
     writable:false,
-    configurable:false,
+    configurable:true,
     enumerable:true
   });
 }catch(e){}
@@ -224,7 +224,7 @@ try{
   Object.defineProperty(window,'ga',{
     value:gaStub,
     writable:false,
-    configurable:false,
+    configurable:true,
     enumerable:true
   });
 }catch(e){}
@@ -364,6 +364,7 @@ if(B._scriptSrcDesc){
         this.setAttribute('data-blocked-src',url);
         this.setAttribute('data-consent-blocked','true');
         this.type='javascript/blocked';
+        B.blocked.push({tag:'script',src:url,parent:this.parentNode,next:this.nextSibling});
         return;
       }
       this.setAttribute('src',url);
@@ -841,39 +842,54 @@ window.__enableConsentTrackers=function(){
     }
   }
   
-  // Delete tracker stubs (let trackers reinitialize themselves)
+  // Delete tracker stubs so real tracker scripts can define them when they load
   var propsToRemove=['fbq','_fbq','gtag','ga','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
   for(var i=0;i<propsToRemove.length;i++){
+    var prop=propsToRemove[i];
     try{
-      delete window[propsToRemove[i]];
+      var deleted=delete window[prop];
+      if(deleted)log('Removed stub: '+prop);
     }catch(e){
       try{
-        window[propsToRemove[i]]=undefined;
+        window[prop]=undefined;
+        log('Cleared stub: '+prop);
       }catch(e2){}
     }
   }
   
-  // Restore blocked EXTERNAL scripts only (not images, not inline scripts)
+  // Collect all script URLs to restore: from B.blocked and from DOM (data-blocked-src)
+  var toRestore=[];
   for(var i=0;i<B.blocked.length;i++){
     var b=B.blocked[i];
-    // Only restore external scripts with src
-    if(b.tag!=='script'||!b.src)continue;
-    
+    if(b.tag==='script'&&b.src)toRestore.push({src:b.src,parent:b.parent,next:b.next});
+  }
+  var existingBlocked=document.querySelectorAll('script[data-blocked-src]');
+  for(var j=0;j<existingBlocked.length;j++){
+    var s=existingBlocked[j];
+    var blockedSrc=s.getAttribute('data-blocked-src');
+    if(blockedSrc&&!toRestore.some(function(r){return r.src===blockedSrc;})){
+      toRestore.push({src:blockedSrc,parent:s.parentNode,next:s.nextSibling});
+    }
+  }
+  
+  // Restore every blocked external script
+  for(var k=0;k<toRestore.length;k++){
+    var r=toRestore[k];
     var el=document.createElement('script');
-    el.src=b.src;
+    el.src=r.src;
     el.setAttribute('data-consent-restored','true');
-    
+    el.async=false;
     try{
-      if(b.parent&&b.next&&b.parent.contains(b.next)){
-        b.parent.insertBefore(el,b.next);
-      }else if(b.parent){
-        b.parent.appendChild(el);
+      if(r.parent&&r.next&&r.parent.contains&&r.parent.contains(r.next)){
+        r.parent.insertBefore(el,r.next);
+      }else if(r.parent&&r.parent.appendChild){
+        r.parent.appendChild(el);
       }else{
-        document.head.appendChild(el);
+        (document.head||document.documentElement).appendChild(el);
       }
-      log('Restored script: '+b.src);
+      log('Restored script: '+r.src);
     }catch(e){
-      document.head.appendChild(el);
+      (document.head||document.documentElement).appendChild(el);
     }
   }
   
