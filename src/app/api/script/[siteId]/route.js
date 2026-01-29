@@ -505,7 +505,8 @@ if(Element.prototype.append){
           if(isTracker(src,code)){
             log('BLOCKED append: '+(src||'inline'));
             node.setAttribute('data-consent-blocked','true');
-            if(tag==='script')node.type='javascript/blocked';
+            if(src)node.setAttribute('data-blocked-src',src);
+            if(tag==='script'){ node.type='javascript/blocked'; B.blocked.push({tag:tag,src:src,code:code,parent:this,next:null}); }
             continue;
           }
         }
@@ -530,7 +531,8 @@ if(Element.prototype.prepend){
           if(isTracker(src,code)){
             log('BLOCKED prepend: '+(src||'inline'));
             node.setAttribute('data-consent-blocked','true');
-            if(tag==='script')node.type='javascript/blocked';
+            if(src)node.setAttribute('data-blocked-src',src);
+            if(tag==='script'){ node.type='javascript/blocked'; B.blocked.push({tag:tag,src:src,code:code,parent:this,next:null}); }
             continue;
           }
         }
@@ -577,8 +579,9 @@ function blockExistingTrackers(){
         next:s.nextSibling
       });
       
-      // Mark as blocked
+      // Mark as blocked (data-blocked-src so __enableConsentTrackers can find by DOM)
       s.setAttribute('data-consent-blocked','true');
+      if(src)s.setAttribute('data-blocked-src',src);
       s.type='javascript/blocked';
       
       // Clear content to prevent execution
@@ -745,6 +748,14 @@ if(!hasConsent()){
    STEP 8: ENABLE TRACKERS FUNCTION
 ====================================================== */
 window.__enableConsentTrackers=function(){
+  try{
+  var B=window._cb;
+  if(!B){ log('Enable skipped: blocker not loaded'); return; }
+  if(!B.blocked)B.blocked=[];
+  if(typeof CONSENT_KEY!=='undefined'&&localStorage.getItem(CONSENT_KEY)!=='accepted'){
+    log('Enable skipped: consent not accepted');
+    return;
+  }
   log('Enabling trackers...');
   
   // Restore all originals
@@ -926,6 +937,9 @@ window.__enableConsentTrackers=function(){
   },50);
   
   log('Trackers enabled - trackers can now initialize');
+  }catch(err){
+    console.error('[ConsentFlow] __enableConsentTrackers error:',err);
+  }
 };
 
 B.ready=true;
@@ -1133,12 +1147,14 @@ var maxVerificationAttempts=5;
   
   document.body.appendChild(banner);
   
-  // Accept button
+  // Accept button - defer enable so it runs after stack and localStorage is set
   document.getElementById('consentflow-accept').onclick=function(){
     setConsent('accepted');
     banner.remove();
     if(window.__enableConsentTrackers){
-      window.__enableConsentTrackers();
+      setTimeout(function(){
+        try{ window.__enableConsentTrackers(); }catch(e){ console.error('[ConsentFlow] Enable trackers error:',e); }
+      },0);
     }
   };
   
