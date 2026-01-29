@@ -65,6 +65,7 @@ function DashboardContent() {
   const [error, setError] = useState("");
   const [sites, setSites] = useState([]);
   const [subscriptions, setSubscriptions] = useState({});
+  const [siteStats, setSiteStats] = useState({});
   const [copiedId, setCopiedId] = useState(null);
   const hasRefreshed = useRef(false);
 
@@ -78,7 +79,12 @@ function DashboardContent() {
     if (session && !hasRefreshed.current) {
       hasRefreshed.current = true;
       update();
-      Promise.all([fetchSites(), fetchSubscriptions()]).then(() => setPageLoading(false));
+      Promise.all([fetchSites(), fetchSubscriptions()]).then(([sitesData]) => {
+        setPageLoading(false);
+        if (sitesData && sitesData.length > 0) {
+          fetchAllStats(sitesData);
+        }
+      });
     }
   }, [session, update]);
 
@@ -111,9 +117,40 @@ function DashboardContent() {
       if (response.ok) {
         const data = await response.json();
         setSites(data);
+        return data;
       }
     } catch (err) {
       console.error("Failed to fetch sites:", err);
+    }
+    return [];
+  };
+
+  const fetchAllStats = async (sitesList) => {
+    if (!sitesList || sitesList.length === 0) return;
+    try {
+      const statsPromises = sitesList.map(async (site) => {
+        try {
+          const response = await fetch(`/api/sites/${site.siteId}/stats`);
+          if (response.ok) {
+            const stats = await response.json();
+            return { siteId: site.siteId, stats };
+          }
+        } catch (err) {
+          console.error(`Failed to fetch stats for ${site.siteId}:`, err);
+        }
+        return { siteId: site.siteId, stats: null };
+      });
+      
+      const results = await Promise.all(statsPromises);
+      const statsMap = {};
+      results.forEach(({ siteId, stats }) => {
+        if (stats) {
+          statsMap[siteId] = stats;
+        }
+      });
+      setSiteStats(statsMap);
+    } catch (err) {
+      console.error("Failed to fetch stats:", err);
     }
   };
 
@@ -171,8 +208,11 @@ function DashboardContent() {
 
       setResults(data);
       setDomain("");
-      fetchSites();
+      const sitesData = await fetchSites();
       fetchSubscriptions();
+      if (sitesData && sitesData.length > 0) {
+        fetchAllStats(sitesData);
+      }
 
       if (data.needsPlan) {
         router.push(`/plans?siteId=${data.siteId}&domain=${encodeURIComponent(data.domain)}`);
@@ -198,7 +238,8 @@ function DashboardContent() {
 
   const activeCount = Object.values(subscriptions).filter((s) => s.isActive).length;
   const trialCount = Object.values(subscriptions).filter((s) => s.subscription?.status === "trial").length;
-  const totalPageViews = sites.reduce((acc, site) => acc + (site.pageViews || 0), 0);
+  const totalPageViews = Object.values(siteStats).reduce((acc, stats) => acc + (stats?.totalViews || 0), 0);
+  const totalUniquePages = Object.values(siteStats).reduce((acc, stats) => acc + (stats?.totalUniquePages || 0), 0);
 
   return (
     <DashboardLayout>
@@ -245,7 +286,7 @@ function DashboardContent() {
 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-gray-500">Page Views</span>
+            <span className="text-sm font-medium text-gray-500">Total Page Views</span>
             <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
               <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -254,10 +295,7 @@ function DashboardContent() {
             </div>
           </div>
           <p className="text-3xl font-bold text-gray-900">{totalPageViews.toLocaleString()}</p>
-          <div className="flex items-center gap-1 mt-1">
-            <ArrowUpIcon />
-            <span className="text-sm text-green-600">12% this month</span>
-          </div>
+          <p className="text-sm text-gray-500 mt-1">{totalUniquePages} unique pages</p>
         </div>
       </div>
 
@@ -323,8 +361,22 @@ function DashboardContent() {
 
       {/* Domains List */}
       <div className="bg-white rounded-xl border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Your Domains</h2>
+          <button
+            onClick={() => {
+              fetchSites().then((sitesData) => {
+                if (sitesData && sitesData.length > 0) {
+                  fetchAllStats(sitesData);
+                }
+              });
+              fetchSubscriptions();
+            }}
+            className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+            title="Refresh stats"
+          >
+            Refresh
+          </button>
         </div>
 
         {sites.length > 0 ? (
@@ -383,6 +435,16 @@ function DashboardContent() {
                         </div>
                         <p className="text-sm text-gray-500 mt-0.5">
                           {Array.isArray(site.trackers) ? site.trackers.length : 0} trackers detected
+                          {siteStats[site.siteId] ? (
+                            <>
+                              {" • "}
+                              <span className="font-medium text-indigo-600">{siteStats[site.siteId].totalUniquePages || 0} pages</span>
+                              {" • "}
+                              <span className="font-medium text-indigo-600">{siteStats[site.siteId].totalViews?.toLocaleString() || 0} views</span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400"> • Loading stats...</span>
+                          )}
                         </p>
                       </div>
                     </div>
