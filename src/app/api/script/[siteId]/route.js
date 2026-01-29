@@ -1360,7 +1360,6 @@ export async function GET(req, { params }) {
     }
 
     const { searchParams } = new URL(req.url);
-    const domainParam = searchParams.get("domain");
     const isPreview = searchParams.get("preview") === "1";
     const configParam = searchParams.get("config");
 
@@ -1391,7 +1390,9 @@ export async function GET(req, { params }) {
       }
     }
 
-    const allowedDomain = domainParam || site.domain;
+    // SECURITY: Always use domain from database, never from query parameter
+    // This prevents domain spoofing attacks where someone could use ?domain=malicious.com
+    const allowedDomain = site.domain;
     
     const protocol = req.headers.get("x-forwarded-proto") || 
       (req.headers.get("host")?.includes("localhost") ? "http" : "https");
