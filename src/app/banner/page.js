@@ -279,12 +279,16 @@ function BannerContent() {
 
   const getInstallCode = () => {
     if (!selectedSite) return "";
-    const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
-    // Use CDN URL instead of API URL for production scripts
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ||
+      (typeof window !== "undefined" ? window.location.origin : "");
+    const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL?.replace(/\/$/, "") || "";
+    const scriptSrc = r2Base
+      ? `${r2Base}/sites/${selectedSite.siteId}/script.js`
+      : `${baseUrl}/cdn/sites/${selectedSite.siteId}/script.js`;
     return [
       "<!-- CRITICAL: Place this script FIRST in <head>, BEFORE any Meta Pixel, Google Analytics, or other tracker scripts -->",
       "<!-- Start ConsentFlow banner -->",
-      `<script id="consentflow" src="${baseUrl}/cdn/sites/${selectedSite.siteId}/script.js"></script>`,
+      `<script id="consentflow" src="${scriptSrc}"></script>`,
       "<!-- End ConsentFlow banner -->",
       "<!-- Example: Place ConsentFlow script BEFORE Meta Pixel -->",
       "<!-- <script id=\"consentflow\" src=\"...\"></script> -->",

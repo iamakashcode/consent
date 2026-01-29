@@ -4,6 +4,7 @@ import { generateSiteId } from "@/lib/store";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
 import { startUserTrial } from "@/lib/subscription";
+import { getCdnUrl, R2_CONFIGURED } from "@/lib/cdn-service";
 
 /**
  * Crawl a domain and detect trackers
@@ -200,13 +201,12 @@ export async function POST(req) {
       }
     }
 
-    // Build response
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ||
       req.headers.get("origin") ||
       `http://${req.headers.get("host")}`;
-
-    // Use CDN URL for production scripts
-    const scriptUrl = `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
+    const scriptUrl = R2_CONFIGURED
+      ? getCdnUrl(site.siteId, false)
+      : `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
 
     // Check if site has a subscription
     const hasSubscription = !!site.subscription;

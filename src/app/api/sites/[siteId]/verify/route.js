@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { hasVerificationColumns, hasBannerConfigColumn } from "@/lib/db-utils";
+import { getCdnUrl, R2_CONFIGURED } from "@/lib/cdn-service";
 
 /**
  * Check verification status - verification happens automatically when script is added
@@ -174,12 +175,12 @@ export async function POST(req, { params }) {
         domain: site.domain,
       });
     } else {
-      // Get base URL for script
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ||
         (req.headers.get("origin") || `http://${req.headers.get("host")}`);
-      // Use CDN URL for production scripts
-      const scriptUrl = `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
-      
+      const scriptUrl = R2_CONFIGURED
+        ? getCdnUrl(site.siteId, false)
+        : `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
+
       return Response.json({
         verified: false,
         message: "Domain not yet verified",
@@ -389,11 +390,11 @@ export async function GET(req, { params }) {
       }
     }
 
-    // Get script URL
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ||
       (req.headers.get("origin") || `http://${req.headers.get("host")}`);
-    // Use CDN URL for production scripts
-    const scriptUrl = `${baseUrl}/cdn/sites/${siteId}/script.js`;
+    const scriptUrl = R2_CONFIGURED
+      ? getCdnUrl(siteId, false)
+      : `${baseUrl}/cdn/sites/${siteId}/script.js`;
 
     return Response.json({
       isVerified: effectiveIsVerified,

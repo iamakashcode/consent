@@ -1,86 +1,79 @@
 /**
  * CDN Service for Script Storage
- * 
- * This service handles uploading and serving scripts from CDN.
- * Currently uses file system storage (can be migrated to S3/R2/Blob later)
+ *
+ * Uses Cloudflare R2 when configured; otherwise falls back to file system.
  */
 
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
+import {
+  R2_CONFIGURED,
+  r2Upload,
+  r2Get,
+  r2Exists,
+  r2PublicUrl,
+} from "./r2-client";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// CDN base URL - can be configured via environment variable
-const CDN_BASE_URL = process.env.CDN_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || '';
-const CDN_STORAGE_PATH = process.env.CDN_STORAGE_PATH || path.join(process.cwd(), 'public', 'cdn', 'sites');
+const CDN_BASE_URL = process.env.CDN_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "";
+const CDN_STORAGE_PATH =
+  process.env.CDN_STORAGE_PATH || path.join(process.cwd(), "public", "cdn", "sites");
 
-/**
- * Ensure CDN storage directory exists
- */
 async function ensureStorageDir() {
   try {
     await fs.mkdir(CDN_STORAGE_PATH, { recursive: true });
-  } catch (error) {
-    console.error('[CDN] Failed to create storage directory:', error);
-    throw error;
+  } catch (e) {
+    console.error("[CDN] Failed to create storage directory:", e);
+    throw e;
   }
 }
 
 /**
- * Get CDN URL for a site's script
+ * Get the public URL for a site's script.
+ * Uses R2 CDN URL when R2 is configured; otherwise app-relative /cdn/ URL.
  */
 export function getCdnUrl(siteId, isPreview = false) {
-  const filename = isPreview ? 'script.preview.js' : 'script.js';
-  const cdnPath = `/cdn/sites/${siteId}/${filename}`;
-  
-  if (CDN_BASE_URL) {
-    return `${CDN_BASE_URL}${cdnPath}`;
+  if (R2_CONFIGURED) {
+    const url = r2PublicUrl(siteId, isPreview);
+    if (url) return url;
   }
-  
-  // Fallback to relative URL
-  return cdnPath;
+  const filename = isPreview ? "script.preview.js" : "script.js";
+  const p = `/cdn/sites/${siteId}/${filename}`;
+  return CDN_BASE_URL ? `${CDN_BASE_URL}${p}` : p;
 }
 
 /**
- * Upload script to CDN storage
+ * Upload script to R2 or file system.
  */
 export async function uploadScript(siteId, scriptContent, isPreview = false) {
-  try {
-    await ensureStorageDir();
-    
-    const siteDir = path.join(CDN_STORAGE_PATH, siteId);
-    await fs.mkdir(siteDir, { recursive: true });
-    
-    const filename = isPreview ? 'script.preview.js' : 'script.js';
-    const filePath = path.join(siteDir, filename);
-    
-    await fs.writeFile(filePath, scriptContent, 'utf-8');
-    
-    const cdnUrl = getCdnUrl(siteId, isPreview);
-    
-    console.log(`[CDN] Script uploaded: ${filePath} -> ${cdnUrl}`);
-    
-    return {
-      success: true,
-      url: cdnUrl,
-      path: filePath,
-    };
-  } catch (error) {
-    console.error(`[CDN] Failed to upload script for site ${siteId}:`, error);
-    throw error;
+  if (R2_CONFIGURED) {
+    await r2Upload(siteId, scriptContent, isPreview);
+    const url = r2PublicUrl(siteId, isPreview);
+    console.log("[CDN] Script uploaded to R2:", url);
+    return { success: true, url, path: null };
   }
+  await ensureStorageDir();
+  const siteDir = path.join(CDN_STORAGE_PATH, siteId);
+  await fs.mkdir(siteDir, { recursive: true });
+  const filename = isPreview ? "script.preview.js" : "script.js";
+  const filePath = path.join(siteDir, filename);
+  await fs.writeFile(filePath, scriptContent, "utf-8");
+  const url = getCdnUrl(siteId, isPreview);
+  console.log("[CDN] Script uploaded (fs):", filePath, "->", url);
+  return { success: true, url, path: filePath };
 }
 
 /**
- * Check if script exists in CDN
+ * Check if script exists in R2 or file system.
  */
 export async function scriptExists(siteId, isPreview = false) {
+  if (R2_CONFIGURED) return r2Exists(siteId, isPreview);
+  const filename = isPreview ? "script.preview.js" : "script.js";
+  const filePath = path.join(CDN_STORAGE_PATH, siteId, filename);
   try {
-    const filename = isPreview ? 'script.preview.js' : 'script.js';
-    const filePath = path.join(CDN_STORAGE_PATH, siteId, filename);
-    
     await fs.access(filePath);
     return true;
   } catch {
@@ -89,49 +82,40 @@ export async function scriptExists(siteId, isPreview = false) {
 }
 
 /**
- * Get script from CDN storage
+ * Get script content from R2 or file system. Returns null if not found.
  */
 export async function getScript(siteId, isPreview = false) {
+  if (R2_CONFIGURED) return r2Get(siteId, isPreview);
+  const filename = isPreview ? "script.preview.js" : "script.js";
+  const filePath = path.join(CDN_STORAGE_PATH, siteId, filename);
   try {
-    const filename = isPreview ? 'script.preview.js' : 'script.js';
-    const filePath = path.join(CDN_STORAGE_PATH, siteId, filename);
-    
-    const content = await fs.readFile(filePath, 'utf-8');
-    return content;
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      return null; // Script not found
-    }
-    throw error;
+    return await fs.readFile(filePath, "utf-8");
+  } catch (e) {
+    if (e.code === "ENOENT") return null;
+    throw e;
   }
 }
 
 /**
- * Delete script from CDN storage
+ * Delete script from R2 or file system.
+ * R2: we don't implement delete for now; no-op.
  */
 export async function deleteScript(siteId, isPreview = false) {
-  try {
-    const filename = isPreview ? 'script.preview.js' : 'script.js';
-    const filePath = path.join(CDN_STORAGE_PATH, siteId, filename);
-    
-    await fs.unlink(filePath).catch(() => {
-      // Ignore if file doesn't exist
-    });
-    
-    // Clean up directory if empty
-    const siteDir = path.join(CDN_STORAGE_PATH, siteId);
-    try {
-      const files = await fs.readdir(siteDir);
-      if (files.length === 0) {
-        await fs.rmdir(siteDir);
-      }
-    } catch {
-      // Ignore errors
-    }
-    
+  if (R2_CONFIGURED) {
+    // Optional: implement R2 DeleteObjectCommand when needed
     return true;
-  } catch (error) {
-    console.error(`[CDN] Failed to delete script for site ${siteId}:`, error);
-    return false;
   }
+  const filename = isPreview ? "script.preview.js" : "script.js";
+  const filePath = path.join(CDN_STORAGE_PATH, siteId, filename);
+  try {
+    await fs.unlink(filePath);
+  } catch (_) {}
+  const siteDir = path.join(CDN_STORAGE_PATH, siteId);
+  try {
+    const files = await fs.readdir(siteDir);
+    if (files.length === 0) await fs.rmdir(siteDir);
+  } catch (_) {}
+  return true;
 }
+
+export { R2_CONFIGURED };

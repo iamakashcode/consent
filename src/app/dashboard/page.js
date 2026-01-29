@@ -172,10 +172,11 @@ function DashboardContent() {
   const copyScript = async (site) => {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ||
       (typeof window !== "undefined" ? window.location.origin : "");
-    
-    // Use CDN URL (falls back to API if CDN not available)
-    const cdnUrl = `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
-    const scriptTag = `<script src="${cdnUrl}"></script>`;
+    const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL?.replace(/\/$/, "") || "";
+    const scriptSrc = r2Base
+      ? `${r2Base}/sites/${site.siteId}/script.js`
+      : `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
+    const scriptTag = `<script src="${scriptSrc}"></script>`;
     try {
       await navigator.clipboard.writeText(scriptTag);
       setCopiedId(site.id);
