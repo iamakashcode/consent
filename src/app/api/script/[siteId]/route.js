@@ -4,7 +4,6 @@ import { hasVerificationColumns } from "@/lib/db-utils";
 import { isSubscriptionActive } from "@/lib/subscription";
 
 // Generate AGGRESSIVE pre-execution blocker
-// Fixed generateInlineBlocker function
 function generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiDomain) {
   const CONSENT_KEY = `cookie_consent_${siteId}`;
   
@@ -804,4 +803,313 @@ window.__enableConsentTrackers=function(){
 B.ready=true;
 log('Pre-execution blocker ready. Consent: '+hasConsent());
 })();`;
+}
+
+// Generate main script with banner and verification
+function generateMainScript(siteId, allowedDomain, isPreview, config, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl, templateStyle) {
+  const CONSENT_KEY = `cookie_consent_${siteId}`;
+  
+  // Escape template literal special characters
+  const escapeForTemplate = (str) => {
+    if (!str) return '';
+    return String(str)
+      .replace(/\\/g, '\\\\')
+      .replace(/\`/g, '\\`')
+      .replace(/\$/g, '\\$');
+  };
+  
+  const safeTitle = escapeForTemplate(title);
+  const safeMessage = escapeForTemplate(message);
+  const safeAccept = escapeForTemplate(acceptText);
+  const safeReject = escapeForTemplate(rejectText);
+  
+  return `
+/* ======================================================
+   CONSENT BANNER & DOMAIN VERIFICATION
+====================================================== */
+
+var CONSENT_KEY='${CONSENT_KEY}';
+var currentHost=location.hostname.toLowerCase().replace(/^www\\./,'');
+var allowedHost='${allowedDomain || ''}'.toLowerCase().replace(/^www\\./,'');
+var isPreview=${isPreview ? 'true' : 'false'};
+
+// Domain check - log warning but don't block in preview mode
+if(!isPreview&&allowedHost&&currentHost!==allowedHost&&!currentHost.endsWith('.'+allowedHost)){
+  console.warn('[ConsentFlow] Domain mismatch: '+currentHost+' !== '+allowedHost);
+}
+
+function hasConsent(){
+  try{
+    return localStorage.getItem(CONSENT_KEY)==='accepted';
+  }catch(e){
+    return false;
+  }
+}
+
+function setConsent(value){
+  try{
+    localStorage.setItem(CONSENT_KEY,value);
+  }catch(e){
+    console.error('[ConsentFlow] Failed to set consent:',e);
+  }
+}
+
+// Domain verification callback
+(function verifyDomain(){
+  if(!document.body)return setTimeout(verifyDomain,50);
+  
+  var verifyUrl='${verifyCallbackUrl}';
+  if(!verifyUrl)return;
+  
+  try{
+    fetch(verifyUrl+'?domain='+encodeURIComponent(location.hostname),{
+      method:'GET',
+      mode:'cors',
+      credentials:'omit'
+    }).then(function(res){
+      return res.json();
+    }).then(function(data){
+      if(data.connected){
+        console.log('[ConsentFlow] Domain connected successfully');
+      }
+    }).catch(function(err){
+      console.warn('[ConsentFlow] Verification failed:',err);
+    });
+  }catch(e){
+    console.warn('[ConsentFlow] Verification error:',e);
+  }
+})();
+
+// Page view tracking
+(function trackPageView(){
+  if(!document.body)return setTimeout(trackPageView,50);
+  
+  var trackUrl='${trackUrl}';
+  if(!trackUrl)return;
+  
+  try{
+    fetch(trackUrl,{
+      method:'POST',
+      mode:'cors',
+      credentials:'omit',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        url:location.href,
+        referrer:document.referrer||'',
+        timestamp:Date.now()
+      })
+    }).catch(function(err){
+      // Silent fail
+    });
+  }catch(e){
+    // Silent fail
+  }
+})();
+
+// Show consent banner
+(function showBanner(){
+  if(hasConsent())return;
+  if(document.getElementById('consentflow-banner'))return;
+  if(!document.body)return setTimeout(showBanner,50);
+  
+  var banner=document.createElement('div');
+  banner.id='consentflow-banner';
+  banner.setAttribute('data-consent','essential');
+  
+  // Apply banner styles
+  var styles='${bannerStyle || ''}';
+  if(styles){
+    banner.style.cssText=styles;
+  }else{
+    // Default styles
+    var pos='${position || 'bottom'}';
+    banner.style.cssText=
+      'position:fixed;'+
+      (pos==='top'?'top:0;bottom:auto;':'bottom:0;top:auto;')+
+      'left:0;right:0;'+
+      'background:#1f2937;color:#fff;padding:20px;'+
+      'display:flex;justify-content:space-between;'+
+      'align-items:center;gap:15px;flex-wrap:wrap;'+
+      'z-index:2147483647;font-family:system-ui,-apple-system,sans-serif;'+
+      'box-shadow:0 -4px 6px rgba(0,0,0,0.1);';
+  }
+  
+    var templateStyleObj=${JSON.stringify(templateStyle || {})};
+    var acceptBtnStyle='background:'+(templateStyleObj.buttonColor||'#22c55e')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
+    var rejectBtnStyle='background:transparent;color:'+(templateStyleObj.textColor||'#fff')+';border:2px solid '+(templateStyleObj.textColor||'#fff')+';padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
+    
+    banner.innerHTML=
+      '<div style="flex:1;max-width:700px;">'+
+      '<strong style="font-size:16px;display:block;margin-bottom:6px;">${safeTitle || '🍪 We use cookies'}</strong>'+
+      '<p style="margin:0;font-size:14px;opacity:0.9;line-height:1.5;">${safeMessage || 'This site uses tracking cookies. Accept to enable analytics.'}</p>'+
+      '</div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
+      '<button id="consentflow-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept'}</button>'+
+      ${showReject ? `'<button id="consentflow-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject'}</button>'+` : ''}
+      '</div>';
+  
+  document.body.appendChild(banner);
+  
+  // Accept button
+  document.getElementById('consentflow-accept').onclick=function(){
+    setConsent('accepted');
+    banner.remove();
+    if(window.__enableConsentTrackers){
+      window.__enableConsentTrackers();
+    }
+  };
+  
+  // Reject button
+  ${showReject ? `var rejectBtn=document.getElementById('consentflow-reject');
+  if(rejectBtn){
+    rejectBtn.onclick=function(){
+      setConsent('rejected');
+      banner.remove();
+    };
+  }` : ''}
+})();
+`;
+}
+
+// Main GET endpoint
+export async function GET(req, { params }) {
+  try {
+    const resolvedParams = await params;
+    const { siteId } = resolvedParams;
+    
+    if (!siteId) {
+      return new Response("// Site ID is required", {
+        status: 400,
+        headers: { "Content-Type": "application/javascript" },
+      });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const domainParam = searchParams.get("domain");
+    const isPreview = searchParams.get("preview") === "1";
+    const configParam = searchParams.get("config");
+
+    // Get site from database
+    const site = await prisma.site.findUnique({
+      where: { siteId },
+      include: {
+        subscription: true,
+      },
+    });
+
+    if (!site) {
+      return new Response("// Site not found", {
+        status: 404,
+        headers: { "Content-Type": "application/javascript" },
+      });
+    }
+
+    // Check subscription (allow preview mode)
+    if (!isPreview) {
+      const subscriptionStatus = await isSubscriptionActive(site.id);
+      if (!subscriptionStatus.isActive) {
+        return new Response(
+          `(function(){console.error('[Consent SDK] Access denied: Subscription inactive for this domain. ${subscriptionStatus.reason}');})();`,
+          {
+            status: 403,
+            headers: { "Content-Type": "application/javascript" },
+          }
+        );
+      }
+    }
+
+    // Get allowed domain
+    const allowedDomain = domainParam || site.domain;
+    
+    // Get base URL for API calls
+    const baseUrl = req.headers.get("origin") || 
+                   req.headers.get("referer")?.split("/").slice(0, 3).join("/") ||
+                   `https://${req.headers.get("host") || "localhost:3000"}`;
+    
+    // Extract consent API domain
+    let consentApiHostname = "";
+    try {
+      const baseUrlObj = new URL(baseUrl);
+      consentApiHostname = baseUrlObj.hostname.replace(/^www\./, "");
+    } catch (e) {
+      // Fallback
+      consentApiHostname = req.headers.get("host")?.replace(/^www\./, "") || "";
+    }
+
+    // Get banner config
+    const bannerConfig = site.bannerConfig || DEFAULT_BANNER_CONFIG;
+    const template = bannerConfig.template || "default";
+    const templateConfig = BANNER_TEMPLATES[template] || BANNER_TEMPLATES.default;
+    
+    const title = bannerConfig.title || templateConfig.title || "🍪 We use cookies";
+    const message = bannerConfig.message || templateConfig.message || "This site uses tracking cookies. Accept to enable analytics.";
+    const acceptText = bannerConfig.acceptText || templateConfig.acceptText || "Accept";
+    const rejectText = bannerConfig.rejectText || templateConfig.rejectText || "Reject";
+    const showReject = bannerConfig.showReject !== false;
+    const position = bannerConfig.position || "bottom";
+    
+    // Get banner style from template
+    let bannerStyle = "";
+    if (templateConfig.style) {
+      const style = templateConfig.style;
+      const posStyle = position === "top" ? "top:0;bottom:auto;" : "bottom:0;top:auto;";
+      bannerStyle = 
+        `position:fixed;${posStyle}left:0;right:0;` +
+        `background:${style.backgroundColor || '#1f2937'};` +
+        `color:${style.textColor || '#ffffff'};` +
+        `padding:${style.padding || '20px'};` +
+        `z-index:2147483647;` +
+        `display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap;` +
+        `font-family:system-ui,-apple-system,sans-serif;` +
+        `font-size:${style.fontSize || '14px'};` +
+        (style.borderRadius ? `border-radius:${style.borderRadius};` : '') +
+        (style.border ? `border:${style.border};` : '') +
+        (style.boxShadow ? `box-shadow:${style.boxShadow};` : 'box-shadow:0 -4px 6px rgba(0,0,0,0.1);');
+    }
+
+    // Build callback URLs
+    const actualSiteId = siteId;
+    const verifyCallbackUrl = `${baseUrl}/api/sites/${actualSiteId}/verify-callback`;
+    const trackUrl = `${baseUrl}/api/sites/${actualSiteId}/track`;
+
+    // Generate scripts
+    const inlineBlocker = generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiHostname);
+    const mainScript = generateMainScript(
+      siteId,
+      allowedDomain,
+      isPreview,
+      bannerConfig,
+      bannerStyle,
+      position,
+      title,
+      message,
+      acceptText,
+      rejectText,
+      showReject,
+      verifyCallbackUrl,
+      trackUrl,
+      templateConfig.style
+    );
+
+    // Combine both scripts
+    const fullScript = inlineBlocker + "\n" + mainScript;
+
+    return new Response(fullScript, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/javascript; charset=utf-8",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  } catch (error) {
+    console.error("[Script API] Error:", error);
+    return new Response(
+      `console.error('[Consent SDK] Error loading script: ${error.message}');`,
+      {
+        status: 500,
+        headers: { "Content-Type": "application/javascript" },
+      }
+    );
+  }
 }
