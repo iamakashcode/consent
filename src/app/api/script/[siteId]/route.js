@@ -3,7 +3,7 @@ import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES } from "@/lib/banner-templates"
 import { hasVerificationColumns } from "@/lib/db-utils";
 import { isSubscriptionActive } from "@/lib/subscription";
 
-// Generate AGGRESSIVE pre-execution blocker
+// Generate AGGRESSIVE pre-execution blocker with IMPROVEMENTS
 function generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiDomain) {
   const CONSENT_KEY = `cookie_consent_${siteId}`;
   
@@ -533,7 +533,7 @@ if(Element.prototype.prepend){
 }
 
 /* ======================================================
-   STEP 5: BLOCK EXISTING SCRIPTS IN DOM
+   STEP 5: BLOCK EXISTING SCRIPTS IN DOM - IMPROVED
 ====================================================== */
 function blockExistingTrackers(){
   if(hasConsent())return;
@@ -558,12 +558,27 @@ function blockExistingTrackers(){
     if(isTracker(src,code)){
       log('BLOCKED existing script: '+(src||'inline'));
       
+      // IMPROVED: Store complete script information including attributes
+      var attributes={};
+      if(s.attributes){
+        for(var j=0;j<s.attributes.length;j++){
+          var attr=s.attributes[j];
+          if(attr.name!=='src'&&attr.name!=='type'){
+            attributes[attr.name]=attr.value;
+          }
+        }
+      }
+      
       B.blocked.push({
         tag:'script',
         src:src,
         code:code,
         parent:s.parentNode,
-        next:s.nextSibling
+        next:s.nextSibling,
+        async:s.async,
+        defer:s.defer,
+        type:s.getAttribute('type'),
+        attributes:attributes
       });
       
       s.setAttribute('data-consent-blocked','true');
@@ -721,212 +736,377 @@ if(!hasConsent()){
 }
 
 /* ======================================================
-   STEP 8: ENABLE TRACKERS FUNCTION
+   STEP 8: ENABLE TRACKERS FUNCTION - FULLY IMPROVED
 ====================================================== */
 window.__enableConsentTrackers=function(){
   try{
-  log('__enableConsentTrackers called - starting enablement process');
-  window.__consentGiven=true;
-  
-  var B=window._cb;
-  if(!B){ log('Enable skipped: blocker not loaded'); return; }
-  if(!B.blocked)B.blocked=[];
-  
-  if(B.observer){
-    try{
-      B.observer.disconnect();
-      B.observer=null;
-      log('✓ MutationObserver disconnected');
-    }catch(e){}
-  }
-  
-  Object.defineProperty=_defineProperty;
-  Object.defineProperties=_defineProperties;
-  if(B._currentScriptDesc){
-    try{ Object.defineProperty(Document.prototype,'currentScript',B._currentScriptDesc); }catch(e){}
-  }
-  if(B._scriptSrcDesc){
-    try{ Object.defineProperty(HTMLScriptElement.prototype,'src',B._scriptSrcDesc); }catch(e){}
-  }
-  Element.prototype.setAttribute=_setAttribute;
-  document.createElement=_createElement;
-  Node.prototype.appendChild=_appendChild;
-  Node.prototype.insertBefore=_insertBefore;
-  if(_append)Element.prototype.append=_append;
-  if(_prepend)Element.prototype.prepend=_prepend;
-  window.fetch=_fetch;
-  XMLHttpRequest.prototype.open=_XHRopen;
-  XMLHttpRequest.prototype.send=_XHRsend;
-  navigator.sendBeacon=_sendBeacon;
-  window.Image=_Image;
-  Function.prototype.call=_origCall;
-  log('✓ All DOM/API overrides restored');
-  
-  var stubsToDelete=['fbq','_fbq','gtag','ga','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
-  for(var i=0;i<stubsToDelete.length;i++){
-    try{ 
-      delete window[stubsToDelete[i]]; 
-      log('✓ Deleted stub: '+stubsToDelete[i]);
-    }catch(e){ 
-      try{ window[stubsToDelete[i]]=undefined; }catch(e2){} 
+    log('__enableConsentTrackers called - starting enablement process');
+    window.__consentGiven=true;
+    
+    var B=window._cb;
+    if(!B){ 
+      log('Enable skipped: blocker not loaded'); 
+      return; 
     }
-  }
-  
-  if(window.dataLayer&&Array.isArray(window.dataLayer)){
-    try{
-      delete window.dataLayer.push;
-      log('✓ Restored dataLayer.push to native');
-    }catch(e){
-      window.dataLayer.push=Array.prototype.push;
+    if(!B.blocked)B.blocked=[];
+    
+    // Disconnect observer first
+    if(B.observer){
+      try{
+        B.observer.disconnect();
+        B.observer=null;
+        log('✓ MutationObserver disconnected');
+      }catch(e){}
     }
-  }
-  if(window._gaq&&Array.isArray(window._gaq)){
-    try{
-      delete window._gaq.push;
-      log('✓ Restored _gaq.push to native');
-    }catch(e){
-      window._gaq.push=Array.prototype.push;
+    
+    // Restore all overrides
+    Object.defineProperty=_defineProperty;
+    Object.defineProperties=_defineProperties;
+    if(B._currentScriptDesc){
+      try{ 
+        Object.defineProperty(Document.prototype,'currentScript',B._currentScriptDesc); 
+      }catch(e){}
     }
-  }
-  
-  var toRestore=[];
-  var seenUrls={};
-  
-  for(var j=0;j<B.blocked.length;j++){
-    var b=B.blocked[j];
-    if(b.tag==='script'&&b.src&&!seenUrls[b.src]){
-      toRestore.push({src:b.src,parent:b.parent,next:b.next});
-      seenUrls[b.src]=true;
+    if(B._scriptSrcDesc){
+      try{ 
+        Object.defineProperty(HTMLScriptElement.prototype,'src',B._scriptSrcDesc); 
+      }catch(e){}
     }
-  }
-  
-  var existingBlocked=document.querySelectorAll('script[data-blocked-src]');
-  for(var k=0;k<existingBlocked.length;k++){
-    var s=existingBlocked[k];
-    var blockedSrc=s.getAttribute('data-blocked-src');
-    if(blockedSrc&&!seenUrls[blockedSrc]){
-      toRestore.push({src:blockedSrc,parent:s.parentNode,next:s.nextSibling});
-      seenUrls[blockedSrc]=true;
+    Element.prototype.setAttribute=_setAttribute;
+    document.createElement=_createElement;
+    Node.prototype.appendChild=_appendChild;
+    Node.prototype.insertBefore=_insertBefore;
+    if(_append)Element.prototype.append=_append;
+    if(_prepend)Element.prototype.prepend=_prepend;
+    window.fetch=_fetch;
+    XMLHttpRequest.prototype.open=_XHRopen;
+    XMLHttpRequest.prototype.send=_XHRsend;
+    navigator.sendBeacon=_sendBeacon;
+    window.Image=_Image;
+    Function.prototype.call=_origCall;
+    log('✓ All DOM/API overrides restored');
+    
+    // Delete stubs completely
+    var stubsToDelete=['fbq','_fbq','gtag','ga','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
+    for(var i=0;i<stubsToDelete.length;i++){
+      try{ 
+        delete window[stubsToDelete[i]]; 
+        log('✓ Deleted stub: '+stubsToDelete[i]);
+      }catch(e){ 
+        try{ 
+          window[stubsToDelete[i]]=undefined; 
+        }catch(e2){} 
+      }
     }
-  }
-  
-  log('✓ Found '+toRestore.length+' unique script(s) to restore');
-  
-  var head=document.head||document.documentElement;
-  var scriptsToLoad=toRestore.length;
-  var scriptsLoaded=0;
-  
-  var trackerInitTriggered=false;
-  function triggerTrackerInit(){
-    scriptsLoaded++;
-    if(scriptsLoaded>=scriptsToLoad&&scriptsToLoad>0&&!trackerInitTriggered){
-      trackerInitTriggered=true;
-      var attempts=0;
-      var maxAttempts=25;
-      var fbqFired=false;
-      var gtagFired=false;
-      var gaFired=false;
-      var gtmFired=false;
+    
+    // Restore dataLayer.push
+    if(window.dataLayer&&Array.isArray(window.dataLayer)){
+      if(B._origDataLayerPush){
+        try{
+          Object.defineProperty(window.dataLayer,'push',{
+            value:B._origDataLayerPush,
+            writable:true,
+            configurable:true
+          });
+          log('✓ Restored dataLayer.push to original');
+        }catch(e){
+          window.dataLayer.push=B._origDataLayerPush;
+        }
+      }else{
+        try{
+          delete window.dataLayer.push;
+          log('✓ Restored dataLayer.push to native');
+        }catch(e){
+          window.dataLayer.push=Array.prototype.push;
+        }
+      }
+    }
+    
+    // Restore _gaq.push
+    if(window._gaq&&Array.isArray(window._gaq)){
+      if(B._origGaqPush){
+        try{
+          Object.defineProperty(window._gaq,'push',{
+            value:B._origGaqPush,
+            writable:true,
+            configurable:true
+          });
+          log('✓ Restored _gaq.push to original');
+        }catch(e){
+          window._gaq.push=B._origGaqPush;
+        }
+      }else{
+        try{
+          delete window._gaq.push;
+          log('✓ Restored _gaq.push to native');
+        }catch(e){
+          window._gaq.push=Array.prototype.push;
+        }
+      }
+    }
+    
+    // IMPROVEMENT: Trigger consent granted event BEFORE loading scripts
+    if(window.dataLayer&&Array.isArray(window.dataLayer)){
+      try{
+        window.dataLayer.push({
+          'event':'consent_granted',
+          'consent_type':'all'
+        });
+        log('✓ Pushed consent_granted to dataLayer');
+      }catch(e){}
+    }
+    
+    // Remove all blocked script tags from DOM
+    var existingBlocked=document.querySelectorAll('script[data-consent-blocked="true"]');
+    for(var k=0;k<existingBlocked.length;k++){
+      try{
+        existingBlocked[k].parentNode.removeChild(existingBlocked[k]);
+      }catch(e){}
+    }
+    log('✓ Removed '+existingBlocked.length+' blocked script tags from DOM');
+    
+    // IMPROVEMENT: Prepare scripts to restore (both external and inline)
+    var toRestore=[];
+    var seenUrls={};
+    
+    for(var j=0;j<B.blocked.length;j++){
+      var b=B.blocked[j];
+      if(b.tag==='script'){
+        if(b.src&&!seenUrls[b.src]){
+          toRestore.push({
+            type:'external',
+            src:b.src,
+            parent:b.parent,
+            next:b.next,
+            async:b.async,
+            defer:b.defer,
+            attributes:b.attributes
+          });
+          seenUrls[b.src]=true;
+        }else if(!b.src&&b.code){
+          // IMPROVEMENT: Restore inline scripts too
+          toRestore.push({
+            type:'inline',
+            code:b.code,
+            parent:b.parent,
+            next:b.next,
+            attributes:b.attributes
+          });
+        }
+      }
+    }
+    
+    log('✓ Found '+toRestore.length+' script(s) to restore');
+    
+    var head=document.head||document.documentElement;
+    var scriptsToLoad=toRestore.filter(function(s){return s.type==='external';}).length;
+    var scriptsLoaded=0;
+    var scriptsErrored=0;
+    
+    // IMPROVEMENT: Create a promise-based loader for better control
+    var scriptPromises=[];
+    
+    // Load external scripts first
+    for(var m=0;m<toRestore.length;m++){
+      var r=toRestore[m];
       
-      var attemptInterval=setInterval(function(){
-        attempts++;
-        var firedAny=false;
-        
-        if(window.dataLayer&&Array.isArray(window.dataLayer)){
-          try{
-            if(attempts===1){
-              window.dataLayer.push({'event':'consent-granted'});
-              window.dataLayer.push({'event':'gtm.js','gtm.start':Date.now()});
-              gtmFired=true;
-              log('✓ Triggered GTM/dataLayer');
-            }
-            firedAny=true;
-          }catch(e){}
-        }
-        
-        if(window.gtag&&typeof window.gtag==='function'){
-          try{
-            if(!gtagFired){
-              window.gtag('js',new Date());
-              gtagFired=true;
-              log('✓ Triggered gtag');
-            }
-            firedAny=true;
-          }catch(e){}
-        }
-        
-        if(window.fbq&&typeof window.fbq==='function'){
-          try{
-            if(!fbqFired||attempts<=5){
-              window.fbq('track','PageView');
-              if(!fbqFired){
-                fbqFired=true;
-                log('✓ Triggered fbq PageView');
+      if(r.type==='external'){
+        (function(scriptInfo){
+          var promise=new Promise(function(resolve,reject){
+            var el=document.createElement('script');
+            el.src=scriptInfo.src;
+            el.setAttribute('data-consent-restored','true');
+            
+            // IMPROVEMENT: Restore original attributes
+            if(scriptInfo.attributes){
+              for(var attr in scriptInfo.attributes){
+                try{
+                  el.setAttribute(attr,scriptInfo.attributes[attr]);
+                }catch(e){}
               }
             }
-            firedAny=true;
-          }catch(e){
-            if(attempts>=10&&!fbqFired){
-              log('⚠ fbq not ready after 10 attempts');
+            
+            // IMPROVEMENT: Preserve async/defer behavior
+            if(scriptInfo.async!==undefined)el.async=scriptInfo.async;
+            if(scriptInfo.defer!==undefined)el.defer=scriptInfo.defer;
+            
+            el.onload=function(){
+              scriptsLoaded++;
+              log('✓ Loaded: '+scriptInfo.src+' ('+scriptsLoaded+'/'+scriptsToLoad+')');
+              resolve();
+            };
+            
+            el.onerror=function(){
+              scriptsErrored++;
+              log('✗ Error loading: '+scriptInfo.src);
+              resolve(); // Still resolve to not block others
+            };
+            
+            try{
+              if(scriptInfo.parent&&scriptInfo.next&&
+                 scriptInfo.parent.contains&&scriptInfo.parent.contains(scriptInfo.next)){
+                scriptInfo.parent.insertBefore(el,scriptInfo.next);
+              }else if(scriptInfo.parent&&scriptInfo.parent.appendChild){
+                scriptInfo.parent.appendChild(el);
+              }else{
+                head.appendChild(el);
+              }
+            }catch(e){
+              head.appendChild(el);
             }
+          });
+          
+          scriptPromises.push(promise);
+        })(r);
+      }
+    }
+    
+    // IMPROVEMENT: Wait for all external scripts to load, then execute inline scripts
+    Promise.all(scriptPromises).then(function(){
+      log('✓ All external scripts loaded ('+scriptsLoaded+' success, '+scriptsErrored+' errors)');
+      
+      // IMPROVEMENT: Now execute inline scripts
+      for(var n=0;n<toRestore.length;n++){
+        var r=toRestore[n];
+        if(r.type==='inline'&&r.code){
+          try{
+            var inlineScript=document.createElement('script');
+            inlineScript.setAttribute('data-consent-restored','true');
+            
+            if(r.attributes){
+              for(var attr in r.attributes){
+                try{
+                  inlineScript.setAttribute(attr,r.attributes[attr]);
+                }catch(e){}
+              }
+            }
+            
+            inlineScript.textContent=r.code;
+            
+            if(r.parent&&r.next&&r.parent.contains(r.next)){
+              r.parent.insertBefore(inlineScript,r.next);
+            }else if(r.parent){
+              r.parent.appendChild(inlineScript);
+            }else{
+              head.appendChild(inlineScript);
+            }
+            
+            log('✓ Executed inline script');
+          }catch(e){
+            log('✗ Error executing inline script: '+e.message);
           }
         }
-        
-        if(window.ga&&typeof window.ga==='function'){
-          try{
-            if(!gaFired){
-              window.ga('send','pageview');
-              gaFired=true;
-              log('✓ Triggered ga pageview');
-            }
-            firedAny=true;
-          }catch(e){}
-        }
-        
-        if(attempts>=maxAttempts){
-          clearInterval(attemptInterval);
-          log('✓ Tracker initialization attempts complete');
-        }
-      },150);
-    }
-  }
-  
-  for(var m=0;m<toRestore.length;m++){
-    var r=toRestore[m];
-    var el=document.createElement('script');
-    el.src=r.src;
-    el.setAttribute('data-consent-restored','true');
-    el.async=false;
-    
-    (function(src){
-      el.onload=function(){ triggerTrackerInit(); };
-      el.onerror=function(){ triggerTrackerInit(); };
-    })(r.src);
-    
-    try{
-      if(r.parent&&r.next&&r.parent.contains&&r.parent.contains(r.next)){
-        r.parent.insertBefore(el,r.next);
-      }else if(r.parent&&r.parent.appendChild){
-        r.parent.appendChild(el);
-      }else{
-        head.appendChild(el);
       }
-      log('✓ Restored script: '+r.src);
-    }catch(e){
-      head.appendChild(el);
-      log('✓ Restored script (fallback): '+r.src);
-    }
-  }
-  
-  if(scriptsToLoad===0){
-    setTimeout(function(){
-      triggerTrackerInit();
-    },100);
-  }
-  
-  B.blocked=[];
-  log('✓ Trackers enabled - scripts are now loading and will initialize');
-  
+      
+      // IMPROVEMENT: More aggressive tracker initialization with longer attempts
+      setTimeout(function(){
+        var attempts=0;
+        var maxAttempts=50; // IMPROVEMENT: Increased from 25
+        var checkInterval=100; // IMPROVEMENT: Check every 100ms
+        
+        var trackerStatus={
+          fbq:false,
+          gtag:false,
+          ga:false,
+          gtm:false
+        };
+        
+        var attemptInterval=setInterval(function(){
+          attempts++;
+          var allReady=true;
+          
+          // Check and initialize GTM/dataLayer
+          if(!trackerStatus.gtm&&window.dataLayer&&Array.isArray(window.dataLayer)){
+            try{
+              window.dataLayer.push({
+                'event':'gtm.js',
+                'gtm.start':Date.now()
+              });
+              window.dataLayer.push({
+                'event':'consent_update',
+                'consent_type':'all'
+              });
+              trackerStatus.gtm=true;
+              log('✓ Initialized GTM/dataLayer');
+            }catch(e){
+              allReady=false;
+            }
+          }
+          
+          // Check and initialize gtag
+          if(!trackerStatus.gtag&&window.gtag&&typeof window.gtag==='function'){
+            try{
+              window.gtag('js',new Date());
+              // IMPROVEMENT: Trigger consent mode update
+              window.gtag('consent','update',{
+                'analytics_storage':'granted',
+                'ad_storage':'granted',
+                'ad_user_data':'granted',
+                'ad_personalization':'granted'
+              });
+              trackerStatus.gtag=true;
+              log('✓ Initialized gtag');
+            }catch(e){
+              allReady=false;
+            }
+          }
+          
+          // Check and initialize Facebook Pixel
+          if(!trackerStatus.fbq&&window.fbq&&typeof window.fbq==='function'){
+            try{
+              // IMPROVEMENT: Check if it's the real fbq (not our stub)
+              if(window.fbq.loaded===true||window.fbq.version==='2.9'||
+                 (window.fbq.callMethod&&window.fbq.callMethod!==noop)){
+                window.fbq('track','PageView');
+                // IMPROVEMENT: Grant consent
+                if(window.fbq.consent){
+                  window.fbq('consent','grant');
+                }
+                trackerStatus.fbq=true;
+                log('✓ Initialized fbq');
+              }else{
+                allReady=false;
+              }
+            }catch(e){
+              allReady=false;
+            }
+          }
+          
+          // Check and initialize Google Analytics
+          if(!trackerStatus.ga&&window.ga&&typeof window.ga==='function'){
+            try{
+              window.ga('send','pageview');
+              trackerStatus.ga=true;
+              log('✓ Initialized ga');
+            }catch(e){
+              allReady=false;
+            }
+          }
+          
+          // Stop if all trackers initialized or max attempts reached
+          if(allReady||attempts>=maxAttempts){
+            clearInterval(attemptInterval);
+            log('✓ Tracker initialization complete (attempts: '+attempts+')');
+            
+            // IMPROVEMENT: Fire a custom event that trackers can listen to
+            try{
+              var event=new CustomEvent('consentflow_trackers_ready',{
+                detail:{trackerStatus:trackerStatus}
+              });
+              window.dispatchEvent(event);
+              log('✓ Dispatched consentflow_trackers_ready event');
+            }catch(e){}
+          }
+        },checkInterval);
+      },200); // IMPROVEMENT: Increased initial delay to 200ms
+      
+    }).catch(function(err){
+      log('✗ Error in script loading: '+err.message);
+    });
+    
+    B.blocked=[];
+    log('✓ Enablement process started');
+    
   }catch(err){
     console.error('[ConsentFlow] __enableConsentTrackers error:',err);
   }
