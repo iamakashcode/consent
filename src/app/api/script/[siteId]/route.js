@@ -813,12 +813,48 @@ window.__enableConsentTrackers=function(){
   log('✓ Found '+toRestore.length+' unique script(s) to restore');
   
   var head=document.head||document.documentElement;
+  var scriptsToLoad=toRestore.length;
+  var scriptsLoaded=0;
+  
+  function triggerTrackerInit(){
+    scriptsLoaded++;
+    if(scriptsLoaded>=scriptsToLoad&&scriptsToLoad>0){
+      setTimeout(function(){
+        if(window.dataLayer&&Array.isArray(window.dataLayer)){
+          try{
+            window.dataLayer.push({'event':'consent-granted'});
+            window.dataLayer.push({'event':'gtm.js','gtm.start':Date.now()});
+            log('✓ Triggered GTM/dataLayer initialization');
+          }catch(e){}
+        }
+        if(window.gtag&&typeof window.gtag==='function'){
+          try{
+            window.gtag('js',new Date());
+            log('✓ Triggered gtag initialization');
+          }catch(e){}
+        }
+        if(window.fbq&&typeof window.fbq==='function'){
+          try{
+            window.fbq('track','PageView');
+            log('✓ Triggered fbq PageView');
+          }catch(e){}
+        }
+        log('✓ All trackers initialized and firing');
+      },100);
+    }
+  }
+  
   for(var m=0;m<toRestore.length;m++){
     var r=toRestore[m];
     var el=document.createElement('script');
     el.src=r.src;
     el.setAttribute('data-consent-restored','true');
     el.async=false;
+    
+    (function(src){
+      el.onload=function(){ triggerTrackerInit(); };
+      el.onerror=function(){ triggerTrackerInit(); };
+    })(r.src);
     
     try{
       if(r.parent&&r.next&&r.parent.contains&&r.parent.contains(r.next)){
@@ -833,6 +869,10 @@ window.__enableConsentTrackers=function(){
       head.appendChild(el);
       log('✓ Restored script (fallback): '+r.src);
     }
+  }
+  
+  if(scriptsToLoad===0){
+    triggerTrackerInit();
   }
   
   B.blocked=[];
