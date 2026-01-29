@@ -280,10 +280,11 @@ function BannerContent() {
   const getInstallCode = () => {
     if (!selectedSite) return "";
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+    // Use CDN URL instead of API URL for production scripts
     return [
       "<!-- CRITICAL: Place this script FIRST in <head>, BEFORE any Meta Pixel, Google Analytics, or other tracker scripts -->",
       "<!-- Start ConsentFlow banner -->",
-      `<script id="consentflow" src="${baseUrl}/api/script/${selectedSite.siteId}?domain=${encodeURIComponent(selectedSite.domain)}"></script>`,
+      `<script id="consentflow" src="${baseUrl}/cdn/sites/${selectedSite.siteId}/script.js"></script>`,
       "<!-- End ConsentFlow banner -->",
       "<!-- Example: Place ConsentFlow script BEFORE Meta Pixel -->",
       "<!-- <script id=\"consentflow\" src=\"...\"></script> -->",

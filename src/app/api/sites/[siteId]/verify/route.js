@@ -177,7 +177,8 @@ export async function POST(req, { params }) {
       // Get base URL for script
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
         (req.headers.get("origin") || `http://${req.headers.get("host")}`);
-      const scriptUrl = `${baseUrl}/api/script/${site.siteId}?domain=${encodeURIComponent(site.domain)}`;
+      // Use CDN URL for production scripts
+      const scriptUrl = `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
       
       return Response.json({
         verified: false,
@@ -391,7 +392,8 @@ export async function GET(req, { params }) {
     // Get script URL
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
       (req.headers.get("origin") || `http://${req.headers.get("host")}`);
-    const scriptUrl = `${baseUrl}/api/script/${siteId}?domain=${encodeURIComponent(site.domain)}`;
+    // Use CDN URL for production scripts
+    const scriptUrl = `${baseUrl}/cdn/sites/${siteId}/script.js`;
 
     return Response.json({
       isVerified: effectiveIsVerified,

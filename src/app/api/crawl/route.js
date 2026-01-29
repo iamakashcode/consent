@@ -205,7 +205,8 @@ export async function POST(req) {
       req.headers.get("origin") ||
       `http://${req.headers.get("host")}`;
 
-    const scriptUrl = `${baseUrl}/api/script/${site.siteId}?domain=${encodeURIComponent(cleanDomain)}`;
+    // Use CDN URL for production scripts
+    const scriptUrl = `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
 
     // Check if site has a subscription
     const hasSubscription = !!site.subscription;
