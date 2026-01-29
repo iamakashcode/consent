@@ -842,19 +842,21 @@ window.__enableConsentTrackers=function(){
     }
   }
   
-  // Delete tracker stubs so real tracker scripts can define them when they load
-  var propsToRemove=['fbq','_fbq','gtag','ga','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
-  for(var i=0;i<propsToRemove.length;i++){
-    var prop=propsToRemove[i];
-    try{
-      var deleted=delete window[prop];
-      if(deleted)log('Removed stub: '+prop);
-    }catch(e){
-      try{
-        window[prop]=undefined;
-        log('Cleared stub: '+prop);
-      }catch(e2){}
-    }
+  // Replace main tracker stubs with queueing proxies so calls made before restored
+  // scripts load are replayed once the real fbq/gtag/ga are defined (fixes trackers
+  // not enabling until reload).
+  B._fbqQueue=[]; B._gtagQueue=[]; B._gaQueue=[];
+  B._fbqProxy=function(){ B._fbqQueue.push([].slice.call(arguments)); };
+  B._gtagProxy=function(){ B._gtagQueue.push([].slice.call(arguments)); };
+  B._gaProxy=function(){ B._gaQueue.push([].slice.call(arguments)); };
+  try{ window.fbq=B._fbqProxy; window._fbq=B._fbqProxy; }catch(e){}
+  try{ window.gtag=B._gtagProxy; }catch(e){}
+  try{ window.ga=B._gaProxy; }catch(e){}
+  log('Installed queueing proxies for fbq, gtag, ga');
+  // Clear other stubs so real scripts can define them when they load
+  var otherProps=['analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
+  for(var i=0;i<otherProps.length;i++){
+    try{ delete window[otherProps[i]]; }catch(e){ try{ window[otherProps[i]]=undefined; }catch(e2){} }
   }
   
   // Collect all script URLs to restore: from B.blocked and from DOM (data-blocked-src)
@@ -894,6 +896,35 @@ window.__enableConsentTrackers=function(){
   }
   
   B.blocked=[];
+  
+  // Replay queued fbq/gtag/ga calls once real implementations load (restored scripts load async)
+  var replayStart=Date.now();
+  var replayMax=10000;
+  var replayIv=setInterval(function(){
+    var now=Date.now();
+    if(now-replayStart>replayMax){
+      clearInterval(replayIv);
+      return;
+    }
+    var didReplay=false;
+    if(window.fbq&&window.fbq!==B._fbqProxy&&B._fbqQueue.length){
+      while(B._fbqQueue.length){ try{ window.fbq.apply(null,B._fbqQueue.shift()); }catch(e){} }
+      didReplay=true;
+    }
+    if(window.gtag&&window.gtag!==B._gtagProxy&&B._gtagQueue.length){
+      while(B._gtagQueue.length){ try{ window.gtag.apply(null,B._gtagQueue.shift()); }catch(e){} }
+      didReplay=true;
+    }
+    if(window.ga&&window.ga!==B._gaProxy&&B._gaQueue.length){
+      while(B._gaQueue.length){ try{ window.ga.apply(null,B._gaQueue.shift()); }catch(e){} }
+      didReplay=true;
+    }
+    if(didReplay)log('Replayed queued tracker calls');
+    if(B._fbqQueue.length===0&&B._gtagQueue.length===0&&B._gaQueue.length===0){
+      clearInterval(replayIv);
+    }
+  },50);
+  
   log('Trackers enabled - trackers can now initialize');
 };
 
