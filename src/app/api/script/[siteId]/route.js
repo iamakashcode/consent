@@ -24,25 +24,15 @@ var DEBUG=true;
 window.__consentGiven=false;
 
 var TRACKER_PATTERNS=[
-  // Google
   'google-analytics','googletagmanager','gtag/js','gtag','analytics.js','ga.js','/gtm.js','google.com/pagead','googleadservices','googlesyndication','doubleclick',
-  // Meta/Facebook
   'facebook.net','facebook.com/tr','fbevents.js','connect.facebook','facebook.com','fbcdn.net','fbstatic','facebook',
-  // Microsoft
   'clarity.ms','bing.com/bat',
-  // Other trackers
   'hotjar','static.hotjar','mixpanel','amplitude','segment','segment.io','heapanalytics','fullstory','mouseflow','crazyegg','lucky-orange','inspectlet','logrocket',
-  // Twitter/X
   'analytics.twitter','static.ads-twitter','t.co/i/adsct',
-  // LinkedIn
   'snap.licdn','linkedin.com/px','ads.linkedin',
-  // TikTok
   'analytics.tiktok','tiktok.com/i18n',
-  // Pinterest
   'pintrk','ct.pinterest',
-  // Snapchat
   'sc-static.net','tr.snapchat',
-  // Generic patterns
   '/pixel','/beacon','/collect','/track','/analytics','/event','/conversion'
 ];
 
@@ -65,7 +55,10 @@ function hasConsent(){
   if(window.__consentGiven===true)return true;
   try{
     var consent=localStorage.getItem(CONSENT_KEY)==='accepted';
-    if(consent&&!window.__consentGiven)window.__consentGiven=true;
+    if(consent&&!window.__consentGiven){
+      window.__consentGiven=true;
+      log('Consent detected in localStorage - flag set');
+    }
     return consent;
   }catch(e){
     return false;
@@ -121,7 +114,6 @@ B.blocked=[];
 B._currentScriptDesc=null;
 B._scriptSrcDesc=null;
 
-// Store ALL originals IMMEDIATELY before any overrides
 var _setAttribute=Element.prototype.setAttribute;
 var _createElement=document.createElement;
 var _appendChild=Node.prototype.appendChild;
@@ -144,15 +136,12 @@ var _insertAdjacentElement=Element.prototype.insertAdjacentElement;
 var _insertAdjacentHTML=Element.prototype.insertAdjacentHTML;
 var _origCall=Function.prototype.call;
 
-// Store for later restoration
 B._origCall=_origCall;
 
 /* ======================================================
-   STEP 1: CREATE PROPER TRACKER STUBS (CookieYes-style)
-   This must happen BEFORE any tracker scripts load
+   STEP 1: CREATE PROPER TRACKER STUBS
 ====================================================== */
 
-// Create fbq stub with ALL required properties
 var fbqStub=function(){
   log('fbq() call blocked');
   return undefined;
@@ -169,7 +158,6 @@ fbqStub.init=noop;
 fbqStub.set=noop;
 fbqStub['delete']=noop;
 
-// Set fbq - MUST be configurable so we can delete when user accepts consent
 try{
   delete window.fbq;
 }catch(e){}
@@ -177,15 +165,12 @@ window.fbq=fbqStub;
 try{
   Object.defineProperty(window,'fbq',{
     value:fbqStub,
-    writable:false,
+    writable:true,
     configurable:true,
     enumerable:true
   });
-}catch(e){
-  // Already set - that's okay
-}
+}catch(e){}
 
-// Set _fbq
 var _fbqStub=noop;
 try{
   delete window._fbq;
@@ -194,13 +179,12 @@ window._fbq=_fbqStub;
 try{
   Object.defineProperty(window,'_fbq',{
     value:_fbqStub,
-    writable:false,
+    writable:true,
     configurable:true,
     enumerable:true
   });
 }catch(e){}
 
-// Set gtag
 var gtagStub=function(){
   log('gtag() call blocked');
   return undefined;
@@ -212,13 +196,12 @@ window.gtag=gtagStub;
 try{
   Object.defineProperty(window,'gtag',{
     value:gtagStub,
-    writable:false,
+    writable:true,
     configurable:true,
     enumerable:true
   });
 }catch(e){}
 
-// Set ga
 var gaStub=noop;
 try{
   delete window.ga;
@@ -227,50 +210,66 @@ window.ga=gaStub;
 try{
   Object.defineProperty(window,'ga',{
     value:gaStub,
-    writable:false,
+    writable:true,
     configurable:true,
     enumerable:true
   });
 }catch(e){}
 
-// Set dataLayer with blocked push - STORE ORIGINAL FIRST
 if(!window.dataLayer||!Array.isArray(window.dataLayer)){
   window.dataLayer=[];
 }
-// Store original push if it exists and is a function
 B._origDataLayerPush=window.dataLayer.push&&typeof window.dataLayer.push==='function'?window.dataLayer.push:Array.prototype.push;
-// MUST use configurable:true so we can restore push when user accepts consent
 try{
   Object.defineProperty(window.dataLayer,'push',{
     value:function(){
+      if(hasConsent()){
+        var origPush=B._origDataLayerPush||Array.prototype.push;
+        return origPush.apply(this,arguments);
+      }
       log('dataLayer.push() blocked');
       return 0;
     },
-    writable:false,
+    writable:true,
     configurable:true
   });
 }catch(e){
   window.dataLayer.push=function(){
+    if(hasConsent()){
+      var origPush=B._origDataLayerPush||Array.prototype.push;
+      return origPush.apply(this,arguments);
+    }
     log('dataLayer.push() blocked');
     return 0;
   };
 }
 
-// Set other tracker stubs - STORE ORIGINAL FIRST
 if(!window._gaq||!Array.isArray(window._gaq)){
   window._gaq=[];
 }
-// Store original push if it exists and is a function
 B._origGaqPush=window._gaq.push&&typeof window._gaq.push==='function'?window._gaq.push:Array.prototype.push;
-// MUST use configurable:true so we can restore push when user accepts consent
 try{
   Object.defineProperty(window._gaq,'push',{
-    value:function(){log('_gaq.push() blocked');return 0;},
-    writable:false,
+    value:function(){
+      if(hasConsent()){
+        var origPush=B._origGaqPush||Array.prototype.push;
+        return origPush.apply(this,arguments);
+      }
+      log('_gaq.push() blocked');
+      return 0;
+    },
+    writable:true,
     configurable:true
   });
 }catch(e){
-  window._gaq.push=function(){log('_gaq.push() blocked');return 0;};
+  window._gaq.push=function(){
+    if(hasConsent()){
+      var origPush=B._origGaqPush||Array.prototype.push;
+      return origPush.apply(this,arguments);
+    }
+    log('_gaq.push() blocked');
+    return 0;
+  };
 }
 
 window.analytics={track:noop,page:noop,identify:noop,alias:noop,ready:noop,reset:noop};
@@ -289,11 +288,9 @@ log('Global tracker stubs initialized');
 
 /* ======================================================
    STEP 2: INTERCEPT Function.prototype.call
-   This catches fbq('track', 'PageView') style calls
 ====================================================== */
 if(!hasConsent()){
   Function.prototype.call=function(){
-    // Check if this function is a blocked tracker
     if(this===window.fbq||this===window._fbq||this===window.gtag||this===window.ga){
       log('Function.call blocked for tracker');
       return undefined;
@@ -305,7 +302,6 @@ if(!hasConsent()){
 
 /* ======================================================
    STEP 3: OVERRIDE Object.defineProperty
-   Prevents trackers from redefining our stubs
 ====================================================== */
 Object.defineProperty=function(obj,prop,desc){
   if((obj===window||obj===globalThis)&&!hasConsent()){
@@ -335,7 +331,6 @@ Object.defineProperties=function(obj,props){
    STEP 4: OVERRIDE SCRIPT CREATION & INSERTION
 ====================================================== */
 
-// Override document.currentScript
 B._currentScriptDesc=Object.getOwnPropertyDescriptor(Document.prototype,'currentScript');
 if(B._currentScriptDesc&&B._currentScriptDesc.get){
   Object.defineProperty(Document.prototype,'currentScript',{
@@ -355,7 +350,6 @@ if(B._currentScriptDesc&&B._currentScriptDesc.get){
   });
 }
 
-// Override HTMLScriptElement.prototype.src
 B._scriptSrcDesc=Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,'src');
 if(B._scriptSrcDesc){
   Object.defineProperty(HTMLScriptElement.prototype,'src',{
@@ -378,7 +372,6 @@ if(B._scriptSrcDesc){
   });
 }
 
-// Override Element.prototype.setAttribute
 Element.prototype.setAttribute=function(name,value){
   if(!hasConsent()&&this.tagName==='SCRIPT'&&name==='src'&&isTrackerUrl(value)&&!isEssential(this)){
     log('BLOCKED setAttribute src: '+value);
@@ -391,13 +384,11 @@ Element.prototype.setAttribute=function(name,value){
   return _setAttribute.call(this,name,value);
 };
 
-// Override document.createElement
 document.createElement=function(tag,opts){
   var el=_createElement.call(document,tag,opts);
   var t=(tag||'').toLowerCase();
   
   if(t==='script'&&!hasConsent()){
-    // Override src setter on this specific element
     var srcDesc=Object.getOwnPropertyDescriptor(el,'src')||{};
     Object.defineProperty(el,'src',{
       set:function(url){
@@ -415,7 +406,6 @@ document.createElement=function(tag,opts){
       configurable:true
     });
     
-    // Override textContent for inline scripts
     var origTextContent=Object.getOwnPropertyDescriptor(Node.prototype,'textContent');
     if(origTextContent){
       Object.defineProperty(el,'textContent',{
@@ -438,7 +428,6 @@ document.createElement=function(tag,opts){
   return el;
 };
 
-// Override Node.prototype.appendChild
 Node.prototype.appendChild=function(child){
   if(child&&child.nodeType===1&&!hasConsent()){
     var tag=(child.tagName||'').toLowerCase();
@@ -458,7 +447,6 @@ Node.prototype.appendChild=function(child){
             child.innerHTML='';
           }catch(e){}
         }
-        // Return child but don't actually append
         return child;
       }
     }
@@ -466,7 +454,6 @@ Node.prototype.appendChild=function(child){
   return _appendChild.call(this,child);
 };
 
-// Override Node.prototype.insertBefore
 Node.prototype.insertBefore=function(newNode,refNode){
   if(newNode&&newNode.nodeType===1&&!hasConsent()){
     var tag=(newNode.tagName||'').toLowerCase();
@@ -493,7 +480,6 @@ Node.prototype.insertBefore=function(newNode,refNode){
   return _insertBefore.call(this,newNode,refNode);
 };
 
-// Override other insertion methods
 if(Element.prototype.append){
   Element.prototype.append=function(){
     if(hasConsent()){
@@ -552,7 +538,6 @@ if(Element.prototype.prepend){
 function blockExistingTrackers(){
   if(hasConsent())return;
   
-  // Wait for document to exist
   if(typeof document==='undefined'||!document.getElementsByTagName){
     setTimeout(blockExistingTrackers,10);
     return;
@@ -564,7 +549,6 @@ function blockExistingTrackers(){
   for(var i=0;i<scripts.length;i++){
     var s=scripts[i];
     
-    // Skip if already processed or essential
     if(s.dataset&&s.dataset.consentBlocked==='true')continue;
     if(isEssential(s))continue;
     
@@ -574,7 +558,6 @@ function blockExistingTrackers(){
     if(isTracker(src,code)){
       log('BLOCKED existing script: '+(src||'inline'));
       
-      // Store for later
       B.blocked.push({
         tag:'script',
         src:src,
@@ -583,12 +566,10 @@ function blockExistingTrackers(){
         next:s.nextSibling
       });
       
-      // Mark as blocked (data-blocked-src so __enableConsentTrackers can find by DOM)
       s.setAttribute('data-consent-blocked','true');
       if(src)s.setAttribute('data-blocked-src',src);
       s.type='javascript/blocked';
       
-      // Clear content to prevent execution
       try{
         s.removeAttribute('src');
         s.textContent='';
@@ -604,19 +585,16 @@ function blockExistingTrackers(){
   }
 }
 
-// Run blocking at multiple stages
 if(typeof document!=='undefined'){
   blockExistingTrackers();
 }
 
-// Run again after small delays to catch late-loading scripts
 setTimeout(blockExistingTrackers,0);
 setTimeout(blockExistingTrackers,1);
 setTimeout(blockExistingTrackers,10);
 setTimeout(blockExistingTrackers,50);
 setTimeout(blockExistingTrackers,100);
 
-// Run on DOM ready
 if(typeof document!=='undefined'){
   if(document.readyState==='loading'){
     document.addEventListener('DOMContentLoaded',blockExistingTrackers);
@@ -653,7 +631,6 @@ if(typeof MutationObserver!=='undefined'&&!hasConsent()){
               }catch(e){}
             }
             
-            // Remove from DOM
             if(node.parentNode){
               node.parentNode.removeChild(node);
             }
@@ -665,7 +642,6 @@ if(typeof MutationObserver!=='undefined'&&!hasConsent()){
     });
   });
   
-  // Start observing
   if(typeof document!=='undefined'&&document.documentElement){
     try{
       B.observer.observe(document.documentElement,{
@@ -683,7 +659,6 @@ if(typeof MutationObserver!=='undefined'&&!hasConsent()){
    STEP 7: BLOCK NETWORK REQUESTS
 ====================================================== */
 if(!hasConsent()){
-  // Block fetch
   window.fetch=function(input,init){
     if(hasConsent())return _fetch.apply(window,arguments);
     var url=typeof input==='string'?input:(input&&input.url?input.url:'');
@@ -694,7 +669,6 @@ if(!hasConsent()){
     return _fetch.apply(window,arguments);
   };
   
-  // Block XMLHttpRequest
   XMLHttpRequest.prototype.open=function(method,url){
     this._blockedUrl=null;
     if(!hasConsent()&&url&&isTrackerUrl(url)&&!isFirstParty(url)){
@@ -713,7 +687,6 @@ if(!hasConsent()){
     return _XHRsend.apply(this,arguments);
   };
   
-  // Block sendBeacon
   navigator.sendBeacon=function(url,data){
     if(hasConsent())return _sendBeacon.apply(navigator,arguments);
     if(url&&isTrackerUrl(url)&&!isFirstParty(url)){
@@ -723,7 +696,6 @@ if(!hasConsent()){
     return _sendBeacon.apply(navigator,arguments);
   };
   
-  // Block Image pixels
   window.Image=function(w,h){
     var img=new _Image(w,h);
     var origSrcDesc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
@@ -753,79 +725,21 @@ if(!hasConsent()){
 ====================================================== */
 window.__enableConsentTrackers=function(){
   try{
+  log('__enableConsentTrackers called - starting enablement process');
   window.__consentGiven=true;
+  
   var B=window._cb;
   if(!B){ log('Enable skipped: blocker not loaded'); return; }
   if(!B.blocked)B.blocked=[];
-  if(typeof CONSENT_KEY!=='undefined'&&localStorage.getItem(CONSENT_KEY)!=='accepted'){
-    log('Enable skipped: consent not accepted');
-    return;
-  }
-  log('Enabling trackers...');
   
-  // STEP 1: Disconnect MutationObserver FIRST so it does not interfere with restoration
   if(B.observer){
     try{
       B.observer.disconnect();
       B.observer=null;
-      log('MutationObserver disconnected (first step)');
+      log('✓ MutationObserver disconnected');
     }catch(e){}
   }
   
-  // STEP 2: Restore dataLayer.push and _gaq.push IMMEDIATELY - before any script restoration
-  // GTM and ga() need native push() to be functional before their scripts load
-  if(window.dataLayer&&Array.isArray(window.dataLayer)){
-    var dataLayerPush=B._origDataLayerPush===Array.prototype.push?Array.prototype.push:B._origDataLayerPush;
-    var restored=false;
-    try{
-      Object.defineProperty(window.dataLayer,'push',{
-        value:dataLayerPush,
-        writable:true,
-        configurable:true,
-        enumerable:true
-      });
-      restored=true;
-      log('Restored dataLayer.push (before script load)');
-    }catch(e){}
-    if(!restored){
-      try{
-        window.dataLayer.push=dataLayerPush;
-        restored=true;
-        log('Restored dataLayer.push (direct)');
-      }catch(e2){}
-    }
-    if(!restored){
-      var existing=[].slice.call(window.dataLayer);
-      window.dataLayer=existing;
-      log('Restored dataLayer (new array with native push)');
-    }
-  }
-  if(window._gaq&&Array.isArray(window._gaq)){
-    var gaqPush=B._origGaqPush===Array.prototype.push?Array.prototype.push:B._origGaqPush;
-    var restoredGaq=false;
-    try{
-      Object.defineProperty(window._gaq,'push',{
-        value:gaqPush,
-        writable:true,
-        configurable:true,
-        enumerable:true
-      });
-      restoredGaq=true;
-      log('Restored _gaq.push (before script load)');
-    }catch(e){}
-    if(!restoredGaq){
-      try{
-        window._gaq.push=gaqPush;
-        restoredGaq=true;
-      }catch(e2){}
-    }
-    if(!restoredGaq){
-      var existingGaq=[].slice.call(window._gaq);
-      window._gaq=existingGaq;
-    }
-  }
-  
-  // STEP 3: Restore all other originals (APIs, DOM, etc.)
   Object.defineProperty=_defineProperty;
   Object.defineProperties=_defineProperties;
   if(B._currentScriptDesc){
@@ -846,86 +760,66 @@ window.__enableConsentTrackers=function(){
   navigator.sendBeacon=_sendBeacon;
   window.Image=_Image;
   Function.prototype.call=_origCall;
+  log('✓ All DOM/API overrides restored');
   
-  // STEP 4: Replace main tracker stubs with queueing proxies
-  B._fbqQueue=[]; B._gtagQueue=[]; B._gaQueue=[];
-  B._fbqProxy=function(){ B._fbqQueue.push([].slice.call(arguments)); };
-  B._gtagProxy=function(){ B._gtagQueue.push([].slice.call(arguments)); };
-  B._gaProxy=function(){ B._gaQueue.push([].slice.call(arguments)); };
-  try{ window.fbq=B._fbqProxy; window._fbq=B._fbqProxy; }catch(e){}
-  try{ window.gtag=B._gtagProxy; }catch(e){}
-  try{ window.ga=B._gaProxy; }catch(e){}
-  log('Installed queueing proxies for fbq, gtag, ga');
-  var otherProps=['analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
-  for(var i=0;i<otherProps.length;i++){
-    try{ delete window[otherProps[i]]; }catch(e){ try{ window[otherProps[i]]=undefined; }catch(e2){} }
+  var stubsToDelete=['fbq','_fbq','gtag','ga','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
+  for(var i=0;i<stubsToDelete.length;i++){
+    try{ 
+      delete window[stubsToDelete[i]]; 
+      log('✓ Deleted stub: '+stubsToDelete[i]);
+    }catch(e){ 
+      try{ window[stubsToDelete[i]]=undefined; }catch(e2){} 
+    }
   }
   
-  // Define replay so it exists before any restored script onload fires.
-  // Use loose checks: any function that replaced our proxy is treated as real (no .version/.queue requirement).
-  function doReplay(){
-    var didReplay=false;
-    if(B._fbqQueue.length&&window.fbq&&window.fbq!==B._fbqProxy&&typeof window.fbq==='function'){
-      log('Real fbq detected'+(window.fbq.version ? ' v'+window.fbq.version : '')+' - replaying '+B._fbqQueue.length+' queued call(s)');
-      while(B._fbqQueue.length){ try{ window.fbq.apply(null,B._fbqQueue.shift()); }catch(e){} }
-      didReplay=true;
+  if(window.dataLayer&&Array.isArray(window.dataLayer)){
+    try{
+      delete window.dataLayer.push;
+      log('✓ Restored dataLayer.push to native');
+    }catch(e){
+      window.dataLayer.push=Array.prototype.push;
     }
-    if(B._gtagQueue.length&&window.gtag&&window.gtag!==B._gtagProxy&&typeof window.gtag==='function'){
-      log('Real gtag detected - replaying '+B._gtagQueue.length+' queued call(s)');
-      while(B._gtagQueue.length){ try{ window.gtag.apply(null,B._gtagQueue.shift()); }catch(e){} }
-      didReplay=true;
-    }
-    if(B._gaQueue.length&&window.ga&&window.ga!==B._gaProxy&&typeof window.ga==='function'){
-      log('Real ga detected - replaying '+B._gaQueue.length+' queued call(s)');
-      while(B._gaQueue.length){ try{ window.ga.apply(null,B._gaQueue.shift()); }catch(e){} }
-      didReplay=true;
-    }
-    return didReplay;
   }
-  window.__replayConsentQueues=function(){
-    log('Manual __replayConsentQueues called');
-    return doReplay();
-  };
+  if(window._gaq&&Array.isArray(window._gaq)){
+    try{
+      delete window._gaq.push;
+      log('✓ Restored _gaq.push to native');
+    }catch(e){
+      window._gaq.push=Array.prototype.push;
+    }
+  }
   
-  // STEP 5: Collect script URLs to restore
   var toRestore=[];
-  for(var i=0;i<B.blocked.length;i++){
-    var b=B.blocked[i];
-    if(b.tag==='script'&&b.src)toRestore.push({src:b.src,parent:b.parent,next:b.next});
-  }
-  var existingBlocked=document.querySelectorAll('script[data-blocked-src]');
-  for(var j=0;j<existingBlocked.length;j++){
-    var s=existingBlocked[j];
-    var blockedSrc=s.getAttribute('data-blocked-src');
-    if(blockedSrc&&!toRestore.some(function(r){return r.src===blockedSrc;})){
-      toRestore.push({src:blockedSrc,parent:s.parentNode,next:s.nextSibling});
+  var seenUrls={};
+  
+  for(var j=0;j<B.blocked.length;j++){
+    var b=B.blocked[j];
+    if(b.tag==='script'&&b.src&&!seenUrls[b.src]){
+      toRestore.push({src:b.src,parent:b.parent,next:b.next});
+      seenUrls[b.src]=true;
     }
   }
   
-  // STEP 6: Restore scripts with async=true and load/error listeners; track load count
-  var head=document.head||document.documentElement;
-  var totalToRestore=toRestore.length;
-  var loadedCount=0;
-  function onScriptLoaded(src){
-    loadedCount++;
-    log('Restored script loaded: '+src+' (Loaded '+loadedCount+'/'+totalToRestore+' restored scripts)');
-    if(loadedCount>=totalToRestore&&totalToRestore>0){
-      log('All restored scripts loaded - triggering replay after 150ms (let script execution finish)');
-      setTimeout(function(){
-        if(window.__replayConsentQueues)window.__replayConsentQueues();
-      },150);
+  var existingBlocked=document.querySelectorAll('script[data-blocked-src]');
+  for(var k=0;k<existingBlocked.length;k++){
+    var s=existingBlocked[k];
+    var blockedSrc=s.getAttribute('data-blocked-src');
+    if(blockedSrc&&!seenUrls[blockedSrc]){
+      toRestore.push({src:blockedSrc,parent:s.parentNode,next:s.nextSibling});
+      seenUrls[blockedSrc]=true;
     }
   }
-  for(var k=0;k<toRestore.length;k++){
-    var r=toRestore[k];
+  
+  log('✓ Found '+toRestore.length+' unique script(s) to restore');
+  
+  var head=document.head||document.documentElement;
+  for(var m=0;m<toRestore.length;m++){
+    var r=toRestore[m];
     var el=document.createElement('script');
     el.src=r.src;
     el.setAttribute('data-consent-restored','true');
-    el.async=true;
-    (function(src){
-      el.onload=function(){ onScriptLoaded(src); };
-      el.onerror=function(){ log('Restored script failed: '+src); };
-    })(r.src);
+    el.async=false;
+    
     try{
       if(r.parent&&r.next&&r.parent.contains&&r.parent.contains(r.next)){
         r.parent.insertBefore(el,r.next);
@@ -934,34 +828,16 @@ window.__enableConsentTrackers=function(){
       }else{
         head.appendChild(el);
       }
-      log('Restored script (async): '+r.src);
+      log('✓ Restored script: '+r.src);
     }catch(e){
       head.appendChild(el);
+      log('✓ Restored script (fallback): '+r.src);
     }
   }
+  
   B.blocked=[];
+  log('✓ Trackers enabled - scripts are now loading and will initialize');
   
-  // STEP 7: Replay interval (30s timeout, 100ms) - doReplay already defined above
-  var replayStart=Date.now();
-  var replayMax=30000;
-  setTimeout(function(){ doReplay(); },0);
-  var replayIv=setInterval(function(){
-    var now=Date.now();
-    if(now-replayStart>replayMax){
-      clearInterval(replayIv);
-      log('Replay interval ended after 30s');
-      if(B._fbqQueue.length||B._gtagQueue.length||B._gaQueue.length){
-        log('WARNING: Tracker queues not empty after timeout - tracker scripts may not have loaded. Manual replay: __replayConsentQueues()');
-      }
-      return;
-    }
-    doReplay();
-    if(B._fbqQueue.length===0&&B._gtagQueue.length===0&&B._gaQueue.length===0){
-      clearInterval(replayIv);
-    }
-  },100);
-  
-  log('Trackers enabled - trackers can now initialize');
   }catch(err){
     console.error('[ConsentFlow] __enableConsentTrackers error:',err);
   }
@@ -970,8 +846,6 @@ window.__enableConsentTrackers=function(){
 B.ready=true;
 log('Pre-execution blocker ready. Consent: '+hasConsent());
 
-// If consent was already given (e.g. returning visitor), enable trackers immediately
-// so we do not block dataLayer.push, fbq, gtag etc.
 if(hasConsent()){
   log('Consent already accepted - enabling trackers now');
   window.__enableConsentTrackers();
@@ -979,11 +853,9 @@ if(hasConsent()){
 })();`;
 }
 
-// Generate main script with banner and verification
 function generateMainScript(siteId, allowedDomain, isPreview, config, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl, templateStyle) {
   const CONSENT_KEY = `cookie_consent_${siteId}`;
   
-  // Escape template literal special characters
   const escapeForTemplate = (str) => {
     if (!str) return '';
     return String(str)
@@ -1007,7 +879,6 @@ var currentHost=location.hostname.toLowerCase().replace(/^www\\./,'');
 var allowedHost='${allowedDomain || ''}'.toLowerCase().replace(/^www\\./,'');
 var isPreview=${isPreview ? 'true' : 'false'};
 
-// Domain check - log warning but don't block in preview mode
 if(!isPreview&&allowedHost&&currentHost!==allowedHost&&!currentHost.endsWith('.'+allowedHost)){
   console.warn('[ConsentFlow] Domain mismatch: '+currentHost+' !== '+allowedHost);
 }
@@ -1024,12 +895,12 @@ function setConsent(value){
   try{
     window.__consentGiven=(value==='accepted');
     localStorage.setItem(CONSENT_KEY,value);
+    console.log('[ConsentFlow] Consent set to:',value);
   }catch(e){
     console.error('[ConsentFlow] Failed to set consent:',e);
   }
 }
 
-// Domain verification callback - retry multiple times
 var verificationAttempts=0;
 var maxVerificationAttempts=5;
 
@@ -1051,7 +922,6 @@ var maxVerificationAttempts=5;
     return;
   }
   
-  // Add domain parameter
   var domainParam=encodeURIComponent(location.hostname);
   var fullUrl=verifyUrl+(verifyUrl.indexOf('?')===-1?'?':'&')+'domain='+domainParam;
   
@@ -1103,7 +973,6 @@ var maxVerificationAttempts=5;
   }
 })();
 
-// Page view tracking
 (function trackPageView(){
   if(!document.body)return setTimeout(trackPageView,50);
   
@@ -1121,15 +990,10 @@ var maxVerificationAttempts=5;
         referrer:document.referrer||'',
         timestamp:Date.now()
       })
-    }).catch(function(err){
-      // Silent fail
-    });
-  }catch(e){
-    // Silent fail
-  }
+    }).catch(function(err){});
+  }catch(e){}
 })();
 
-// Show consent banner
 (function showBanner(){
   if(hasConsent())return;
   if(document.getElementById('consentflow-banner'))return;
@@ -1139,12 +1003,10 @@ var maxVerificationAttempts=5;
   banner.id='consentflow-banner';
   banner.setAttribute('data-consent','essential');
   
-  // Apply banner styles
   var styles='${bannerStyle || ''}';
   if(styles){
     banner.style.cssText=styles;
   }else{
-    // Default styles
     var pos='${position || 'bottom'}';
     banner.style.cssText=
       'position:fixed;'+
@@ -1157,46 +1019,47 @@ var maxVerificationAttempts=5;
       'box-shadow:0 -4px 6px rgba(0,0,0,0.1);';
   }
   
-    var templateStyleObj=${JSON.stringify(templateStyle || {})};
-    var acceptBtnStyle='background:'+(templateStyleObj.buttonColor||'#22c55e')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
-    var rejectBtnStyle='background:transparent;color:'+(templateStyleObj.textColor||'#fff')+';border:2px solid '+(templateStyleObj.textColor||'#fff')+';padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
-    
-    banner.innerHTML=
-      '<div style="flex:1;max-width:700px;">'+
-      '<strong style="font-size:16px;display:block;margin-bottom:6px;">${safeTitle || '🍪 We use cookies'}</strong>'+
-      '<p style="margin:0;font-size:14px;opacity:0.9;line-height:1.5;">${safeMessage || 'This site uses tracking cookies. Accept to enable analytics.'}</p>'+
-      '</div>'+
-      '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
-      '<button id="consentflow-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept'}</button>'+
-      ${showReject ? `'<button id="consentflow-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject'}</button>'+` : ''}
-      '</div>';
+  var templateStyleObj=${JSON.stringify(templateStyle || {})};
+  var acceptBtnStyle='background:'+(templateStyleObj.buttonColor||'#22c55e')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
+  var rejectBtnStyle='background:transparent;color:'+(templateStyleObj.textColor||'#fff')+';border:2px solid '+(templateStyleObj.textColor||'#fff')+';padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
+  
+  banner.innerHTML=
+    '<div style="flex:1;max-width:700px;">'+
+    '<strong style="font-size:16px;display:block;margin-bottom:6px;">${safeTitle || '🍪 We use cookies'}</strong>'+
+    '<p style="margin:0;font-size:14px;opacity:0.9;line-height:1.5;">${safeMessage || 'This site uses tracking cookies. Accept to enable analytics.'}</p>'+
+    '</div>'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
+    '<button id="consentflow-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept'}</button>'+
+    ${showReject ? `'<button id="consentflow-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject'}</button>'+` : ''}
+    '</div>';
   
   document.body.appendChild(banner);
   
-  // Accept button - defer enable so it runs after stack and localStorage is set
   document.getElementById('consentflow-accept').onclick=function(){
     setConsent('accepted');
     banner.remove();
+    console.log('[ConsentFlow] User accepted consent - enabling trackers');
     if(window.__enableConsentTrackers){
-      setTimeout(function(){
-        try{ window.__enableConsentTrackers(); }catch(e){ console.error('[ConsentFlow] Enable trackers error:',e); }
-      },0);
+      try{ 
+        window.__enableConsentTrackers(); 
+      }catch(e){ 
+        console.error('[ConsentFlow] Enable trackers error:',e); 
+      }
     }
   };
   
-  // Reject button
   ${showReject ? `var rejectBtn=document.getElementById('consentflow-reject');
   if(rejectBtn){
     rejectBtn.onclick=function(){
       setConsent('rejected');
       banner.remove();
+      console.log('[ConsentFlow] User rejected consent');
     };
   }` : ''}
 })();
 `;
 }
 
-// Main GET endpoint
 export async function GET(req, { params }) {
   try {
     const resolvedParams = await params;
@@ -1214,7 +1077,6 @@ export async function GET(req, { params }) {
     const isPreview = searchParams.get("preview") === "1";
     const configParam = searchParams.get("config");
 
-    // Get site from database
     const site = await prisma.site.findUnique({
       where: { siteId },
       include: {
@@ -1229,7 +1091,6 @@ export async function GET(req, { params }) {
       });
     }
 
-    // Check subscription (allow preview mode)
     if (!isPreview) {
       const subscriptionStatus = await isSubscriptionActive(site.id);
       if (!subscriptionStatus.isActive) {
@@ -1243,27 +1104,21 @@ export async function GET(req, { params }) {
       }
     }
 
-    // Get allowed domain
     const allowedDomain = domainParam || site.domain;
     
-    // Base URL must be the ConsentFlow API server (where this script is served from),
-    // NOT the client site. Otherwise verify-callback and track go to desirediv.com and 404.
     const protocol = req.headers.get("x-forwarded-proto") || 
       (req.headers.get("host")?.includes("localhost") ? "http" : "https");
     const apiHost = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3000";
     const baseUrl = `${protocol}://${apiHost}`;
     
-    // Extract consent API domain
     let consentApiHostname = "";
     try {
       const baseUrlObj = new URL(baseUrl);
       consentApiHostname = baseUrlObj.hostname.replace(/^www\./, "");
     } catch (e) {
-      // Fallback
       consentApiHostname = req.headers.get("host")?.replace(/^www\./, "") || "";
     }
 
-    // Get banner config
     const bannerConfig = site.bannerConfig || DEFAULT_BANNER_CONFIG;
     const template = bannerConfig.template || "default";
     const templateConfig = BANNER_TEMPLATES[template] || BANNER_TEMPLATES.default;
@@ -1275,7 +1130,6 @@ export async function GET(req, { params }) {
     const showReject = bannerConfig.showReject !== false;
     const position = bannerConfig.position || "bottom";
     
-    // Get banner style from template
     let bannerStyle = "";
     if (templateConfig.style) {
       const style = templateConfig.style;
@@ -1294,12 +1148,10 @@ export async function GET(req, { params }) {
         (style.boxShadow ? `box-shadow:${style.boxShadow};` : 'box-shadow:0 -4px 6px rgba(0,0,0,0.1);');
     }
 
-    // Build callback URLs
     const actualSiteId = siteId;
     const verifyCallbackUrl = `${baseUrl}/api/sites/${actualSiteId}/verify-callback`;
     const trackUrl = `${baseUrl}/api/sites/${actualSiteId}/track`;
 
-    // Generate scripts
     const inlineBlocker = generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiHostname);
     const mainScript = generateMainScript(
       siteId,
@@ -1318,7 +1170,6 @@ export async function GET(req, { params }) {
       templateConfig.style
     );
 
-    // Combine both scripts
     const fullScript = inlineBlocker + "\n" + mainScript;
 
     return new Response(fullScript, {
