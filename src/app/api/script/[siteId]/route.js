@@ -1262,6 +1262,12 @@ var maxVerificationAttempts=5;
 (function trackPageView(){
   if(!document.body)return setTimeout(trackPageView,50);
   
+  // Skip tracking in preview mode
+  var isPreview=${isPreview ? 'true' : 'false'};
+  if(isPreview===true||isPreview==='true'){
+    return;
+  }
+  
   var trackUrl='${trackUrl}';
   if(!trackUrl)return;
   
