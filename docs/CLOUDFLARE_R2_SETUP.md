@@ -61,6 +61,16 @@ NEXT_PUBLIC_R2_PUBLIC_URL=https://pub-xxxxx.r2.dev
 - Use the **same** value for `R2_PUBLIC_URL` and `NEXT_PUBLIC_R2_PUBLIC_URL` (r2.dev or your custom domain).
 - For a **custom domain**, use that base URL, e.g. `https://cdn.yourdomain.com`.
 
+**Optional – bucket name in URL:**  
+If you want the bucket name in the path (e.g. `…/cookie/sites/…/script.js`), set:
+
+```env
+R2_PUBLIC_PATH_PREFIX=cookie
+NEXT_PUBLIC_R2_PATH_PREFIX=cookie
+```
+
+Use your actual bucket name. **Re-save the banner config** after adding this so scripts are uploaded to the new path.
+
 ---
 
 ## 6. Install deps and run
@@ -92,3 +102,26 @@ npm run dev
 ## 9. Without R2
 
 If R2 env vars are **not** set, the app uses **local file storage** (`public/cdn/sites/`) and **`/cdn/sites/...`** URLs as before. No R2 or Cloudflare config required.
+
+---
+
+## 10. Troubleshooting: “Link not working” / 404
+
+- **Bucket name not in the URL**  
+  With r2.dev, the bucket name does **not** appear in the URL. The `pub-xxx.r2.dev` subdomain is tied to **one** bucket. If you want it in the path, set `R2_PUBLIC_PATH_PREFIX` / `NEXT_PUBLIC_R2_PATH_PREFIX` (see above).
+
+- **`R2_BUCKET_NAME` and `R2_PUBLIC_URL` must match**  
+  We upload to `R2_BUCKET_NAME` and serve from `R2_PUBLIC_URL`. The r2.dev URL you use **must** be the one for **that same bucket**.  
+  1. In R2, open the **cookie** bucket → **Settings** → **Public access** → note the r2.dev URL.  
+  2. Set `R2_BUCKET_NAME=cookie` and `R2_PUBLIC_URL` / `NEXT_PUBLIC_R2_PUBLIC_URL` to that exact URL.
+
+- **Script not uploaded yet**  
+  Scripts are uploaded **only when you save the banner config**. If you added a domain via the dashboard but never opened or saved the **Banner** page, the script was never uploaded to R2 → 404. Go to **Banner** → **Save** (defaults are fine) → then test the install link again.
+
+- **Public access not enabled**  
+  For the bucket you use, enable **Public access** → **Allow Access** → **R2.dev subdomain** (or custom domain).
+
+- **Test the URL directly**  
+  Open  
+  `https://pub-xxx.r2.dev/sites/<your-site-id>/script.js`  
+  (or `…/cookie/sites/…` if you use the path prefix). If you get 404, the object is missing (re-save banner) or the URL/bucket mismatch above applies.

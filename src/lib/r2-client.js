@@ -4,6 +4,7 @@
  */
 
 import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { getScriptPath } from "./script-urls";
 
 const accountId = process.env.R2_ACCOUNT_ID;
 const accessKeyId = process.env.R2_ACCESS_KEY_ID;
@@ -30,11 +31,8 @@ function getClient() {
   return _client;
 }
 
-const PREFIX = "sites";
-
 function key(siteId, isPreview) {
-  const filename = isPreview ? "script.preview.js" : "script.js";
-  return `${PREFIX}/${siteId}/${filename}`;
+  return getScriptPath(siteId, isPreview);
 }
 
 /**
@@ -108,6 +106,6 @@ export async function r2Exists(siteId, isPreview = false) {
 export function r2PublicUrl(siteId, isPreview = false) {
   if (!publicUrl) return null;
   const base = publicUrl.replace(/\/$/, "");
-  const filename = isPreview ? "script.preview.js" : "script.js";
-  return `${base}/${PREFIX}/${siteId}/${filename}`;
+  const path = getScriptPath(siteId, isPreview);
+  return `${base}/${path}`;
 }

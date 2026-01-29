@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
+import { getScriptPath } from "@/lib/script-urls";
 
 // Icons
 const PlusIcon = () => (
@@ -174,7 +175,7 @@ function DashboardContent() {
       (typeof window !== "undefined" ? window.location.origin : "");
     const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL?.replace(/\/$/, "") || "";
     const scriptSrc = r2Base
-      ? `${r2Base}/sites/${site.siteId}/script.js`
+      ? `${r2Base}/${getScriptPath(site.siteId, false)}`
       : `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
     const scriptTag = `<script src="${scriptSrc}"></script>`;
     try {

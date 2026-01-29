@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
+import { getScriptPath } from "@/lib/script-urls";
 
 const POSITIONS = [
   { id: "bottom", label: "Bottom", icon: "⬇️" },
@@ -283,7 +284,7 @@ function BannerContent() {
       (typeof window !== "undefined" ? window.location.origin : "");
     const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL?.replace(/\/$/, "") || "";
     const scriptSrc = r2Base
-      ? `${r2Base}/sites/${selectedSite.siteId}/script.js`
+      ? `${r2Base}/${getScriptPath(selectedSite.siteId, false)}`
       : `${baseUrl}/cdn/sites/${selectedSite.siteId}/script.js`;
     return [
       "<!-- CRITICAL: Place this script FIRST in <head>, BEFORE any Meta Pixel, Google Analytics, or other tracker scripts -->",
