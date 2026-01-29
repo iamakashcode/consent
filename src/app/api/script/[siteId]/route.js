@@ -235,6 +235,7 @@ if(!window.dataLayer||!Array.isArray(window.dataLayer)){
 }
 // Store original push if it exists and is a function
 B._origDataLayerPush=window.dataLayer.push&&typeof window.dataLayer.push==='function'?window.dataLayer.push:Array.prototype.push;
+// MUST use configurable:true so we can restore push when user accepts consent
 try{
   Object.defineProperty(window.dataLayer,'push',{
     value:function(){
@@ -242,7 +243,7 @@ try{
       return 0;
     },
     writable:false,
-    configurable:false
+    configurable:true
   });
 }catch(e){
   window.dataLayer.push=function(){
@@ -257,11 +258,12 @@ if(!window._gaq||!Array.isArray(window._gaq)){
 }
 // Store original push if it exists and is a function
 B._origGaqPush=window._gaq.push&&typeof window._gaq.push==='function'?window._gaq.push:Array.prototype.push;
+// MUST use configurable:true so we can restore push when user accepts consent
 try{
   Object.defineProperty(window._gaq,'push',{
     value:function(){log('_gaq.push() blocked');return 0;},
     writable:false,
-    configurable:false
+    configurable:true
   });
 }catch(e){
   window._gaq.push=function(){log('_gaq.push() blocked');return 0;};
@@ -784,46 +786,58 @@ window.__enableConsentTrackers=function(){
   }
   
   // CRITICAL: Restore dataLayer.push and _gaq.push BEFORE deleting stubs
-  // Use native Array.push if original was blocked, otherwise restore original
+  // If defineProperty fails (read-only), replace the whole array so push works
   if(window.dataLayer&&Array.isArray(window.dataLayer)){
+    var dataLayerPush=B._origDataLayerPush===Array.prototype.push?Array.prototype.push:B._origDataLayerPush;
+    var restored=false;
     try{
-      // If we stored a custom function, restore it; otherwise use native push
-      var dataLayerPush=B._origDataLayerPush===Array.prototype.push?Array.prototype.push:B._origDataLayerPush;
       Object.defineProperty(window.dataLayer,'push',{
         value:dataLayerPush,
         writable:true,
         configurable:true,
         enumerable:true
       });
+      restored=true;
       log('Restored dataLayer.push');
-    }catch(e){
+    }catch(e){}
+    if(!restored){
       try{
-        window.dataLayer.push=B._origDataLayerPush===Array.prototype.push?Array.prototype.push:B._origDataLayerPush;
-      }catch(e2){
-        // Last resort: use native push
-        window.dataLayer.push=Array.prototype.push;
-        log('Restored dataLayer.push to native');
-      }
+        window.dataLayer.push=dataLayerPush;
+        restored=true;
+        log('Restored dataLayer.push (direct)');
+      }catch(e2){}
+    }
+    if(!restored){
+      var existing=[].slice.call(window.dataLayer);
+      window.dataLayer=existing;
+      log('Restored dataLayer (new array with native push)');
     }
   }
   
   if(window._gaq&&Array.isArray(window._gaq)){
+    var gaqPush=B._origGaqPush===Array.prototype.push?Array.prototype.push:B._origGaqPush;
+    var restoredGaq=false;
     try{
-      var gaqPush=B._origGaqPush===Array.prototype.push?Array.prototype.push:B._origGaqPush;
       Object.defineProperty(window._gaq,'push',{
         value:gaqPush,
         writable:true,
         configurable:true,
         enumerable:true
       });
+      restoredGaq=true;
       log('Restored _gaq.push');
-    }catch(e){
+    }catch(e){}
+    if(!restoredGaq){
       try{
-        window._gaq.push=B._origGaqPush===Array.prototype.push?Array.prototype.push:B._origGaqPush;
-      }catch(e2){
-        window._gaq.push=Array.prototype.push;
-        log('Restored _gaq.push to native');
-      }
+        window._gaq.push=gaqPush;
+        restoredGaq=true;
+        log('Restored _gaq.push (direct)');
+      }catch(e2){}
+    }
+    if(!restoredGaq){
+      var existingGaq=[].slice.call(window._gaq);
+      window._gaq=existingGaq;
+      log('Restored _gaq (new array with native push)');
     }
   }
   
