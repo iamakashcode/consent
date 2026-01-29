@@ -1266,15 +1266,21 @@ var maxVerificationAttempts=5;
   if(!trackUrl)return;
   
   try{
+    var pagePath=location.pathname+location.search;
+    var pageTitle=document.title||'';
+    var userAgent=navigator.userAgent||'';
+    var referer=document.referrer||'';
+    
     fetch(trackUrl,{
       method:'POST',
       mode:'cors',
       credentials:'omit',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        url:location.href,
-        referrer:document.referrer||'',
-        timestamp:Date.now()
+        pagePath:pagePath,
+        pageTitle:pageTitle,
+        userAgent:userAgent,
+        referer:referer
       })
     }).catch(function(err){});
   }catch(e){}

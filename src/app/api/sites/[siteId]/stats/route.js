@@ -42,25 +42,31 @@ export async function GET(req, { params }) {
     }
 
     try {
-      // Only count pages that have been viewed recently (last 7 days)
-      // This ensures we only count pages where the script is currently active
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       
-      // Get unique page count (only recently active pages) and total view count
-      const [uniquePages, totalViews, recentViews] = await Promise.all([
-        // Count unique pages that have been viewed in the last 7 days
-        // This gives us the count of pages where the script is currently active
+      // Get all statistics: unique pages (all-time and recent), total views, recent views
+      const [allTimeUniquePages, recentUniquePages, totalViews, recentViews] = await Promise.all([
+        // Count ALL unique pages where script has been added (all-time)
+        prisma.pageView.groupBy({
+          by: ["pagePath"],
+          where: {
+            siteId: site.id,
+          },
+          _count: true,
+        }),
+        // Count unique pages viewed in last 7 days (currently active pages)
         prisma.pageView.groupBy({
           by: ["pagePath"],
           where: {
             siteId: site.id,
             viewedAt: {
-              gte: sevenDaysAgo, // Only pages viewed in last 7 days
+              gte: sevenDaysAgo,
             },
           },
           _count: true,
         }),
-        // Count total views (all time)
+        // Count total page views (all time)
         prisma.pageView.count({
           where: { siteId: site.id },
         }),
@@ -69,7 +75,7 @@ export async function GET(req, { params }) {
           where: {
             siteId: site.id,
             viewedAt: {
-              gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
+              gte: thirtyDaysAgo,
             },
           },
         }),
@@ -78,10 +84,11 @@ export async function GET(req, { params }) {
       return Response.json({
         siteId: site.siteId,
         domain: site.domain,
-        uniquePages: uniquePages.length, // Only pages active in last 7 days
-        totalViews: totalViews,
+        totalUniquePages: allTimeUniquePages.length, // All pages where script has been added (all-time)
+        activeUniquePages: recentUniquePages.length, // Pages active in last 7 days
+        totalViews: totalViews, // Total page views (all time)
         recentViews: recentViews, // Views in last 30 days
-        pages: uniquePages.map((p) => ({
+        pages: allTimeUniquePages.map((p) => ({
           path: p.pagePath,
           views: p._count,
         })),
