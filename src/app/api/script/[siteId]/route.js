@@ -883,6 +883,13 @@ window.__enableConsentTrackers=function(){
 
 B.ready=true;
 log('Pre-execution blocker ready. Consent: '+hasConsent());
+
+// If consent was already given (e.g. returning visitor), enable trackers immediately
+// so we do not block dataLayer.push, fbq, gtag etc.
+if(hasConsent()){
+  log('Consent already accepted - enabling trackers now');
+  window.__enableConsentTrackers();
+}
 })();`;
 }
 
@@ -1150,10 +1157,12 @@ export async function GET(req, { params }) {
     // Get allowed domain
     const allowedDomain = domainParam || site.domain;
     
-    // Get base URL for API calls
-    const baseUrl = req.headers.get("origin") || 
-                   req.headers.get("referer")?.split("/").slice(0, 3).join("/") ||
-                   `https://${req.headers.get("host") || "localhost:3000"}`;
+    // Base URL must be the ConsentFlow API server (where this script is served from),
+    // NOT the client site. Otherwise verify-callback and track go to desirediv.com and 404.
+    const protocol = req.headers.get("x-forwarded-proto") || 
+      (req.headers.get("host")?.includes("localhost") ? "http" : "https");
+    const apiHost = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3000";
+    const baseUrl = `${protocol}://${apiHost}`;
     
     // Extract consent API domain
     let consentApiHostname = "";
