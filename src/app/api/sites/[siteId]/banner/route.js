@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
+import { regenerateScriptOnConfigChange } from "@/lib/script-generator";
 
 export async function PUT(req, { params }) {
   try {
@@ -61,6 +62,12 @@ export async function PUT(req, { params }) {
       data: {
         bannerConfig: bannerConfig,
       },
+    });
+
+    // Regenerate and upload script to CDN (async, don't wait)
+    regenerateScriptOnConfigChange(site.siteId).catch((error) => {
+      console.error(`[Banner API] Failed to regenerate script for ${site.siteId}:`, error);
+      // Don't fail the request if CDN upload fails
     });
 
     return Response.json({

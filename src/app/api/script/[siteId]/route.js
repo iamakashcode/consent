@@ -2,9 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES } from "@/lib/banner-templates";
 import { hasVerificationColumns } from "@/lib/db-utils";
 import { isSubscriptionActive } from "@/lib/subscription";
+import { getScript, getCdnUrl } from "@/lib/cdn-service";
 
 // Generate AGGRESSIVE pre-execution blocker with IMPROVEMENTS
-function generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiDomain) {
+export function generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiDomain) {
   const CONSENT_KEY = `cookie_consent_${siteId}`;
   
   return `(function(){
@@ -1137,7 +1138,7 @@ if(hasConsent()){
 })();`;
 }
 
-function generateMainScript(siteId, allowedDomain, isPreview, config, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl, templateStyle) {
+export function generateMainScript(siteId, allowedDomain, isPreview, config, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl, templateStyle) {
   const CONSENT_KEY = `cookie_consent_${siteId}`;
   
   const escapeForTemplate = (str) => {
@@ -1375,6 +1376,30 @@ export async function GET(req, { params }) {
     const isPreview = searchParams.get("preview") === "1";
     const configParam = searchParams.get("config");
 
+    // Try to serve from CDN first (only for production, not preview with custom config)
+    if (!isPreview || !configParam) {
+      try {
+        const cdnScript = await getScript(siteId, isPreview);
+        if (cdnScript) {
+          // Script found in CDN - serve it with proper cache headers
+          return new Response(cdnScript, {
+            status: 200,
+            headers: {
+              "Content-Type": "application/javascript; charset=utf-8",
+              "Cache-Control": isPreview 
+                ? "no-cache, no-store, must-revalidate" 
+                : "public, max-age=31536000, immutable",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        }
+      } catch (cdnError) {
+        // CDN error - fall through to dynamic generation
+        console.log(`[Script API] CDN script not found for ${siteId}, generating dynamically`);
+      }
+    }
+
+    // Fallback: Generate dynamically (for preview with custom config, or if CDN file missing)
     const site = await prisma.site.findUnique({
       where: { siteId },
       include: {
