@@ -229,8 +229,12 @@ try{
   });
 }catch(e){}
 
-// Set dataLayer with blocked push
-window.dataLayer=window.dataLayer||[];
+// Set dataLayer with blocked push - STORE ORIGINAL FIRST
+if(!window.dataLayer||!Array.isArray(window.dataLayer)){
+  window.dataLayer=[];
+}
+// Store original push if it exists and is a function
+B._origDataLayerPush=window.dataLayer.push&&typeof window.dataLayer.push==='function'?window.dataLayer.push:Array.prototype.push;
 try{
   Object.defineProperty(window.dataLayer,'push',{
     value:function(){
@@ -247,8 +251,12 @@ try{
   };
 }
 
-// Set other tracker stubs
-window._gaq=window._gaq||[];
+// Set other tracker stubs - STORE ORIGINAL FIRST
+if(!window._gaq||!Array.isArray(window._gaq)){
+  window._gaq=[];
+}
+// Store original push if it exists and is a function
+B._origGaqPush=window._gaq.push&&typeof window._gaq.push==='function'?window._gaq.push:Array.prototype.push;
 try{
   Object.defineProperty(window._gaq,'push',{
     value:function(){log('_gaq.push() blocked');return 0;},
@@ -739,6 +747,21 @@ window.__enableConsentTrackers=function(){
   // Restore all originals
   Object.defineProperty=_defineProperty;
   Object.defineProperties=_defineProperties;
+  
+  // Restore document.currentScript
+  if(B._currentScriptDesc){
+    try{
+      Object.defineProperty(Document.prototype,'currentScript',B._currentScriptDesc);
+    }catch(e){}
+  }
+  
+  // Restore HTMLScriptElement.prototype.src
+  if(B._scriptSrcDesc){
+    try{
+      Object.defineProperty(HTMLScriptElement.prototype,'src',B._scriptSrcDesc);
+    }catch(e){}
+  }
+  
   Element.prototype.setAttribute=_setAttribute;
   document.createElement=_createElement;
   Node.prototype.appendChild=_appendChild;
@@ -760,7 +783,51 @@ window.__enableConsentTrackers=function(){
     }catch(e){}
   }
   
-  // Delete tracker stubs
+  // CRITICAL: Restore dataLayer.push and _gaq.push BEFORE deleting stubs
+  // Use native Array.push if original was blocked, otherwise restore original
+  if(window.dataLayer&&Array.isArray(window.dataLayer)){
+    try{
+      // If we stored a custom function, restore it; otherwise use native push
+      var dataLayerPush=B._origDataLayerPush===Array.prototype.push?Array.prototype.push:B._origDataLayerPush;
+      Object.defineProperty(window.dataLayer,'push',{
+        value:dataLayerPush,
+        writable:true,
+        configurable:true,
+        enumerable:true
+      });
+      log('Restored dataLayer.push');
+    }catch(e){
+      try{
+        window.dataLayer.push=B._origDataLayerPush===Array.prototype.push?Array.prototype.push:B._origDataLayerPush;
+      }catch(e2){
+        // Last resort: use native push
+        window.dataLayer.push=Array.prototype.push;
+        log('Restored dataLayer.push to native');
+      }
+    }
+  }
+  
+  if(window._gaq&&Array.isArray(window._gaq)){
+    try{
+      var gaqPush=B._origGaqPush===Array.prototype.push?Array.prototype.push:B._origGaqPush;
+      Object.defineProperty(window._gaq,'push',{
+        value:gaqPush,
+        writable:true,
+        configurable:true,
+        enumerable:true
+      });
+      log('Restored _gaq.push');
+    }catch(e){
+      try{
+        window._gaq.push=B._origGaqPush===Array.prototype.push?Array.prototype.push:B._origGaqPush;
+      }catch(e2){
+        window._gaq.push=Array.prototype.push;
+        log('Restored _gaq.push to native');
+      }
+    }
+  }
+  
+  // Delete tracker stubs (let trackers reinitialize themselves)
   var propsToRemove=['fbq','_fbq','gtag','ga','analytics','mixpanel','amplitude','hj','clarity','_hsq','twq','pintrk','ttq','snaptr'];
   for(var i=0;i<propsToRemove.length;i++){
     try{
@@ -772,14 +839,14 @@ window.__enableConsentTrackers=function(){
     }
   }
   
-  // Restore blocked scripts
+  // Restore blocked EXTERNAL scripts only (not images, not inline scripts)
   for(var i=0;i<B.blocked.length;i++){
     var b=B.blocked[i];
-    if(!b.src&&!b.code)continue;
+    // Only restore external scripts with src
+    if(b.tag!=='script'||!b.src)continue;
     
-    var el=document.createElement(b.tag||'script');
-    if(b.src)el.src=b.src;
-    if(b.code)el.textContent=b.code;
+    var el=document.createElement('script');
+    el.src=b.src;
     el.setAttribute('data-consent-restored','true');
     
     try{
@@ -790,14 +857,14 @@ window.__enableConsentTrackers=function(){
       }else{
         document.head.appendChild(el);
       }
-      log('Restored: '+(b.src||'inline script'));
+      log('Restored script: '+b.src);
     }catch(e){
       document.head.appendChild(el);
     }
   }
   
   B.blocked=[];
-  log('Trackers enabled');
+  log('Trackers enabled - trackers can now initialize');
 };
 
 B.ready=true;
@@ -854,29 +921,77 @@ function setConsent(value){
   }
 }
 
-// Domain verification callback
+// Domain verification callback - retry multiple times
+var verificationAttempts=0;
+var maxVerificationAttempts=5;
+
 (function verifyDomain(){
-  if(!document.body)return setTimeout(verifyDomain,50);
+  verificationAttempts++;
+  
+  if(!document.body){
+    if(verificationAttempts<maxVerificationAttempts){
+      setTimeout(verifyDomain,100);
+    }
+    return;
+  }
   
   var verifyUrl='${verifyCallbackUrl}';
-  if(!verifyUrl)return;
+  if(!verifyUrl){
+    if(verificationAttempts===1){
+      console.warn('[ConsentFlow] No verification URL provided');
+    }
+    return;
+  }
+  
+  // Add domain parameter
+  var domainParam=encodeURIComponent(location.hostname);
+  var fullUrl=verifyUrl+(verifyUrl.indexOf('?')===-1?'?':'&')+'domain='+domainParam;
+  
+  if(verificationAttempts===1){
+    console.log('[ConsentFlow] Calling verification:',fullUrl);
+  }
   
   try{
-    fetch(verifyUrl+'?domain='+encodeURIComponent(location.hostname),{
+    fetch(fullUrl,{
       method:'GET',
       mode:'cors',
-      credentials:'omit'
+      credentials:'omit',
+      headers:{
+        'Accept':'application/json'
+      }
     }).then(function(res){
+      if(!res.ok){
+        if(verificationAttempts<maxVerificationAttempts){
+          setTimeout(verifyDomain,500);
+          return null;
+        }
+        console.warn('[ConsentFlow] Verification response not OK:',res.status);
+        return null;
+      }
       return res.json();
     }).then(function(data){
-      if(data.connected){
-        console.log('[ConsentFlow] Domain connected successfully');
+      if(data&&data.connected){
+        console.log('[ConsentFlow] ✓ Domain connected successfully:',data.domain||location.hostname);
+      }else if(data){
+        if(verificationAttempts<maxVerificationAttempts&&data.error){
+          setTimeout(verifyDomain,500);
+          return;
+        }
+        console.warn('[ConsentFlow] Verification failed:',data.error||data.message||'Unknown error');
       }
     }).catch(function(err){
-      console.warn('[ConsentFlow] Verification failed:',err);
+      if(verificationAttempts<maxVerificationAttempts){
+        setTimeout(verifyDomain,500);
+        return;
+      }
+      console.warn('[ConsentFlow] Verification request failed:',err.message||err);
     });
   }catch(e){
-    console.warn('[ConsentFlow] Verification error:',e);
+    if(verificationAttempts<maxVerificationAttempts){
+      setTimeout(verifyDomain,500);
+      return;
+    }
+    console.warn('[ConsentFlow] Verification error:',e.message||e);
   }
 })();
 
