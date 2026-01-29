@@ -21,6 +21,7 @@ var noop=function(){return undefined;};
 var SITE_ID='${siteId}';
 var CONSENT_KEY='${CONSENT_KEY}';
 var DEBUG=true;
+window.__consentGiven=false;
 
 var TRACKER_PATTERNS=[
   // Google
@@ -63,7 +64,9 @@ function log(msg){if(DEBUG)console.log('[ConsentBlock]',msg);}
 function hasConsent(){
   if(window.__consentGiven===true)return true;
   try{
-    return localStorage.getItem(CONSENT_KEY)==='accepted';
+    var consent=localStorage.getItem(CONSENT_KEY)==='accepted';
+    if(consent&&!window.__consentGiven)window.__consentGiven=true;
+    return consent;
   }catch(e){
     return false;
   }
@@ -750,6 +753,7 @@ if(!hasConsent()){
 ====================================================== */
 window.__enableConsentTrackers=function(){
   try{
+  window.__consentGiven=true;
   var B=window._cb;
   if(!B){ log('Enable skipped: blocker not loaded'); return; }
   if(!B.blocked)B.blocked=[];
@@ -757,7 +761,6 @@ window.__enableConsentTrackers=function(){
     log('Enable skipped: consent not accepted');
     return;
   }
-  window.__consentGiven=true;
   log('Enabling trackers...');
   
   // STEP 1: Disconnect MutationObserver FIRST so it does not interfere with restoration
@@ -858,6 +861,31 @@ window.__enableConsentTrackers=function(){
     try{ delete window[otherProps[i]]; }catch(e){ try{ window[otherProps[i]]=undefined; }catch(e2){} }
   }
   
+  // Define replay so it exists before any restored script onload fires
+  function doReplay(){
+    var didReplay=false;
+    if(window.fbq&&window.fbq!==B._fbqProxy&&typeof window.fbq==='function'&&(window.fbq.version||window.fbq.queue)&&B._fbqQueue.length){
+      log('Real fbq detected'+(window.fbq.version ? ' v'+window.fbq.version : '')+' - replaying '+B._fbqQueue.length+' queued call(s)');
+      while(B._fbqQueue.length){ try{ window.fbq.apply(null,B._fbqQueue.shift()); }catch(e){} }
+      didReplay=true;
+    }
+    if(window.gtag&&window.gtag!==B._gtagProxy&&typeof window.gtag==='function'&&B._gtagQueue.length){
+      log('Real gtag detected - replaying '+B._gtagQueue.length+' queued call(s)');
+      while(B._gtagQueue.length){ try{ window.gtag.apply(null,B._gtagQueue.shift()); }catch(e){} }
+      didReplay=true;
+    }
+    if(window.ga&&window.ga!==B._gaProxy&&typeof window.ga==='function'&&B._gaQueue.length){
+      log('Real ga detected - replaying '+B._gaQueue.length+' queued call(s)');
+      while(B._gaQueue.length){ try{ window.ga.apply(null,B._gaQueue.shift()); }catch(e){} }
+      didReplay=true;
+    }
+    return didReplay;
+  }
+  window.__replayConsentQueues=function(){
+    log('Manual __replayConsentQueues called');
+    return doReplay();
+  };
+  
   // STEP 5: Collect script URLs to restore
   var toRestore=[];
   for(var i=0;i<B.blocked.length;i++){
@@ -873,8 +901,18 @@ window.__enableConsentTrackers=function(){
     }
   }
   
-  // STEP 6: Restore scripts with async=true and load/error listeners for reliable init
+  // STEP 6: Restore scripts with async=true and load/error listeners; track load count
   var head=document.head||document.documentElement;
+  var totalToRestore=toRestore.length;
+  var loadedCount=0;
+  function onScriptLoaded(src){
+    loadedCount++;
+    log('Restored script loaded: '+src+' (Loaded '+loadedCount+'/'+totalToRestore+' restored scripts)');
+    if(loadedCount>=totalToRestore&&totalToRestore>0){
+      log('All restored scripts loaded - triggering immediate replay');
+      if(window.__replayConsentQueues)window.__replayConsentQueues();
+    }
+  }
   for(var k=0;k<toRestore.length;k++){
     var r=toRestore[k];
     var el=document.createElement('script');
@@ -882,7 +920,7 @@ window.__enableConsentTrackers=function(){
     el.setAttribute('data-consent-restored','true');
     el.async=true;
     (function(src){
-      el.onload=function(){ log('Restored script loaded: '+src); };
+      el.onload=function(){ onScriptLoaded(src); };
       el.onerror=function(){ log('Restored script failed: '+src); };
     })(r.src);
     try{
@@ -900,38 +938,17 @@ window.__enableConsentTrackers=function(){
   }
   B.blocked=[];
   
-  // STEP 7: Replay queues when real fbq/gtag/ga load (30s timeout, 100ms interval, manual trigger)
+  // STEP 7: Replay interval (30s timeout, 100ms) - doReplay already defined above
   var replayStart=Date.now();
   var replayMax=30000;
-  var replayIv;
-  function doReplay(){
-    var didReplay=false;
-    if(window.fbq&&window.fbq!==B._fbqProxy&&B._fbqQueue.length){
-      log('Real fbq detected - replaying '+B._fbqQueue.length+' queued call(s)');
-      while(B._fbqQueue.length){ try{ window.fbq.apply(null,B._fbqQueue.shift()); }catch(e){} }
-      didReplay=true;
-    }
-    if(window.gtag&&window.gtag!==B._gtagProxy&&B._gtagQueue.length){
-      log('Real gtag detected - replaying '+B._gtagQueue.length+' queued call(s)');
-      while(B._gtagQueue.length){ try{ window.gtag.apply(null,B._gtagQueue.shift()); }catch(e){} }
-      didReplay=true;
-    }
-    if(window.ga&&window.ga!==B._gaProxy&&B._gaQueue.length){
-      log('Real ga detected - replaying '+B._gaQueue.length+' queued call(s)');
-      while(B._gaQueue.length){ try{ window.ga.apply(null,B._gaQueue.shift()); }catch(e){} }
-      didReplay=true;
-    }
-    return didReplay;
-  }
-  window.__replayConsentQueues=function(){
-    log('Manual __replayConsentQueues called');
-    return doReplay();
-  };
-  replayIv=setInterval(function(){
+  var replayIv=setInterval(function(){
     var now=Date.now();
     if(now-replayStart>replayMax){
       clearInterval(replayIv);
       log('Replay interval ended after 30s');
+      if(B._fbqQueue.length||B._gtagQueue.length||B._gaQueue.length){
+        log('WARNING: Tracker queues not empty after timeout - tracker scripts may not have loaded. Manual replay: __replayConsentQueues()');
+      }
       return;
     }
     doReplay();
@@ -1001,8 +1018,7 @@ function hasConsent(){
 
 function setConsent(value){
   try{
-    if(value==='accepted')window.__consentGiven=true;
-    else if(value==='rejected')window.__consentGiven=false;
+    window.__consentGiven=(value==='accepted');
     localStorage.setItem(CONSENT_KEY,value);
   }catch(e){
     console.error('[ConsentFlow] Failed to set consent:',e);
