@@ -861,20 +861,21 @@ window.__enableConsentTrackers=function(){
     try{ delete window[otherProps[i]]; }catch(e){ try{ window[otherProps[i]]=undefined; }catch(e2){} }
   }
   
-  // Define replay so it exists before any restored script onload fires
+  // Define replay so it exists before any restored script onload fires.
+  // Use loose checks: any function that replaced our proxy is treated as real (no .version/.queue requirement).
   function doReplay(){
     var didReplay=false;
-    if(window.fbq&&window.fbq!==B._fbqProxy&&typeof window.fbq==='function'&&(window.fbq.version||window.fbq.queue)&&B._fbqQueue.length){
+    if(B._fbqQueue.length&&window.fbq&&window.fbq!==B._fbqProxy&&typeof window.fbq==='function'){
       log('Real fbq detected'+(window.fbq.version ? ' v'+window.fbq.version : '')+' - replaying '+B._fbqQueue.length+' queued call(s)');
       while(B._fbqQueue.length){ try{ window.fbq.apply(null,B._fbqQueue.shift()); }catch(e){} }
       didReplay=true;
     }
-    if(window.gtag&&window.gtag!==B._gtagProxy&&typeof window.gtag==='function'&&B._gtagQueue.length){
+    if(B._gtagQueue.length&&window.gtag&&window.gtag!==B._gtagProxy&&typeof window.gtag==='function'){
       log('Real gtag detected - replaying '+B._gtagQueue.length+' queued call(s)');
       while(B._gtagQueue.length){ try{ window.gtag.apply(null,B._gtagQueue.shift()); }catch(e){} }
       didReplay=true;
     }
-    if(window.ga&&window.ga!==B._gaProxy&&typeof window.ga==='function'&&B._gaQueue.length){
+    if(B._gaQueue.length&&window.ga&&window.ga!==B._gaProxy&&typeof window.ga==='function'){
       log('Real ga detected - replaying '+B._gaQueue.length+' queued call(s)');
       while(B._gaQueue.length){ try{ window.ga.apply(null,B._gaQueue.shift()); }catch(e){} }
       didReplay=true;
@@ -909,8 +910,10 @@ window.__enableConsentTrackers=function(){
     loadedCount++;
     log('Restored script loaded: '+src+' (Loaded '+loadedCount+'/'+totalToRestore+' restored scripts)');
     if(loadedCount>=totalToRestore&&totalToRestore>0){
-      log('All restored scripts loaded - triggering immediate replay');
-      if(window.__replayConsentQueues)window.__replayConsentQueues();
+      log('All restored scripts loaded - triggering replay after 150ms (let script execution finish)');
+      setTimeout(function(){
+        if(window.__replayConsentQueues)window.__replayConsentQueues();
+      },150);
     }
   }
   for(var k=0;k<toRestore.length;k++){
@@ -941,6 +944,7 @@ window.__enableConsentTrackers=function(){
   // STEP 7: Replay interval (30s timeout, 100ms) - doReplay already defined above
   var replayStart=Date.now();
   var replayMax=30000;
+  setTimeout(function(){ doReplay(); },0);
   var replayIv=setInterval(function(){
     var now=Date.now();
     if(now-replayStart>replayMax){
