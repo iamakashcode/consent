@@ -97,18 +97,18 @@ export const BANNER_TEMPLATES = {
 // Alias so script can use BANNER_TEMPLATES.default
 BANNER_TEMPLATES.default = BANNER_TEMPLATES.minimal;
 
-// Default banner configuration
+// Default banner configuration – must match banner page DEFAULT_CONFIG so first-time script matches preview
 export const DEFAULT_BANNER_CONFIG = {
   template: "minimal",
-  position: "bottom", // bottom, top, bottom-left, bottom-right
-  title: "🍪 We use cookies",
-  message: "This site uses tracking cookies. Accept to enable analytics.",
-  acceptButtonText: "Accept",
-  rejectButtonText: "Reject",
+  position: "bottom",
+  title: "We value your privacy",
+  message: "This site uses tracking cookies to enhance your browsing experience and analyze site traffic.",
+  acceptButtonText: "Accept All",
+  rejectButtonText: "Reject All",
   customizeButtonText: "Customize",
   showRejectButton: true,
   showCustomizeButton: true,
-  customStyle: null, // Custom CSS overrides
+  customStyle: null,
 };
 
 /**
@@ -121,10 +121,10 @@ export function normalizeBannerConfig(config) {
   if (!config || typeof config !== "object") {
     const t = BANNER_TEMPLATES.minimal;
     return {
-      title: "🍪 We use cookies",
-      message: "This site uses tracking cookies. Accept to enable analytics.",
-      acceptText: "Accept",
-      rejectText: "Reject",
+      title: "We value your privacy",
+      message: "This site uses tracking cookies to enhance your browsing experience and analyze site traffic.",
+      acceptText: "Accept All",
+      rejectText: "Reject All",
       showReject: true,
       position: "bottom",
       style: t?.style || {
@@ -155,10 +155,10 @@ export function normalizeBannerConfig(config) {
     : null);
   const style = customStyle || templateStyle;
   return {
-    title: config.title ?? "🍪 We use cookies",
-    message: config.message ?? config.description ?? "This site uses tracking cookies. Accept to enable analytics.",
-    acceptText: config.acceptText ?? config.acceptButtonText ?? "Accept",
-    rejectText: config.rejectText ?? config.rejectButtonText ?? "Reject",
+    title: config.title ?? "We value your privacy",
+    message: config.message ?? config.description ?? "This site uses tracking cookies to enhance your browsing experience and analyze site traffic.",
+    acceptText: config.acceptText ?? config.acceptButtonText ?? "Accept All",
+    rejectText: config.rejectText ?? config.rejectButtonText ?? "Reject All",
     showReject: config.showReject !== false && config.showRejectButton !== false,
     position: config.position ?? "bottom",
     style,

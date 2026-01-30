@@ -1324,12 +1324,12 @@ var maxVerificationAttempts=5;
   
   banner.innerHTML=
     '<div style="flex:1;max-width:700px;">'+
-    '<strong style="font-size:16px;display:block;margin-bottom:6px;">${safeTitle || '🍪 We use cookies'}</strong>'+
-    '<p style="margin:0;font-size:14px;opacity:0.9;line-height:1.5;">${safeMessage || 'This site uses tracking cookies. Accept to enable analytics.'}</p>'+
+    '<strong style="font-size:16px;display:block;margin-bottom:6px;">${safeTitle || 'We value your privacy'}</strong>'+
+    '<p style="margin:0;font-size:14px;opacity:0.9;line-height:1.5;">${safeMessage || 'This site uses tracking cookies to enhance your browsing experience and analyze site traffic.'}</p>'+
     '</div>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
-    '<button id="consentflow-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept'}</button>'+
-    ${showReject ? `'<button id="consentflow-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject'}</button>'+` : ''}
+    '<button id="consentflow-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept All'}</button>'+
+    ${showReject ? `'<button id="consentflow-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject All'}</button>'+` : ''}
     '</div>';
   
   document.body.appendChild(banner);
