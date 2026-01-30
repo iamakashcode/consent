@@ -703,9 +703,9 @@ function BannerContent() {
                 </div>
               </div>
             </div>
-          </div>
             </>
             )}
+          </div>
 
           {/* Preview Panel */}
           <div className="lg:sticky lg:top-24 h-fit">
