@@ -1,5 +1,5 @@
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../../auth/[...nextauth]/route";
+import { authOptions } from "../../auth/[...nextauth]/route";
 import {
   ADDON_BRANDING_PRICE_CENTS,
   ADDON_BRANDING_PRODUCT_NAME,
