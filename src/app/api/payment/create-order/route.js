@@ -200,6 +200,7 @@ export async function POST(req) {
           paddlePrice.id,
           paddleCustomer.id,
           pendingDomain.id,
+          pendingDomain.siteId,
           pendingDomain.domain,
           plan,
           billingInterval

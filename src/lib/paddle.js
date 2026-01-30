@@ -377,9 +377,9 @@ export async function createPaddleTransaction(priceId, customerId, siteId, domai
 
 /**
  * Create Paddle transaction for pending domain (Site created only when payment succeeds)
- * custom_data: { pendingDomain: true, pendingDomainId, domain, plan, billingInterval }
+ * custom_data: { pendingDomain: true, pendingDomainId, siteId, domain, plan, billingInterval }
  */
-export async function createPaddleTransactionForPendingDomain(priceId, customerId, pendingDomainId, domain, plan, billingInterval) {
+export async function createPaddleTransactionForPendingDomain(priceId, customerId, pendingDomainId, siteId, domain, plan, billingInterval) {
   try {
     const transaction = await paddleRequest("POST", "/transactions", {
       items: [{ price_id: priceId, quantity: 1 }],
@@ -388,7 +388,8 @@ export async function createPaddleTransactionForPendingDomain(priceId, customerI
       currency_code: "USD",
       custom_data: {
         pendingDomain: true,
-        pendingDomainId: pendingDomainId,
+        pendingDomainId: String(pendingDomainId),
+        siteId: String(siteId),
         domain,
         plan,
         billingInterval,
