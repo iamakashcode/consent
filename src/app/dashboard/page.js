@@ -68,6 +68,8 @@ function DashboardContent() {
   const [subscriptions, setSubscriptions] = useState({});
   const [siteStats, setSiteStats] = useState({});
   const [copiedId, setCopiedId] = useState(null);
+  const [uploadingId, setUploadingId] = useState(null);
+  const [uploadMessageBySite, setUploadMessageBySite] = useState({});
   const hasRefreshed = useRef(false);
 
   useEffect(() => {
@@ -184,6 +186,29 @@ function DashboardContent() {
       setTimeout(() => setCopiedId(null), 2000);
     } catch (err) {
       alert("Failed to copy. Please copy manually.");
+    }
+  };
+
+  const uploadToCdn = async (site) => {
+    setUploadMessageBySite((prev) => ({ ...prev, [site.siteId]: null }));
+    setUploadingId(site.id);
+    try {
+      const res = await fetch(`/api/sites/${site.siteId}/upload-script`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setUploadMessageBySite((prev) => ({ ...prev, [site.siteId]: { type: "success", text: "Uploaded to CDN" } }));
+      } else {
+        setUploadMessageBySite((prev) => ({ ...prev, [site.siteId]: { type: "error", text: data.error || "Upload failed" } }));
+      }
+    } catch (err) {
+      setUploadMessageBySite((prev) => ({ ...prev, [site.siteId]: { type: "error", text: err.message || "Upload failed" } }));
+    } finally {
+      setUploadingId(null);
+      setTimeout(() => setUploadMessageBySite((prev) => {
+        const next = { ...prev };
+        delete next[site.siteId];
+        return next;
+      }), 4000);
     }
   };
 
@@ -453,7 +478,12 @@ function DashboardContent() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {uploadMessageBySite[site.siteId] && (
+                        <span className={`text-sm ${uploadMessageBySite[site.siteId].type === "success" ? "text-green-600" : "text-red-600"}`}>
+                          {uploadMessageBySite[site.siteId].text}
+                        </span>
+                      )}
                       {isActive ? (
                         <>
                           <button
@@ -466,6 +496,14 @@ function DashboardContent() {
                           >
                             <CopyIcon />
                             {copiedId === site.id ? "Copied!" : "Copy Script"}
+                          </button>
+                          <button
+                            onClick={() => uploadToCdn(site)}
+                            disabled={uploadingId === site.id}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 disabled:opacity-50 transition-colors"
+                            title="Upload script to R2/CDN so the install link works"
+                          >
+                            {uploadingId === site.id ? "Uploading…" : "Upload to CDN"}
                           </button>
                           <Link
                             href={`/banner?siteId=${site.siteId}`}

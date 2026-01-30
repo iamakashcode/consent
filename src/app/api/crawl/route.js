@@ -235,6 +235,14 @@ export async function POST(req) {
         : "Domain exists. Select a plan to activate tracking.";
     }
 
+    // Upload script to R2/CDN when a new domain is added (runs in background, does not block response)
+    if (isNewSite && site?.siteId) {
+      const { regenerateScriptOnConfigChange } = await import("@/lib/script-generator");
+      regenerateScriptOnConfigChange(site.siteId).catch((err) => {
+        console.error("[Crawl] Script upload after add domain failed:", err.message);
+      });
+    }
+
     return Response.json({
       domain: cleanDomain,
       trackers: Array.isArray(site.trackers) ? site.trackers : [],
