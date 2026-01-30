@@ -22,6 +22,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   sites     Site[]
+  pendingDomains PendingDomain[]
 
   @@map("users")
 }
@@ -49,6 +50,23 @@ model Site {
 
   @@unique([userId, domain])
   @@map("sites")
+}
+
+// Domain awaiting payment - converted to Site only when payment succeeds
+model PendingDomain {
+  id                 String   @id @default(cuid())
+  userId             String
+  domain             String
+  siteId             String   @unique  // pre-generated so plans/checkout can use it
+  trackers           Json     @default("[]")
+  verificationToken  String
+  plan               String   @default("basic")
+  billingInterval    String   @default("monthly")
+  createdAt          DateTime @default(now())
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, domain])
+  @@map("pending_domains")
 }
 
 model PageView {

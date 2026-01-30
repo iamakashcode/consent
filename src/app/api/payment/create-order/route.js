@@ -6,6 +6,7 @@ import {
   getOrCreatePaddlePrice,
   getOrCreatePaddleCustomer,
   createPaddleTransaction,
+  createPaddleTransactionForPendingDomain,
   fetchPaddleSubscription,
   getSubscriptionCheckoutUrl,
 } from "@/lib/paddle";
@@ -50,8 +51,8 @@ export async function POST(req) {
       );
     }
 
-    // Find site by public siteId or database ID
-    const site = await prisma.site.findFirst({
+    // Find site by public siteId or database ID; or PendingDomain (domain not created until payment succeeds)
+    let site = await prisma.site.findFirst({
       where: {
         OR: [
           { siteId: siteId },
@@ -62,11 +63,25 @@ export async function POST(req) {
       include: { subscription: true },
     });
 
+    let pendingDomain = null;
     if (!site) {
-      return Response.json(
-        { error: "Site not found. Please add the domain first." },
-        { status: 404 }
-      );
+      pendingDomain = await prisma.pendingDomain.findFirst({
+        where: { siteId: siteId, userId: session.user.id },
+      });
+      if (!pendingDomain) {
+        return Response.json(
+          { error: "Site not found. Please add the domain first." },
+          { status: 404 }
+        );
+      }
+      // Use a minimal "site" shape for redirect/response (no DB Site yet)
+      site = {
+        id: null,
+        siteId: pendingDomain.siteId,
+        domain: pendingDomain.domain,
+        userId: pendingDomain.userId,
+        subscription: null,
+      };
     }
 
     // Check if domain already has an active subscription
@@ -169,7 +184,64 @@ export async function POST(req) {
       );
     }
 
-    // Create Paddle transaction (subscription will be created automatically on payment)
+    // Pending domain: no Site yet - create transaction; Site + Subscription created in webhook on payment success
+    if (pendingDomain) {
+      try {
+        await prisma.pendingDomain.update({
+          where: { id: pendingDomain.id },
+          data: { plan, billingInterval },
+        });
+      } catch (e) {
+        console.error("[Payment] Failed to update PendingDomain:", e);
+      }
+      let paddleTransaction;
+      try {
+        paddleTransaction = await createPaddleTransactionForPendingDomain(
+          paddlePrice.id,
+          paddleCustomer.id,
+          pendingDomain.id,
+          pendingDomain.domain,
+          plan,
+          billingInterval
+        );
+      } catch (error) {
+        console.error("[Payment] Failed to create Paddle transaction (pending domain):", error);
+        if (error.message?.includes("checkout_not_enabled") || error.message?.includes("Checkout has not yet been enabled")) {
+          return Response.json(
+            { error: "Paddle checkout is not enabled. Please complete Paddle onboarding and enable checkout.", errorCode: "PADDLE_CHECKOUT_NOT_ENABLED" },
+            { status: 500 }
+          );
+        }
+        return Response.json(
+          { error: error.message || "Failed to create payment. Please try again." },
+          { status: 500 }
+        );
+      }
+      const checkoutUrl = paddleTransaction.checkout?.url;
+      if (!checkoutUrl) {
+        return Response.json(
+          { error: "Checkout URL not available. Please try again." },
+          { status: 500 }
+        );
+      }
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || req.headers.get("origin") || `http://${req.headers.get("host")}`;
+      const redirectTarget = `/dashboard/usage?payment=success&siteId=${pendingDomain.siteId}`;
+      const returnUrl = `${baseUrl}/payment/return?transaction_id=${paddleTransaction.id}&siteId=${pendingDomain.siteId}&redirect=${encodeURIComponent(redirectTarget)}`;
+      return Response.json({
+        success: true,
+        transactionId: paddleTransaction.id,
+        subscriptionAuthUrl: checkoutUrl,
+        checkoutUrl,
+        requiresPaymentSetup: true,
+        returnUrl,
+        siteId: pendingDomain.siteId,
+        domain: pendingDomain.domain,
+        plan,
+        message: `Please complete payment for ${pendingDomain.domain}. Your domain and 14-day trial will start after payment.`,
+      });
+    }
+
+    // Existing site: create Paddle transaction and Subscription (pending until payment)
     let paddleTransaction;
     try {
       paddleTransaction = await createPaddleTransaction(

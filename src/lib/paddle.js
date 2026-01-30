@@ -376,6 +376,33 @@ export async function createPaddleTransaction(priceId, customerId, siteId, domai
 }
 
 /**
+ * Create Paddle transaction for pending domain (Site created only when payment succeeds)
+ * custom_data: { pendingDomain: true, pendingDomainId, domain, plan, billingInterval }
+ */
+export async function createPaddleTransactionForPendingDomain(priceId, customerId, pendingDomainId, domain, plan, billingInterval) {
+  try {
+    const transaction = await paddleRequest("POST", "/transactions", {
+      items: [{ price_id: priceId, quantity: 1 }],
+      customer_id: customerId,
+      collection_mode: "automatic",
+      currency_code: "USD",
+      custom_data: {
+        pendingDomain: true,
+        pendingDomainId: pendingDomainId,
+        domain,
+        plan,
+        billingInterval,
+      },
+      checkout: { url: null },
+    });
+    return transaction.data;
+  } catch (error) {
+    console.error("[Paddle] Error creating pending domain transaction:", error);
+    throw error;
+  }
+}
+
+/**
  * Create Paddle transaction for add-on (e.g. remove branding) - custom_data includes addonType for webhook
  */
 export async function createPaddleAddonTransaction(priceId, customerId, siteId, addonType) {

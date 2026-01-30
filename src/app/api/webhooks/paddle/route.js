@@ -196,6 +196,64 @@ async function handleTransactionCompleted(event) {
   const subscriptionId = transaction.subscription_id;
   const customData = transaction.custom_data || {};
 
+  // Pending domain: create Site + Subscription only when payment succeeds (domain was not created until now)
+  if (customData.pendingDomain === true && customData.pendingDomainId) {
+    try {
+      const pending = await prisma.pendingDomain.findUnique({
+        where: { id: customData.pendingDomainId },
+      });
+      if (!pending) {
+        console.warn(`[Webhook] PendingDomain not found: ${customData.pendingDomainId}`);
+        return;
+      }
+      const createdSite = await prisma.site.create({
+        data: {
+          domain: pending.domain,
+          siteId: pending.siteId,
+          userId: pending.userId,
+          trackers: pending.trackers,
+          verificationToken: pending.verificationToken,
+          isVerified: false,
+        },
+      });
+      const plan = customData.plan || pending.plan;
+      const billingInterval = customData.billingInterval || pending.billingInterval;
+      const periodEnd = transaction.billing_period?.ends_at
+        ? new Date(transaction.billing_period.ends_at)
+        : (() => {
+            const end = new Date();
+            end.setMonth(end.getMonth() + 1);
+            return end;
+          })();
+      await startUserTrial(pending.userId);
+      const user = await prisma.user.findUnique({
+        where: { id: pending.userId },
+        select: { trialEndAt: true },
+      });
+      const newStatus = user?.trialEndAt && new Date() < new Date(user.trialEndAt) ? "trial" : "active";
+      await prisma.subscription.create({
+        data: {
+          siteId: createdSite.id,
+          plan,
+          billingInterval,
+          status: newStatus,
+          paddleSubscriptionId: subscriptionId || null,
+          paddleTransactionId: transaction.id,
+          currentPeriodStart: transaction.billing_period?.starts_at ? new Date(transaction.billing_period.starts_at) : new Date(),
+          currentPeriodEnd: periodEnd,
+        },
+      });
+      await prisma.pendingDomain.delete({ where: { id: pending.id } });
+      import("@/lib/script-generator")
+        .then(({ syncSiteScriptWithSubscription }) => syncSiteScriptWithSubscription(createdSite.siteId))
+        .catch((err) => console.error("[Webhook] CDN sync after pending domain:", err));
+      console.log(`[Webhook] PendingDomain converted to Site: ${createdSite.siteId} for ${pending.domain}`);
+    } catch (err) {
+      console.error("[Webhook] Failed to create Site from PendingDomain:", err);
+    }
+    return;
+  }
+
   // Add-on purchase (e.g. remove branding) - custom_data has siteId and addonType
   if (customData.addonType === "remove_branding" && customData.siteId) {
     try {

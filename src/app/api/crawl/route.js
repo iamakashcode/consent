@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { generateSiteId } from "@/lib/store";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
-import { startUserTrial } from "@/lib/subscription";
 import { getCdnUrl, R2_CONFIGURED } from "@/lib/cdn-service";
 
 /**
@@ -143,57 +142,63 @@ export async function POST(req) {
         html = null;
       }
 
-      // Generate unique siteId
+      // Generate unique siteId (used for PendingDomain; Site will be created only after payment)
       siteId = generateSiteId();
 
       // Generate verification token
       const verificationToken = `cm_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
 
-      // Create site
+      // Create PendingDomain - Site is created only when payment succeeds (see webhook)
       try {
-        site = await prisma.site.create({
+        const pending = await prisma.pendingDomain.create({
           data: {
             domain: cleanDomain,
             siteId: siteId,
             userId: userId,
             trackers: trackers,
             verificationToken: verificationToken,
-            isVerified: false,
           },
         });
         isNewSite = true;
-        
-        // Start user-level trial (14 days) if this is user's first domain
-        // Check if user already has any sites
-        const userSiteCount = await prisma.site.count({
-          where: { userId: userId },
-        });
-        
-        // If this is the first site, start user trial
-        if (userSiteCount === 1) {
-          try {
-            await startUserTrial(userId);
-            console.log(`[Crawl] Started 14-day user trial for user ${userId} (first domain added)`);
-          } catch (trialError) {
-            console.error("[Crawl] Error starting user trial:", trialError);
-            // Continue even if trial start fails
-          }
-        }
+        // Build a minimal "site" shape for response (no DB Site yet)
+        site = {
+          id: null,
+          domain: cleanDomain,
+          siteId: pending.siteId,
+          trackers: pending.trackers,
+          isVerified: false,
+          verificationToken: pending.verificationToken,
+          subscription: null,
+        };
       } catch (createError) {
-        // Handle race condition if site was created by another request
+        // Handle race: same domain added by another request - check Site or PendingDomain
         if (createError.code === "P2002") {
           existingSite = await prisma.site.findFirst({
-            where: {
-              userId: userId,
-              domain: cleanDomain,
-            },
+            where: { userId: userId, domain: cleanDomain },
             include: { subscription: true },
           });
           if (existingSite) {
             site = existingSite;
             siteId = existingSite.siteId;
           } else {
-            throw createError;
+            const existingPending = await prisma.pendingDomain.findFirst({
+              where: { userId: userId, domain: cleanDomain },
+            });
+            if (existingPending) {
+              site = {
+                id: null,
+                domain: existingPending.domain,
+                siteId: existingPending.siteId,
+                trackers: existingPending.trackers,
+                isVerified: false,
+                verificationToken: existingPending.verificationToken,
+                subscription: null,
+              };
+              siteId = existingPending.siteId;
+              isNewSite = false;
+            } else {
+              throw createError;
+            }
           }
         } else {
           throw createError;
@@ -235,8 +240,8 @@ export async function POST(req) {
         : "Domain exists. Select a plan to activate tracking.";
     }
 
-    // Upload script to R2/CDN when a new domain is added (runs in background, does not block response)
-    if (isNewSite && site?.siteId) {
+    // Upload script to R2/CDN only when a real Site exists (not for PendingDomain - Site is created after payment)
+    if (isNewSite && site?.id && site?.siteId) {
       const { regenerateScriptOnConfigChange } = await import("@/lib/script-generator");
       regenerateScriptOnConfigChange(site.siteId).catch((err) => {
         console.error("[Crawl] Script upload after add domain failed:", err.message);
