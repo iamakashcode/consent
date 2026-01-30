@@ -444,6 +444,19 @@ export async function createPaddleSubscription(priceId, customerId, siteId, doma
 }
 
 /**
+ * Fetch Paddle transaction by ID (e.g. for confirming pending-domain payment on return)
+ */
+export async function fetchPaddleTransaction(transactionId) {
+  try {
+    const res = await paddleRequest("GET", `/transactions/${transactionId}`);
+    return res.data;
+  } catch (error) {
+    console.error("[Paddle] Error fetching transaction:", error);
+    throw error;
+  }
+}
+
+/**
  * Fetch Paddle subscription
  */
 export async function fetchPaddleSubscription(subscriptionId) {

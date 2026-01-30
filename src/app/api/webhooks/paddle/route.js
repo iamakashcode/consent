@@ -1,6 +1,7 @@
 import { verifyPaddleWebhookSignature } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
 import { startUserTrial, activateSubscription } from "@/lib/subscription";
+import { activatePendingDomain } from "@/lib/activate-pending-domain";
 
 /**
  * Paddle Webhook Handler
@@ -249,59 +250,12 @@ async function processPendingDomainPayment(event) {
 }
 
 /**
- * Create Site + Subscription from a PendingDomain and clear the pending record.
- * Returns true on success or already-done; false on unexpected error.
+ * Create Site + Subscription from a PendingDomain (uses shared activatePendingDomain).
+ * Returns true on success or on error (so caller doesn't fall through).
  */
 async function createSiteFromPendingDomain(pending, transaction, subscriptionId) {
   try {
-    const plan = transaction.custom_data?.plan ?? pending.plan;
-    const billingInterval =
-      transaction.custom_data?.billingInterval ??
-      transaction.custom_data?.billing_interval ??
-      pending.billingInterval;
-    const periodEnd = transaction.billing_period?.ends_at
-      ? new Date(transaction.billing_period.ends_at)
-      : (() => {
-          const end = new Date();
-          end.setMonth(end.getMonth() + 1);
-          return end;
-        })();
-
-    const createdSite = await prisma.site.create({
-      data: {
-        domain: pending.domain,
-        siteId: pending.siteId,
-        userId: pending.userId,
-        trackers: pending.trackers,
-        verificationToken: pending.verificationToken,
-        isVerified: false,
-      },
-    });
-    await startUserTrial(pending.userId);
-    const user = await prisma.user.findUnique({
-      where: { id: pending.userId },
-      select: { trialEndAt: true },
-    });
-    const newStatus = user?.trialEndAt && new Date() < new Date(user.trialEndAt) ? "trial" : "active";
-    await prisma.subscription.create({
-      data: {
-        siteId: createdSite.id,
-        plan,
-        billingInterval,
-        status: newStatus,
-        paddleSubscriptionId: subscriptionId || null,
-        paddleTransactionId: transaction.id,
-        currentPeriodStart: transaction.billing_period?.starts_at
-          ? new Date(transaction.billing_period.starts_at)
-          : new Date(),
-        currentPeriodEnd: periodEnd,
-      },
-    });
-    await prisma.pendingDomain.delete({ where: { id: pending.id } });
-    import("@/lib/script-generator")
-      .then(({ syncSiteScriptWithSubscription }) => syncSiteScriptWithSubscription(createdSite.siteId))
-      .catch((err) => console.error("[Webhook] CDN sync after pending domain:", err));
-    console.log(`[Webhook] PendingDomain converted to Site: ${createdSite.siteId} for ${pending.domain}`);
+    await activatePendingDomain(pending, transaction);
     return true;
   } catch (err) {
     console.error("[Webhook] Failed to create Site from PendingDomain:", err);

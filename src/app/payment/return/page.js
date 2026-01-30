@@ -65,6 +65,47 @@ function PaymentReturnContent() {
     // Check subscription status
     const checkSubscription = async () => {
       try {
+        // When we have transaction_id + siteId, this may be a pending-domain checkout (new domain).
+        // Call confirm-pending-domain first so the domain is added even if the webhook didn't fire.
+        if (transactionId && siteIdFromUrl) {
+          setStatusMessage("Confirming your domain...");
+          try {
+            const confirmResponse = await fetch("/api/payment/confirm-pending-domain", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ transactionId, siteId: siteIdFromUrl }),
+            });
+            const confirmData = await confirmResponse.json();
+            if (confirmResponse.ok && confirmData.success && confirmData.site) {
+              setStatusMessage("✅ Payment successful! Your domain has been added.");
+              setRedirecting(true);
+              await update();
+              if (typeof window !== "undefined") {
+                sessionStorage.removeItem("paddle_subscription_id");
+                sessionStorage.removeItem("paddle_transaction_id");
+                sessionStorage.removeItem("paddle_site_id");
+                sessionStorage.removeItem("paddle_redirect_url");
+                sessionStorage.removeItem("paddle_return_url");
+              }
+              const target = `/dashboard/usage?payment=success&siteId=${confirmData.site.siteId}`;
+              setTimeout(() => {
+                if (window.opener && !window.opener.closed) {
+                  try {
+                    window.opener.location.href = target;
+                    window.close();
+                    return;
+                  } catch (e) {}
+                }
+                router.push(target);
+              }, 800);
+              setChecking(false);
+              return;
+            }
+          } catch (confirmErr) {
+            console.error("[Return] confirm-pending-domain error:", confirmErr);
+          }
+        }
+
         setStatusMessage("Syncing subscription status from Paddle...");
         
         // Use the final subscription ID (from URL or sessionStorage)
