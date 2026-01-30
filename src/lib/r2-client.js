@@ -3,7 +3,7 @@
  * Used for storing and serving generated consent scripts via R2 + Cloudflare CDN.
  */
 
-import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getScriptPath } from "./script-urls";
 
 const accountId = process.env.R2_ACCOUNT_ID;
@@ -97,6 +97,25 @@ export async function r2Exists(siteId, isPreview = false) {
     if (e.name === "NotFound" || e.name === "NoSuchKey" || e.$metadata?.httpStatusCode === 404)
       return false;
     throw e;
+  }
+}
+
+/**
+ * Delete a script from R2. No error if object does not exist.
+ */
+export async function r2Delete(siteId, isPreview = false) {
+  const client = getClient();
+  if (!client) return;
+
+  try {
+    await client.send(
+      new DeleteObjectCommand({
+        Bucket: bucket,
+        Key: key(siteId, isPreview),
+      })
+    );
+  } catch (e) {
+    console.error(`[R2] Failed to delete ${key(siteId, isPreview)}:`, e.message);
   }
 }
 

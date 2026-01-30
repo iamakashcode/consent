@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { hasVerificationColumns, hasBannerConfigColumn } from "@/lib/db-utils";
+import { deleteScript } from "@/lib/cdn-service";
 
 export async function GET(req) {
   try {
@@ -200,52 +201,50 @@ export async function DELETE(req) {
     }
 
     const { searchParams } = new URL(req.url);
-    const siteId = searchParams.get("id");
+    const id = searchParams.get("id");
 
-    if (!siteId) {
+    if (!id) {
       return Response.json(
         { error: "Site ID is required" },
         { status: 400 }
       );
     }
 
-    // Verify the site belongs to the user and delete it
-    // Use raw SQL to avoid Prisma schema validation issues
-    try {
-      const result = await prisma.$queryRaw`
-        DELETE FROM "sites"
-        WHERE "id" = ${siteId} AND "userId" = ${session.user.id}
-        RETURNING "id"
-      `;
+    // Fetch site first to get public siteId (needed to delete R2/CDN files)
+    const site = await prisma.site.findFirst({
+      where: {
+        id,
+        userId: session.user.id,
+      },
+      select: { id: true, siteId: true },
+    });
 
-      if (!result || result.length === 0) {
-        return Response.json(
-          { error: "Site not found or access denied" },
-          { status: 404 }
-        );
-      }
+    if (!site) {
+      return Response.json(
+        { error: "Site not found or access denied" },
+        { status: 404 }
+      );
+    }
+
+    // Delete script files from R2 / local CDN before removing the site
+    try {
+      await deleteScript(site.siteId, false);
+      await deleteScript(site.siteId, true);
+    } catch (cdnErr) {
+      console.error("[Sites DELETE] CDN delete failed:", cdnErr);
+      // Continue with DB delete
+    }
+
+    // Delete site from database
+    try {
+      await prisma.$executeRaw`
+        DELETE FROM "sites"
+        WHERE "id" = ${id} AND "userId" = ${session.user.id}
+      `;
     } catch (error) {
       console.error("Error deleting site:", error);
-      // Fallback to Prisma if raw SQL fails
-      const site = await prisma.site.findFirst({
-        where: {
-          id: siteId,
-          userId: session.user.id,
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      if (!site) {
-        return Response.json(
-          { error: "Site not found or access denied" },
-          { status: 404 }
-        );
-      }
-
       await prisma.site.delete({
-        where: { id: siteId },
+        where: { id },
       });
     }
 

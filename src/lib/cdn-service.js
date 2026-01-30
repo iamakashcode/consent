@@ -13,6 +13,7 @@ import {
   r2Get,
   r2Exists,
   r2PublicUrl,
+  r2Delete,
 } from "./r2-client";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -98,11 +99,10 @@ export async function getScript(siteId, isPreview = false) {
 
 /**
  * Delete script from R2 or file system.
- * R2: we don't implement delete for now; no-op.
  */
 export async function deleteScript(siteId, isPreview = false) {
   if (R2_CONFIGURED) {
-    // Optional: implement R2 DeleteObjectCommand when needed
+    await r2Delete(siteId, isPreview);
     return true;
   }
   const filename = isPreview ? "script.preview.js" : "script.js";
