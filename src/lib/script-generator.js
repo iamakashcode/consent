@@ -128,17 +128,9 @@ export async function generateAndUploadScript(siteId, options = {}) {
  * Regenerate script when configuration changes
  */
 export async function regenerateScriptOnConfigChange(siteId) {
-  try {
-    // Generate production script (allow upload even if subscription inactive so banner customisation goes live)
-    await generateAndUploadScript(siteId, { isPreview: false, skipSubscriptionCheck: true });
-    
-    // Also regenerate preview script
-    await generateAndUploadScript(siteId, { isPreview: true });
-    
-    return { success: true };
-  } catch (error) {
-    console.error(`[ScriptGenerator] Failed to regenerate script:`, error);
-    // Don't throw - allow config save to succeed even if CDN upload fails
-    return { success: false, error: error.message };
-  }
+  // Generate production script (allow upload even if subscription inactive so banner customisation goes live)
+  await generateAndUploadScript(siteId, { isPreview: false, skipSubscriptionCheck: true });
+  // Also regenerate preview script
+  await generateAndUploadScript(siteId, { isPreview: true });
+  return { success: true };
 }

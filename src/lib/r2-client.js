@@ -40,21 +40,28 @@ function key(siteId, isPreview) {
  */
 export async function r2Upload(siteId, content, isPreview = false) {
   const client = getClient();
-  if (!client) throw new Error("R2 not configured");
+  if (!client) throw new Error("R2 not configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL in your environment.");
 
   const k = key(siteId, isPreview);
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: k,
-      Body: content,
-      ContentType: "application/javascript; charset=utf-8",
-      CacheControl: isPreview
-        ? "no-cache, no-store, must-revalidate"
-        : "public, max-age=31536000, immutable",
-    })
-  );
-  return k;
+  try {
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: k,
+        Body: content,
+        ContentType: "application/javascript; charset=utf-8",
+        CacheControl: isPreview
+          ? "no-cache, no-store, must-revalidate"
+          : "public, max-age=31536000, immutable",
+      })
+    );
+    return k;
+  } catch (e) {
+    const msg = e.message || String(e);
+    const code = e.name || e.$metadata?.httpStatusCode || "";
+    console.error("[R2] Upload failed:", { key: k, bucket, error: msg, code });
+    throw new Error(`R2 upload failed: ${msg}${code ? ` (${code})` : ""}. Check R2 credentials, bucket name, and API token permissions.`);
+  }
 }
 
 /**

@@ -33,8 +33,19 @@ export async function POST(req, { params }) {
 
     const id = site.siteId;
 
+    if (!R2_CONFIGURED) {
+      return Response.json(
+        {
+          success: false,
+          error: "R2 is not configured",
+          hint: "Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL and NEXT_PUBLIC_R2_PUBLIC_URL in your deployment environment (e.g. Vercel → Project → Settings → Environment Variables).",
+        },
+        { status: 200 }
+      );
+    }
+
     try {
-      await generateAndUploadScript(id, { isPreview: false });
+      await generateAndUploadScript(id, { isPreview: false, skipSubscriptionCheck: true });
       await generateAndUploadScript(id, { isPreview: true });
     } catch (err) {
       return Response.json(
@@ -44,7 +55,9 @@ export async function POST(req, { params }) {
           hint:
             err.message?.includes("Subscription")
               ? "Activate a plan for this domain in the dashboard, then try again."
-              : "Check server logs and R2 env vars.",
+              : err.message?.includes("R2")
+                ? "Check R2 credentials, bucket name, and that the API token has Object Read & Write. In Cloudflare: R2 → Manage R2 API Tokens."
+                : "Check server logs for details.",
         },
         { status: 200 }
       );
@@ -54,9 +67,7 @@ export async function POST(req, { params }) {
     return Response.json({
       success: true,
       url,
-      message: R2_CONFIGURED
-        ? "Script uploaded to R2. If the link still 404s, enable Public access on the bucket in Cloudflare R2."
-        : "Script uploaded to local CDN.",
+      message: "Script uploaded to R2. If the link still 404s, enable Public access on the bucket in Cloudflare R2.",
     });
   } catch (error) {
     console.error("[Upload Script API]", error);
