@@ -64,15 +64,25 @@ export async function PUT(req, { params }) {
       },
     });
 
-    // Regenerate and upload script to CDN (async, don't wait)
-    regenerateScriptOnConfigChange(site.siteId).catch((error) => {
-      console.error(`[Banner API] Failed to regenerate script for ${site.siteId}:`, error);
-      // Don't fail the request if CDN upload fails
-    });
+    // Regenerate and upload script to CDN so live site shows new banner
+    try {
+      await regenerateScriptOnConfigChange(site.siteId);
+    } catch (regenError) {
+      console.error(`[Banner API] Failed to regenerate script for ${site.siteId}:`, regenError);
+      return Response.json(
+        {
+          success: true,
+          message: "Banner configuration updated, but script re-upload failed. Click “Upload to CDN” on the dashboard to update the live script.",
+          site: updated,
+          regenerateError: regenError.message,
+        },
+        { status: 200 }
+      );
+    }
 
     return Response.json({
       success: true,
-      message: "Banner configuration updated",
+      message: "Banner configuration updated and live script updated.",
       site: updated,
     });
   } catch (error) {

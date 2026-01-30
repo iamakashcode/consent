@@ -1445,6 +1445,13 @@ export async function GET(req, { params }) {
     }
 
     let rawConfig = site.bannerConfig || DEFAULT_BANNER_CONFIG;
+    if (typeof rawConfig === "string") {
+      try {
+        rawConfig = JSON.parse(rawConfig);
+      } catch (e) {
+        rawConfig = DEFAULT_BANNER_CONFIG;
+      }
+    }
     if (isPreview && configParam) {
       try {
         const decodedJson =

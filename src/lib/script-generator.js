@@ -21,6 +21,7 @@ export async function generateAndUploadScript(siteId, options = {}) {
     const {
       isPreview = false,
       forceRegenerate = false,
+      skipSubscriptionCheck = false, // e.g. when regenerating after banner config save
     } = options;
 
     // Fetch site data
@@ -35,8 +36,8 @@ export async function generateAndUploadScript(siteId, options = {}) {
       throw new Error(`Site not found: ${siteId}`);
     }
 
-    // Check subscription (skip for preview)
-    if (!isPreview) {
+    // Check subscription (skip for preview or when explicitly allowed, e.g. banner-triggered regenerate)
+    if (!isPreview && !skipSubscriptionCheck) {
       const subscriptionStatus = await isSubscriptionActive(site.id);
       if (!subscriptionStatus.isActive) {
         throw new Error(`Subscription inactive: ${subscriptionStatus.reason}`);
@@ -59,7 +60,14 @@ export async function generateAndUploadScript(siteId, options = {}) {
       consentApiHostname = new URL(baseUrl).hostname || "";
     }
 
-    const rawConfig = site.bannerConfig || DEFAULT_BANNER_CONFIG;
+    let rawConfig = site.bannerConfig || DEFAULT_BANNER_CONFIG;
+    if (typeof rawConfig === "string") {
+      try {
+        rawConfig = JSON.parse(rawConfig);
+      } catch (e) {
+        rawConfig = DEFAULT_BANNER_CONFIG;
+      }
+    }
     const normalized = normalizeBannerConfig(rawConfig);
     const { title, message, acceptText, rejectText, showReject, position, style: normStyle } = normalized;
     const style = normStyle || {};
@@ -121,8 +129,8 @@ export async function generateAndUploadScript(siteId, options = {}) {
  */
 export async function regenerateScriptOnConfigChange(siteId) {
   try {
-    // Generate production script
-    await generateAndUploadScript(siteId, { isPreview: false });
+    // Generate production script (allow upload even if subscription inactive so banner customisation goes live)
+    await generateAndUploadScript(siteId, { isPreview: false, skipSubscriptionCheck: true });
     
     // Also regenerate preview script
     await generateAndUploadScript(siteId, { isPreview: true });
