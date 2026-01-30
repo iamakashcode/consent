@@ -1138,7 +1138,10 @@ if(hasConsent()){
 })();`;
 }
 
-export function generateMainScript(siteId, allowedDomain, isPreview, config, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl, templateStyle) {
+// Default branding text shown in banner when showBranding is true
+const DEFAULT_BRANDING_TEXT = 'Powered by Cookie Access';
+
+export function generateMainScript(siteId, allowedDomain, isPreview, config, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl, templateStyle, showBranding = true) {
   const CONSENT_KEY = `cookie_consent_${siteId}`;
   
   const escapeForTemplate = (str) => {
@@ -1153,6 +1156,7 @@ export function generateMainScript(siteId, allowedDomain, isPreview, config, ban
   const safeMessage = escapeForTemplate(message);
   const safeAccept = escapeForTemplate(acceptText);
   const safeReject = escapeForTemplate(rejectText);
+  const safeBranding = escapeForTemplate(DEFAULT_BRANDING_TEXT);
   
   return `
 /* ======================================================
@@ -1326,6 +1330,7 @@ var maxVerificationAttempts=5;
     '<div style="flex:1;max-width:700px;">'+
     '<strong style="font-size:16px;display:block;margin-bottom:6px;">${safeTitle || 'We value your privacy'}</strong>'+
     '<p style="margin:0;font-size:14px;opacity:0.9;line-height:1.5;">${safeMessage || 'This site uses tracking cookies to enhance your browsing experience and analyze site traffic.'}</p>'+
+    ${showBranding ? `'<p style="margin:8px 0 0 0;font-size:11px;opacity:0.7;">${safeBranding}</p>'+` : ''}
     '</div>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
     '<button id="consentflow-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept All'}</button>'+
@@ -1487,6 +1492,7 @@ export async function GET(req, { params }) {
     const verifyCallbackUrl = `${baseUrl}/api/sites/${actualSiteId}/verify-callback`;
     const trackUrl = `${baseUrl}/api/sites/${actualSiteId}/track`;
 
+    const showBranding = !site.subscription?.removeBrandingAddon;
     const inlineBlocker = generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiHostname);
     const mainScript = generateMainScript(
       siteId,
@@ -1502,7 +1508,8 @@ export async function GET(req, { params }) {
       showReject,
       verifyCallbackUrl,
       trackUrl,
-      style
+      style,
+      showBranding
     );
 
     const fullScript = inlineBlocker + "\n" + mainScript;

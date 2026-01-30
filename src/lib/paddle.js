@@ -42,9 +42,13 @@ export const PLAN_TRIAL_DAYS = {
   pro: 14,
 };
 
+// Add-on: Remove branding from banner ($3/month)
+export const ADDON_BRANDING_PRICE_CENTS = 300; // $3
+export const ADDON_BRANDING_PRODUCT_NAME = "remove_branding";
+
 // Plan page view limits (per domain per month)
 export const PLAN_PAGE_VIEW_LIMITS = {
-  basic: 10,    // 100,000 page views per month
+  basic: 100,    // 100,000 page views per month
   starter: 300000,  // 300,000 page views per month
   pro: Infinity,    // Unlimited page views
 };
@@ -54,7 +58,7 @@ export const PLAN_DETAILS = {
   basic: {
     name: "Basic",
     price: 5,
-    pageViews: 10,
+    pageViews: 100,
     trialDays: 14,
     features: [
       "1 domain",
@@ -170,6 +174,54 @@ export async function getOrCreatePaddleProduct(planName) {
     return product.data;
   } catch (error) {
     console.error(`[Paddle] Error getting/creating product for ${planName}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Get or create Paddle product for add-on (e.g. remove branding)
+ */
+export async function getOrCreatePaddleAddonProduct(addonName) {
+  try {
+    const products = await paddleRequest("GET", "/products");
+    const existing = products.data?.find(
+      (p) => p.name?.toLowerCase().includes(addonName.toLowerCase())
+    );
+    if (existing) return existing;
+    const product = await paddleRequest("POST", "/products", {
+      name: addonName === ADDON_BRANDING_PRODUCT_NAME ? "Remove branding" : addonName,
+      description: addonName === ADDON_BRANDING_PRODUCT_NAME ? "Hide Powered by Cookie Access on consent banner" : "",
+      type: "standard",
+      tax_category: "standard",
+    });
+    return product.data;
+  } catch (error) {
+    console.error(`[Paddle] Error getOrCreate addon product:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Get or create Paddle price for add-on (monthly, no trial)
+ */
+export async function getOrCreatePaddleAddonPrice(productId, amountCents) {
+  try {
+    const prices = await paddleRequest("GET", `/prices?product_id=${productId}`);
+    const existing = prices.data?.find(
+      (p) => p.billing_cycle?.interval === "month" && p.unit_price?.amount === String(amountCents)
+    );
+    if (existing) return existing;
+    const price = await paddleRequest("POST", "/prices", {
+      product_id: productId,
+      description: "Monthly",
+      name: "Monthly",
+      unit_price: { amount: String(amountCents), currency_code: "USD" },
+      billing_cycle: { interval: "month", frequency: 1 },
+      tax_mode: "account_setting",
+    });
+    return price.data;
+  } catch (error) {
+    console.error(`[Paddle] Error getOrCreate addon price:`, error);
     throw error;
   }
 }
@@ -308,6 +360,37 @@ export async function createPaddleTransaction(priceId, customerId, siteId, domai
     return transaction.data;
   } catch (error) {
     console.error("[Paddle] Error creating transaction:", error);
+
+    // Enhance error message for checkout not enabled
+    if (error.message?.includes("checkout_not_enabled") || error.message?.includes("Checkout has not yet been enabled")) {
+      const envType = isProduction ? "LIVE" : "SANDBOX";
+      const dashboardUrl = isProduction
+        ? "https://vendors.paddle.com"
+        : "https://sandbox-vendors.paddle.com";
+
+      error.message = `Paddle ${envType} checkout is not enabled. Please:\n1. Go to ${dashboardUrl}\n2. Complete onboarding and enable checkout\n3. Or contact Paddle support\n\nOriginal error: ${error.message}`;
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Create Paddle transaction for add-on (e.g. remove branding) - custom_data includes addonType for webhook
+ */
+export async function createPaddleAddonTransaction(priceId, customerId, siteId, addonType) {
+  try {
+    const transaction = await paddleRequest("POST", "/transactions", {
+      items: [{ price_id: priceId, quantity: 1 }],
+      customer_id: customerId,
+      collection_mode: "automatic",
+      currency_code: "USD",
+      custom_data: { siteId, addonType },
+      checkout: { url: null },
+    });
+    return transaction.data;
+  } catch (error) {
+    console.error("[Paddle] Error creating addon transaction:", error);
 
     // Enhance error message for checkout not enabled
     if (error.message?.includes("checkout_not_enabled") || error.message?.includes("Checkout has not yet been enabled")) {

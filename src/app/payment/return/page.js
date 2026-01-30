@@ -12,6 +12,7 @@ function PaymentReturnContent() {
   const subscriptionId = searchParams.get("subscription_id") || searchParams.get("subscriptionId");
   const transactionId = searchParams.get("transaction_id");
   const redirectParam = searchParams.get("redirect");
+  const addonParam = searchParams.get("addon");
   const [checking, setChecking] = useState(true);
   const [statusMessage, setStatusMessage] = useState("Checking payment status...");
   const [redirecting, setRedirecting] = useState(false);
@@ -28,6 +29,15 @@ function PaymentReturnContent() {
     const finalSubscriptionId = urlSubscriptionId || storedSubscriptionId;
     const fallbackRedirect = redirectParam || "/dashboard/usage?payment=success";
     const siteIdFromUrl = searchParams.get("siteId");
+
+    // Add-on purchase return: redirect to banner with success
+    if (addonParam === "remove_branding" && redirectParam) {
+      setStatusMessage("✅ Add-on purchased! Branding will be hidden on your banner.");
+      setChecking(false);
+      setRedirecting(true);
+      setTimeout(() => router.push(redirectParam), 1500);
+      return;
+    }
 
     if (!session || !finalSubscriptionId) {
       // No subscription ID, check sessionStorage for redirect info

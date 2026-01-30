@@ -83,7 +83,11 @@ model Subscription {
   paddleProductId      String?
   paddleCustomerId     String?
   paddleTransactionId  String?
-  
+
+  // Add-on: remove "Powered by" branding from banner ($3/mo)
+  removeBrandingAddon  Boolean   @default(false)
+  paddleAddonSubscriptionId String? // add-on subscription id when purchased
+
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
   site                   Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)

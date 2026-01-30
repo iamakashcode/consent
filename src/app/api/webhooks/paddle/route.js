@@ -194,6 +194,34 @@ async function handleSubscriptionUpdated(event) {
 async function handleTransactionCompleted(event) {
   const transaction = event.data;
   const subscriptionId = transaction.subscription_id;
+  const customData = transaction.custom_data || {};
+
+  // Add-on purchase (e.g. remove branding) - custom_data has siteId and addonType
+  if (customData.addonType === "remove_branding" && customData.siteId) {
+    try {
+      await prisma.subscription.updateMany({
+        where: { siteId: customData.siteId },
+        data: {
+          removeBrandingAddon: true,
+          paddleAddonSubscriptionId: subscriptionId || undefined,
+          updatedAt: new Date(),
+        },
+      });
+      const site = await prisma.site.findUnique({
+        where: { id: customData.siteId },
+        select: { siteId: true },
+      });
+      if (site?.siteId) {
+        import("@/lib/script-generator")
+          .then(({ syncSiteScriptWithSubscription }) => syncSiteScriptWithSubscription(site.siteId))
+          .catch((err) => console.error("[Webhook] CDN sync after add-on:", err));
+      }
+      console.log(`[Webhook] Add-on remove_branding activated for siteId: ${customData.siteId}`);
+    } catch (err) {
+      console.error("[Webhook] Failed to activate add-on:", err);
+    }
+    return;
+  }
 
   console.log(`[Webhook] Transaction completed: ${transaction.id}, subscription: ${subscriptionId}`);
 

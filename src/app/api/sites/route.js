@@ -42,6 +42,7 @@ export async function GET(req) {
           ...(hasLastSeenAt ? { lastSeenAt: true } : {}),
           createdAt: true,
           updatedAt: true,
+          subscription: { select: { removeBrandingAddon: true } },
         },
       });
 

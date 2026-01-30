@@ -49,6 +49,7 @@ function BannerContent() {
   const [isVerified, setIsVerified] = useState(false);
   const [canCustomizeBanner, setCanCustomizeBanner] = useState(true);
   const [cannotCustomizeReason, setCannotCustomizeReason] = useState("");
+  const [addonCheckoutLoading, setAddonCheckoutLoading] = useState(false);
   const selectedSiteRef = useRef(null);
   const hasFetchedRef = useRef(false);
 
@@ -221,6 +222,35 @@ function BannerContent() {
     fetchSitesOnce();
   }, [status, loadPreviewOnce, searchParams]);
 
+  // Refetch sites when returning from add-on purchase so subscription.removeBrandingAddon is updated
+  useEffect(() => {
+    if (searchParams?.get("addon") !== "success") return;
+    let cancelled = false;
+    fetch("/api/sites")
+      .then((r) => r.json())
+      .then((sitesData) => {
+        if (cancelled || !Array.isArray(sitesData)) return;
+        setSites((prev) =>
+          prev.map((s) => {
+            const updated = sitesData.find((n) => n.siteId === s.siteId);
+            return updated ? { ...s, ...updated } : s;
+          })
+        );
+        setSelectedSite((current) => {
+          const updated = sitesData.find((s) => s.siteId === current?.siteId);
+          return updated ? { ...current, ...updated } : current;
+        });
+      })
+      .finally(() => {
+        if (!cancelled && typeof window !== "undefined") {
+          const u = new URL(window.location.href);
+          u.searchParams.delete("addon");
+          window.history.replaceState({}, "", u.pathname + u.search);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [searchParams?.get("addon")]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedConfig(config);
@@ -300,6 +330,28 @@ function BannerContent() {
   const handleReset = () => {
     if (confirm("Reset to default settings?")) {
       setConfig(DEFAULT_CONFIG);
+    }
+  };
+
+  const handlePurchaseBrandingAddon = async () => {
+    if (!selectedSite) return;
+    setAddonCheckoutLoading(true);
+    try {
+      const res = await fetch("/api/payment/create-addon-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ siteId: selectedSite.siteId, addonType: "remove_branding" }),
+      });
+      const data = await res.json();
+      if (data.success && data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+      alert(data.error || "Failed to start checkout");
+    } catch (err) {
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setAddonCheckoutLoading(false);
     }
   };
 
@@ -519,6 +571,30 @@ function BannerContent() {
                 >
                   View plans
                 </Link>
+              </div>
+            )}
+
+            {/* Branding: Powered by Cookie Access - hide with add-on ($3/mo) */}
+            {selectedSite && (
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">Banner branding</h3>
+                {selectedSite.subscription?.removeBrandingAddon ? (
+                  <p className="text-sm text-gray-600 mb-2">Branding is hidden on your consent banner.</p>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-600 mb-3">
+                      &quot;Powered by Cookie Access&quot; is shown at the bottom of the banner. Purchase the add-on to hide it.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handlePurchaseBrandingAddon}
+                      disabled={addonCheckoutLoading}
+                      className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                    >
+                      {addonCheckoutLoading ? "Loading…" : "Hide branding — $3/month"}
+                    </button>
+                  </>
+                )}
               </div>
             )}
 

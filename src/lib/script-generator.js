@@ -91,6 +91,7 @@ export async function generateAndUploadScript(siteId, options = {}) {
 
     // Generate scripts
     const inlineBlocker = generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiHostname);
+    const showBranding = !site.subscription?.removeBrandingAddon;
     const mainScript = generateMainScript(
       siteId,
       allowedDomain,
@@ -105,7 +106,8 @@ export async function generateAndUploadScript(siteId, options = {}) {
       showReject,
       verifyCallbackUrl,
       trackUrl,
-      style
+      style,
+      showBranding
     );
 
     const fullScript = inlineBlocker + "\n" + mainScript;
