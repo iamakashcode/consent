@@ -205,6 +205,10 @@ export async function POST(req) {
           plan,
           billingInterval
         );
+        await prisma.pendingDomain.update({
+          where: { id: pendingDomain.id },
+          data: { paddleTransactionId: paddleTransaction.id },
+        });
       } catch (error) {
         console.error("[Payment] Failed to create Paddle transaction (pending domain):", error);
         if (error.message?.includes("checkout_not_enabled") || error.message?.includes("Checkout has not yet been enabled")) {

@@ -193,13 +193,28 @@ async function handleSubscriptionUpdated(event) {
 /**
  * Process payment for a pending domain: create Site + Subscription when payment succeeds.
  * Used by both transaction.paid and transaction.completed so domain is added as soon as payment is captured.
+ * Finds PendingDomain by paddleTransactionId first (reliable); falls back to custom_data if needed.
  * Returns true if this was a pending-domain payment (handled or already processed); false otherwise.
  */
 async function processPendingDomainPayment(event) {
   const transaction = event.data;
+  const transactionId = transaction.id; // Paddle txn id (e.g. txn_01h...)
   const subscriptionId = transaction.subscription_id;
   const customData = transaction.custom_data || {};
 
+  // 1) Reliable path: find PendingDomain by the Paddle transaction ID we stored at checkout (does not depend on custom_data)
+  if (transactionId) {
+    const pendingByTxn = await prisma.pendingDomain.findFirst({
+      where: { paddleTransactionId: transactionId },
+    });
+    if (pendingByTxn) {
+      console.log(`[Webhook] PendingDomain found by transaction id: ${transactionId} -> ${pendingByTxn.domain}`);
+      const done = await createSiteFromPendingDomain(pendingByTxn, transaction, subscriptionId);
+      return done;
+    }
+  }
+
+  // 2) Fallback: custom_data (Paddle may not echo it in all environments)
   const isPendingDomain =
     customData.pendingDomain === true ||
     customData.pendingDomain === "true" ||
@@ -226,6 +241,32 @@ async function processPendingDomainPayment(event) {
       console.warn(`[Webhook] PendingDomain not found: ${pendingDomainId}`);
       return true;
     }
+    return await createSiteFromPendingDomain(pending, transaction, subscriptionId);
+  } catch (err) {
+    console.error("[Webhook] Failed to create Site from PendingDomain:", err);
+    return true;
+  }
+}
+
+/**
+ * Create Site + Subscription from a PendingDomain and clear the pending record.
+ * Returns true on success or already-done; false on unexpected error.
+ */
+async function createSiteFromPendingDomain(pending, transaction, subscriptionId) {
+  try {
+    const plan = transaction.custom_data?.plan ?? pending.plan;
+    const billingInterval =
+      transaction.custom_data?.billingInterval ??
+      transaction.custom_data?.billing_interval ??
+      pending.billingInterval;
+    const periodEnd = transaction.billing_period?.ends_at
+      ? new Date(transaction.billing_period.ends_at)
+      : (() => {
+          const end = new Date();
+          end.setMonth(end.getMonth() + 1);
+          return end;
+        })();
+
     const createdSite = await prisma.site.create({
       data: {
         domain: pending.domain,
@@ -236,15 +277,6 @@ async function processPendingDomainPayment(event) {
         isVerified: false,
       },
     });
-    const plan = customData.plan ?? pending.plan;
-    const billingInterval = customData.billingInterval ?? customData.billing_interval ?? pending.billingInterval;
-    const periodEnd = transaction.billing_period?.ends_at
-      ? new Date(transaction.billing_period.ends_at)
-      : (() => {
-          const end = new Date();
-          end.setMonth(end.getMonth() + 1);
-          return end;
-        })();
     await startUserTrial(pending.userId);
     const user = await prisma.user.findUnique({
       where: { id: pending.userId },
@@ -259,7 +291,9 @@ async function processPendingDomainPayment(event) {
         status: newStatus,
         paddleSubscriptionId: subscriptionId || null,
         paddleTransactionId: transaction.id,
-        currentPeriodStart: transaction.billing_period?.starts_at ? new Date(transaction.billing_period.starts_at) : new Date(),
+        currentPeriodStart: transaction.billing_period?.starts_at
+          ? new Date(transaction.billing_period.starts_at)
+          : new Date(),
         currentPeriodEnd: periodEnd,
       },
     });
