@@ -47,6 +47,8 @@ function BannerContent() {
   const [copyStatus, setCopyStatus] = useState("");
   const [verifyStatus, setVerifyStatus] = useState("");
   const [isVerified, setIsVerified] = useState(false);
+  const [canCustomizeBanner, setCanCustomizeBanner] = useState(true);
+  const [cannotCustomizeReason, setCannotCustomizeReason] = useState("");
   const selectedSiteRef = useRef(null);
   const hasFetchedRef = useRef(false);
 
@@ -194,7 +196,17 @@ function BannerContent() {
             setConfig(initialConfig);
             setDebouncedConfig(initialConfig);
             loadPreviewOnce(nextSite, initialConfig);
-            
+            // Check whether customization is allowed (subscription + view limit)
+            fetch(`/api/sites/${nextSite.siteId}/can-customize`)
+              .then((res) => res.ok ? res.json() : { canCustomize: true })
+              .then((data) => {
+                setCanCustomizeBanner(!!data.canCustomize);
+                setCannotCustomizeReason(data.reason || "");
+              })
+              .catch(() => {
+                setCanCustomizeBanner(true);
+                setCannotCustomizeReason("");
+              });
             // Check verification status
             checkVerificationStatus(nextSite.siteId);
           }
@@ -229,6 +241,8 @@ function BannerContent() {
     if (site) {
       setSelectedSite(site);
       selectedSiteRef.current = site;
+      setCanCustomizeBanner(true);
+      setCannotCustomizeReason("");
       let newConfig = DEFAULT_CONFIG;
       if (site.bannerConfig) {
         const parsedConfig = typeof site.bannerConfig === "string"
@@ -239,6 +253,17 @@ function BannerContent() {
       setConfig(newConfig);
       setDebouncedConfig(newConfig);
       loadPreviewOnce(site, newConfig);
+      // Fetch whether customization is allowed (subscription + view limit)
+      fetch(`/api/sites/${site.siteId}/can-customize`)
+        .then((res) => res.ok ? res.json() : { canCustomize: true })
+        .then((data) => {
+          setCanCustomizeBanner(!!data.canCustomize);
+          setCannotCustomizeReason(data.reason || "");
+        })
+        .catch(() => {
+          setCanCustomizeBanner(true);
+          setCannotCustomizeReason("");
+        });
     }
   };
 
@@ -426,19 +451,23 @@ function BannerContent() {
           >
             Install Code
           </button>
-          <button
-            onClick={handleReset}
-            className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            Reset
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving || !selectedSite}
-            className="px-6 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 transition-colors"
-          >
-            {saving ? "Saving..." : "Save Changes"}
-          </button>
+          {canCustomizeBanner && (
+            <>
+              <button
+                onClick={handleReset}
+                className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Reset
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || !selectedSite}
+                className="px-6 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 transition-colors"
+              >
+                {saving ? "Saving..." : "Save Changes"}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -479,6 +508,23 @@ function BannerContent() {
               </div>
             )}
 
+            {/* Customization unavailable (subscription inactive or view limit exceeded) */}
+            {selectedSite && !canCustomizeBanner && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
+                <h3 className="text-sm font-semibold text-amber-800 mb-2">Banner customization unavailable</h3>
+                <p className="text-sm text-amber-700 mb-4">{cannotCustomizeReason}</p>
+                <Link
+                  href="/plans"
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-amber-800 bg-amber-100 rounded-lg hover:bg-amber-200 transition-colors"
+                >
+                  View plans
+                </Link>
+              </div>
+            )}
+
+            {/* Colors - only when customization is allowed */}
+            {canCustomizeBanner && (
+            <>
             {/* Colors */}
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Colors</h3>
@@ -658,6 +704,8 @@ function BannerContent() {
               </div>
             </div>
           </div>
+            </>
+            )}
 
           {/* Preview Panel */}
           <div className="lg:sticky lg:top-24 h-fit">

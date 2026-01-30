@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { regenerateScriptOnConfigChange } from "@/lib/script-generator";
+import { isSubscriptionActive, checkPageViewLimit } from "@/lib/subscription";
 
 export async function PUT(req, { params }) {
   try {
@@ -53,8 +54,23 @@ export async function PUT(req, { params }) {
       );
     }
 
-    // Check site's subscription plan (banner customization available for all plans)
-    // No need to restrict - all plans can customize banner
+    // Block save when subscription inactive or view limit exceeded (prevents re-uploading real script)
+    const [subStatus, viewLimit] = await Promise.all([
+      isSubscriptionActive(site.siteId),
+      checkPageViewLimit(site.siteId),
+    ]);
+    if (!subStatus.isActive) {
+      return Response.json(
+        { error: "Banner customization is unavailable. Your subscription is inactive or expired. Restore your plan to customize the banner." },
+        { status: 403 }
+      );
+    }
+    if (viewLimit.exceeded) {
+      return Response.json(
+        { error: "Banner customization is unavailable. You've reached your page view limit for this billing period. Upgrade your plan or wait for the next period to customize the banner." },
+        { status: 403 }
+      );
+    }
 
     // Update banner configuration
     const updated = await prisma.site.update({
