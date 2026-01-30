@@ -29,6 +29,10 @@ function PaymentReturnContent() {
     const finalSubscriptionId = urlSubscriptionId || storedSubscriptionId;
     const fallbackRedirect = redirectParam || "/dashboard/usage?payment=success";
     const siteIdFromUrl = searchParams.get("siteId");
+    const siteIdFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('paddle_site_id') : null;
+    const transactionIdFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('paddle_transaction_id') : null;
+    const effectiveTransactionId = transactionId || transactionIdFromStorage;
+    const effectiveSiteId = siteIdFromUrl || siteIdFromStorage;
 
     // Add-on purchase return: redirect to banner with success
     if (addonParam === "remove_branding" && redirectParam) {
@@ -65,15 +69,18 @@ function PaymentReturnContent() {
     // Check subscription status
     const checkSubscription = async () => {
       try {
-        // When we have transaction_id + siteId, this may be a pending-domain checkout (new domain).
-        // Call confirm-pending-domain first so the domain is added even if the webhook didn't fire.
-        if (transactionId && siteIdFromUrl) {
+        // Pending-domain checkout: confirm payment so the domain is added even if the webhook didn't fire.
+        // Use transaction ID from URL or sessionStorage (Paddle often redirects without our query params).
+        if (effectiveTransactionId) {
           setStatusMessage("Confirming your domain...");
           try {
             const confirmResponse = await fetch("/api/payment/confirm-pending-domain", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ transactionId, siteId: siteIdFromUrl }),
+              body: JSON.stringify({
+                transactionId: effectiveTransactionId,
+                ...(effectiveSiteId ? { siteId: effectiveSiteId } : {}),
+              }),
             });
             const confirmData = await confirmResponse.json();
             if (confirmResponse.ok && confirmData.success && confirmData.site) {
@@ -100,6 +107,9 @@ function PaymentReturnContent() {
               }, 800);
               setChecking(false);
               return;
+            }
+            if (confirmResponse.status === 404) {
+              // Not a pending-domain flow (e.g. existing site subscription) – continue to sync-subscription below
             }
           } catch (confirmErr) {
             console.error("[Return] confirm-pending-domain error:", confirmErr);

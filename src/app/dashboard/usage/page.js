@@ -35,6 +35,36 @@ function UsageContent() {
     }
   }, [session]);
 
+  // If user landed here after Paddle checkout with stored transaction ID (e.g. Paddle didn't redirect to /payment/return), confirm pending domain once
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.user) return;
+    const txnId = typeof window !== "undefined" ? sessionStorage.getItem("paddle_transaction_id") : null;
+    if (!txnId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/payment/confirm-pending-domain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            transactionId: txnId,
+            siteId: sessionStorage.getItem("paddle_site_id") || undefined,
+          }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.ok && data.success) {
+          sessionStorage.removeItem("paddle_transaction_id");
+          sessionStorage.removeItem("paddle_site_id");
+          sessionStorage.removeItem("paddle_redirect_url");
+          sessionStorage.removeItem("paddle_return_url");
+          fetchData();
+        }
+      } catch (_) {}
+    })();
+    return () => { cancelled = true; };
+  }, [status, session?.user]);
+
   const fetchData = async () => {
     try {
       const [sitesRes, subsRes] = await Promise.all([
