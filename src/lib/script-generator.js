@@ -6,8 +6,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES, normalizeBannerConfig } from "@/lib/banner-templates";
-import { isSubscriptionActive } from "@/lib/subscription";
-import { uploadScript, getCdnUrl } from "./cdn-service";
+import { isSubscriptionActive, checkPageViewLimit } from "@/lib/subscription";
+import { uploadScript, getCdnUrl, uploadBlankScript } from "./cdn-service";
 
 // Import the generation functions from the script route
 // These are exported from the route file and can be imported
@@ -121,6 +121,23 @@ export async function generateAndUploadScript(siteId, options = {}) {
   } catch (error) {
     console.error(`[ScriptGenerator] Failed to generate script for ${siteId}:`, error);
     throw error;
+  }
+}
+
+/**
+ * Sync CDN script with subscription and view limit: if subscription active and views under limit, upload real script; otherwise upload blank so banner stops.
+ * Call this when subscription/views change or from a cron.
+ */
+export async function syncSiteScriptWithSubscription(siteId) {
+  const [subStatus, viewLimit] = await Promise.all([
+    isSubscriptionActive(siteId),
+    checkPageViewLimit(siteId),
+  ]);
+  const shouldServeRealScript = subStatus.isActive && !viewLimit.exceeded;
+  if (shouldServeRealScript) {
+    await generateAndUploadScript(siteId, { isPreview: false, skipSubscriptionCheck: true });
+  } else {
+    await uploadBlankScript(siteId);
   }
 }
 

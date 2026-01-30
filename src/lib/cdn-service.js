@@ -23,6 +23,10 @@ const CDN_BASE_URL = process.env.CDN_BASE_URL || process.env.NEXT_PUBLIC_BASE_UR
 const CDN_STORAGE_PATH =
   process.env.CDN_STORAGE_PATH || path.join(process.cwd(), "public", "cdn", "sites");
 
+/** No-op script uploaded to CDN when subscription is inactive or view limit exceeded so the banner does not run */
+export const BLANK_SCRIPT =
+  "(function(){'use strict';console.warn('[ConsentFlow] Script inactive: subscription expired or view limit exceeded.');})();";
+
 async function ensureStorageDir() {
   try {
     await fs.mkdir(CDN_STORAGE_PATH, { recursive: true });
@@ -65,6 +69,13 @@ export async function uploadScript(siteId, scriptContent, isPreview = false) {
   const url = getCdnUrl(siteId, isPreview);
   console.log("[CDN] Script uploaded (fs):", filePath, "->", url);
   return { success: true, url, path: filePath };
+}
+
+/**
+ * Upload the blank (no-op) script for a site so the banner stops working (e.g. when subscription expires).
+ */
+export async function uploadBlankScript(siteId) {
+  return uploadScript(siteId, BLANK_SCRIPT, false);
 }
 
 /**

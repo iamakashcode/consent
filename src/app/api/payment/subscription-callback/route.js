@@ -27,7 +27,7 @@ export async function GET(req) {
             { paddleTransactionId: subscriptionId },
           ]
         },
-        include: { site: { include: { user: true } } },
+        include: { site: true },
       });
     } catch (findError) {
       console.error("[Subscription Callback] Error finding subscription:", findError.message);
@@ -59,7 +59,15 @@ export async function GET(req) {
           console.error("[Subscription Callback] Raw SQL also failed:", rawError.message);
         }
       }
-      
+
+      // Sync CDN script so real script is uploaded (subscription restored)
+      const siteId = subscription.site?.siteId;
+      if (siteId) {
+        import("@/lib/script-generator")
+          .then(({ syncSiteScriptWithSubscription }) => syncSiteScriptWithSubscription(siteId))
+          .catch((err) => console.error("[Subscription Callback] CDN sync failed:", err));
+      }
+
       return NextResponse.redirect(new URL("/profile?subscription=activated", req.url));
     }
 

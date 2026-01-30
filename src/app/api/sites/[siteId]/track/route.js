@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { checkPageViewLimit } from "@/lib/subscription";
+import { syncSiteScriptWithSubscription } from "@/lib/script-generator";
 
 /**
  * Track page view when script loads on a page
@@ -88,6 +90,15 @@ export async function POST(req, { params }) {
           userAgent: finalUserAgent,
           referer: finalReferer,
         },
+      });
+
+      // If view limit just exceeded, sync CDN to blank so script stops working
+      checkPageViewLimit(siteId).then((viewLimit) => {
+        if (viewLimit.exceeded) {
+          syncSiteScriptWithSubscription(siteId).catch((err) =>
+            console.error("[Track] CDN sync after view limit exceeded:", err)
+          );
+        }
       });
 
       // Update lastSeenAt to indicate script is still active

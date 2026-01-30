@@ -122,6 +122,14 @@ async function handleSubscriptionActivated(event) {
     },
   });
 
+  // Sync CDN script so real script is uploaded (trial/active)
+  const siteId = dbSubscription.site?.siteId;
+  if (siteId) {
+    import("@/lib/script-generator")
+      .then(({ syncSiteScriptWithSubscription }) => syncSiteScriptWithSubscription(siteId))
+      .catch((err) => console.error("[Webhook] CDN sync failed:", err));
+  }
+
   console.log(`[Webhook] Subscription ${subscriptionId} activated and user trial started`);
 }
 
@@ -136,6 +144,7 @@ async function handleSubscriptionUpdated(event) {
 
   const dbSubscription = await prisma.subscription.findFirst({
     where: { paddleSubscriptionId: subscriptionId },
+    include: { site: true },
   });
 
   if (!dbSubscription) {
@@ -168,6 +177,14 @@ async function handleSubscriptionUpdated(event) {
       updatedAt: new Date(),
     },
   });
+
+  // Sync CDN script: real script when active/trial, blank when cancelled/failed
+  const siteId = dbSubscription.site?.siteId;
+  if (siteId) {
+    import("@/lib/script-generator")
+      .then(({ syncSiteScriptWithSubscription }) => syncSiteScriptWithSubscription(siteId))
+      .catch((err) => console.error("[Webhook] CDN sync failed:", err));
+  }
 }
 
 /**
@@ -248,6 +265,14 @@ async function handleTransactionCompleted(event) {
     },
   });
 
+  // Sync CDN script so real script is uploaded (subscription restored/paid)
+  const siteId = site.siteId;
+  if (siteId) {
+    import("@/lib/script-generator")
+      .then(({ syncSiteScriptWithSubscription }) => syncSiteScriptWithSubscription(siteId))
+      .catch((err) => console.error("[Webhook] CDN sync failed:", err));
+  }
+
   console.log(`[Webhook] Transaction ${transaction.id} completed, subscription ${dbSubscription.id} updated to ${newStatus}`);
 }
 
@@ -268,19 +293,32 @@ async function handlePaymentFailed(event) {
     where: { paddleSubscriptionId: subscriptionId },
   });
 
-  if (!dbSubscription) {
+  const dbSubscriptionWithSite = await prisma.subscription.findFirst({
+    where: { paddleSubscriptionId: subscriptionId },
+    include: { site: true },
+  });
+
+  if (!dbSubscriptionWithSite) {
     console.warn(`[Webhook] Subscription not found: ${subscriptionId}`);
     return;
   }
 
   // Update status to payment_failed
   await prisma.subscription.update({
-    where: { id: dbSubscription.id },
+    where: { id: dbSubscriptionWithSite.id },
     data: {
       status: "payment_failed",
       updatedAt: new Date(),
     },
   });
+
+  // Sync CDN script: upload blank so banner stops
+  const siteId = dbSubscriptionWithSite.site?.siteId;
+  if (siteId) {
+    import("@/lib/script-generator")
+      .then(({ syncSiteScriptWithSubscription }) => syncSiteScriptWithSubscription(siteId))
+      .catch((err) => console.error("[Webhook] CDN sync failed:", err));
+  }
 }
 
 /**
@@ -294,6 +332,7 @@ async function handleSubscriptionCanceled(event) {
 
   const dbSubscription = await prisma.subscription.findFirst({
     where: { paddleSubscriptionId: subscriptionId },
+    include: { site: true },
   });
 
   if (!dbSubscription) {
@@ -310,4 +349,12 @@ async function handleSubscriptionCanceled(event) {
       updatedAt: new Date(),
     },
   });
+
+  // Sync CDN script: upload blank so banner stops
+  const siteId = dbSubscription.site?.siteId;
+  if (siteId) {
+    import("@/lib/script-generator")
+      .then(({ syncSiteScriptWithSubscription }) => syncSiteScriptWithSubscription(siteId))
+      .catch((err) => console.error("[Webhook] CDN sync failed:", err));
+  }
 }
