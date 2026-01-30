@@ -103,11 +103,14 @@ export async function GET(req, { params }) {
       );
     }
 
-    const site = await prisma.site.findUnique({
-      where: { id: siteId },
+    const site = await prisma.site.findFirst({
+      where: {
+        OR: [{ siteId: siteId }, { id: siteId }],
+      },
       select: {
         id: true,
         domain: true,
+        siteId: true,
         bannerConfig: true,
         userId: true,
       },

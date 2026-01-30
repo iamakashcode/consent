@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES } from "@/lib/banner-templates";
+import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES, normalizeBannerConfig } from "@/lib/banner-templates";
 import { hasVerificationColumns } from "@/lib/db-utils";
 import { isSubscriptionActive } from "@/lib/subscription";
 import { getScript, getCdnUrl } from "@/lib/cdn-service";
@@ -1444,34 +1444,37 @@ export async function GET(req, { params }) {
       consentApiHostname = req.headers.get("host")?.replace(/^www\./, "") || "";
     }
 
-    const bannerConfig = site.bannerConfig || DEFAULT_BANNER_CONFIG;
-    const template = bannerConfig.template || "default";
-    const templateConfig = BANNER_TEMPLATES[template] || BANNER_TEMPLATES.default;
-    
-    const title = bannerConfig.title || templateConfig.title || "🍪 We use cookies";
-    const message = bannerConfig.message || templateConfig.message || "This site uses tracking cookies. Accept to enable analytics.";
-    const acceptText = bannerConfig.acceptText || templateConfig.acceptText || "Accept";
-    const rejectText = bannerConfig.rejectText || templateConfig.rejectText || "Reject";
-    const showReject = bannerConfig.showReject !== false;
-    const position = bannerConfig.position || "bottom";
-    
-    let bannerStyle = "";
-    if (templateConfig.style) {
-      const style = templateConfig.style;
-      const posStyle = position === "top" ? "top:0;bottom:auto;" : "bottom:0;top:auto;";
-      bannerStyle = 
-        `position:fixed;${posStyle}left:0;right:0;` +
-        `background:${style.backgroundColor || '#1f2937'};` +
-        `color:${style.textColor || '#ffffff'};` +
-        `padding:${style.padding || '20px'};` +
-        `z-index:2147483647;` +
-        `display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap;` +
-        `font-family:system-ui,-apple-system,sans-serif;` +
-        `font-size:${style.fontSize || '14px'};` +
-        (style.borderRadius ? `border-radius:${style.borderRadius};` : '') +
-        (style.border ? `border:${style.border};` : '') +
-        (style.boxShadow ? `box-shadow:${style.boxShadow};` : 'box-shadow:0 -4px 6px rgba(0,0,0,0.1);');
+    let rawConfig = site.bannerConfig || DEFAULT_BANNER_CONFIG;
+    if (isPreview && configParam) {
+      try {
+        const decodedJson =
+          typeof Buffer !== "undefined"
+            ? Buffer.from(configParam, "base64").toString("utf-8")
+            : decodeURIComponent(escape(atob(configParam)));
+        const decoded = JSON.parse(decodedJson);
+        if (decoded && typeof decoded === "object") {
+          rawConfig = { ...rawConfig, ...decoded };
+        }
+      } catch (e) {
+        console.warn("[Script API] Invalid preview config param:", e.message);
+      }
     }
+    const normalized = normalizeBannerConfig(rawConfig);
+    const { title, message, acceptText, rejectText, showReject, position, style: normStyle } = normalized;
+    const style = normStyle || {};
+    const posStyle = position === "top" ? "top:0;bottom:auto;" : "bottom:0;top:auto;";
+    const bannerStyle =
+      `position:fixed;${posStyle}left:0;right:0;` +
+      `background:${style.backgroundColor || '#1f2937'};` +
+      `color:${style.textColor || '#ffffff'};` +
+      `padding:${style.padding || '20px'};` +
+      `z-index:2147483647;` +
+      `display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap;` +
+      `font-family:system-ui,-apple-system,sans-serif;` +
+      `font-size:${style.fontSize || '14px'};` +
+      (style.borderRadius ? `border-radius:${style.borderRadius};` : '') +
+      (style.border ? `border:${style.border};` : '') +
+      (style.boxShadow ? `box-shadow:${style.boxShadow};` : 'box-shadow:0 -4px 6px rgba(0,0,0,0.1);');
 
     const actualSiteId = siteId;
     const verifyCallbackUrl = `${baseUrl}/api/sites/${actualSiteId}/verify-callback`;
@@ -1482,7 +1485,7 @@ export async function GET(req, { params }) {
       siteId,
       allowedDomain,
       isPreview,
-      bannerConfig,
+      normalized,
       bannerStyle,
       position,
       title,
@@ -1492,7 +1495,7 @@ export async function GET(req, { params }) {
       showReject,
       verifyCallbackUrl,
       trackUrl,
-      templateConfig.style
+      style
     );
 
     const fullScript = inlineBlocker + "\n" + mainScript;

@@ -94,6 +94,9 @@ export const BANNER_TEMPLATES = {
   },
 };
 
+// Alias so script can use BANNER_TEMPLATES.default
+BANNER_TEMPLATES.default = BANNER_TEMPLATES.minimal;
+
 // Default banner configuration
 export const DEFAULT_BANNER_CONFIG = {
   template: "minimal",
@@ -107,6 +110,60 @@ export const DEFAULT_BANNER_CONFIG = {
   showCustomizeButton: true,
   customStyle: null, // Custom CSS overrides
 };
+
+/**
+ * Normalize banner config from either:
+ * - Banner page shape: backgroundColor, textColor, description, showRejectButton, acceptText, etc.
+ * - DB/template shape: message, acceptText, showReject, template, style
+ * Returns { title, message, acceptText, rejectText, showReject, position, style } for script generation.
+ */
+export function normalizeBannerConfig(config) {
+  if (!config || typeof config !== "object") {
+    const t = BANNER_TEMPLATES.minimal;
+    return {
+      title: "🍪 We use cookies",
+      message: "This site uses tracking cookies. Accept to enable analytics.",
+      acceptText: "Accept",
+      rejectText: "Reject",
+      showReject: true,
+      position: "bottom",
+      style: t?.style || {
+        backgroundColor: "#1f2937",
+        textColor: "#ffffff",
+        buttonColor: "#4F46E5",
+        buttonTextColor: "#ffffff",
+        padding: "20px",
+        fontSize: "14px",
+        borderRadius: "8px",
+      },
+    };
+  }
+  const template = BANNER_TEMPLATES[config.template] || BANNER_TEMPLATES.minimal;
+  const templateStyle = template?.style || {};
+  const customStyle = config.customStyle || (config.backgroundColor || config.textColor || config.buttonColor
+    ? {
+        backgroundColor: config.backgroundColor || templateStyle.backgroundColor || "#1f2937",
+        textColor: config.textColor || templateStyle.textColor || "#ffffff",
+        buttonColor: config.buttonColor || templateStyle.buttonColor || "#4F46E5",
+        buttonTextColor: config.buttonTextColor || templateStyle.buttonTextColor || "#ffffff",
+        padding: templateStyle.padding || "20px",
+        fontSize: templateStyle.fontSize || "14px",
+        borderRadius: templateStyle.borderRadius || "8px",
+        border: templateStyle.border,
+        boxShadow: templateStyle.boxShadow,
+      }
+    : null);
+  const style = customStyle || templateStyle;
+  return {
+    title: config.title ?? "🍪 We use cookies",
+    message: config.message ?? config.description ?? "This site uses tracking cookies. Accept to enable analytics.",
+    acceptText: config.acceptText ?? config.acceptButtonText ?? "Accept",
+    rejectText: config.rejectText ?? config.rejectButtonText ?? "Reject",
+    showReject: config.showReject !== false && config.showRejectButton !== false,
+    position: config.position ?? "bottom",
+    style,
+  };
+}
 
 // Generate banner HTML based on configuration
 export function generateBannerHTML(config) {
