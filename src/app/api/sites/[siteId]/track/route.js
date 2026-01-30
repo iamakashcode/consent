@@ -80,9 +80,10 @@ export async function POST(req, { params }) {
     const finalUserAgent = userAgent || req.headers.get("user-agent") || null;
     const finalReferer = referer || req.headers.get("referer") || null;
 
-    // Increment lightweight counter: one row per site per month instead of one per page view
+    // Increment lightweight counters: total views + one row per site per month per path (for unique pages)
     const now = new Date();
     const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const pagePathStored = (finalPagePath || "/").slice(0, 2048);
 
     try {
       await prisma.siteViewCount.upsert({
@@ -92,6 +93,20 @@ export async function POST(req, { params }) {
         create: { siteId: site.id, periodStart, count: 1 },
         update: { count: { increment: 1 }, updatedAt: now },
       });
+
+      try {
+        await prisma.sitePathViewCount.upsert({
+          where: {
+            siteId_periodStart_pagePath: { siteId: site.id, periodStart, pagePath: pagePathStored },
+          },
+          create: { siteId: site.id, periodStart, pagePath: pagePathStored, count: 1 },
+          update: { count: { increment: 1 }, updatedAt: now },
+        });
+      } catch (pathErr) {
+        if (!pathErr?.message?.includes("site_path_view_counts") && !pathErr?.message?.includes("SitePathViewCount")) {
+          throw pathErr;
+        }
+      }
 
       // If view limit just exceeded, sync CDN to blank so script stops working
       checkPageViewLimit(siteId).then((viewLimit) => {

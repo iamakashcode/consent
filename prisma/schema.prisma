@@ -47,6 +47,7 @@ model Site {
   user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   pageViews         PageView[]
   siteViewCounts    SiteViewCount[]
+  sitePathViewCounts SitePathViewCount[]
   subscription      Subscription?
 
   @@unique([userId, domain])
@@ -98,6 +99,21 @@ model SiteViewCount {
   @@unique([siteId, periodStart])
   @@index([siteId])
   @@map("site_view_counts")
+}
+
+// One row per site per month per path: unique pages + per-path view count without storing every view
+model SitePathViewCount {
+  id          String   @id @default(cuid())
+  siteId      String
+  periodStart DateTime
+  pagePath    String   // path only, max 2048
+  count       Int      @default(0)
+  updatedAt   DateTime @updatedAt
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, periodStart, pagePath])
+  @@index([siteId])
+  @@map("site_path_view_counts")
 }
 
 model Subscription {
