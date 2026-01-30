@@ -79,10 +79,17 @@ const ChevronDownIcon = () => (
   </svg>
 );
 
+const ClipboardListIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+  </svg>
+);
+
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: DashboardIcon },
   { href: "/dashboard/domains", label: "Domains", icon: GlobeIcon },
   { href: "/dashboard/usage", label: "Usage", icon: ChartIcon },
+  { href: "/dashboard/consent-log", label: "Consent Log", icon: ClipboardListIcon },
   { href: "/banner", label: "Banner Settings", icon: PaletteIcon },
   { href: "/billing", label: "Billing", icon: CreditCardIcon },
 ];

@@ -1141,7 +1141,7 @@ if(hasConsent()){
 // Default branding text shown in banner when showBranding is true
 const DEFAULT_BRANDING_TEXT = 'Powered by Cookie Access';
 
-export function generateMainScript(siteId, allowedDomain, isPreview, config, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl, templateStyle, showBranding = true) {
+export function generateMainScript(siteId, allowedDomain, isPreview, config, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl, consentLogUrl, templateStyle, showBranding = true) {
   const CONSENT_KEY = `cookie_consent_${siteId}`;
   
   const escapeForTemplate = (str) => {
@@ -1339,8 +1339,17 @@ var maxVerificationAttempts=5;
   
   document.body.appendChild(banner);
   
+  var consentLogUrl='${(consentLogUrl || "").replace(/'/g, "\\'")}';
+  function sendConsentLog(status){
+    if(consentLogUrl){
+      try{
+        fetch(consentLogUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:status,pageUrl:location.href})}).catch(function(){});
+      }catch(e){}
+    }
+  }
   document.getElementById('consentflow-accept').onclick=function(){
     setConsent('accepted');
+    sendConsentLog('accepted');
     banner.remove();
     console.log('[ConsentFlow] User accepted consent - enabling trackers');
     if(window.__enableConsentTrackers){
@@ -1356,6 +1365,7 @@ var maxVerificationAttempts=5;
   if(rejectBtn){
     rejectBtn.onclick=function(){
       setConsent('rejected');
+      sendConsentLog('rejected');
       banner.remove();
       console.log('[ConsentFlow] User rejected consent');
     };
@@ -1491,6 +1501,7 @@ export async function GET(req, { params }) {
     const actualSiteId = siteId;
     const verifyCallbackUrl = `${baseUrl}/api/sites/${actualSiteId}/verify-callback`;
     const trackUrl = `${baseUrl}/api/sites/${actualSiteId}/track`;
+    const consentLogUrl = `${baseUrl}/api/sites/${actualSiteId}/consent-log`;
 
     const showBranding = !site.subscription?.removeBrandingAddon;
     const inlineBlocker = generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiHostname);
@@ -1508,6 +1519,7 @@ export async function GET(req, { params }) {
       showReject,
       verifyCallbackUrl,
       trackUrl,
+      consentLogUrl,
       style,
       showBranding
     );

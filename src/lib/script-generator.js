@@ -88,6 +88,7 @@ export async function generateAndUploadScript(siteId, options = {}) {
     // Generate API URLs
     const verifyCallbackUrl = `${baseUrl}/api/sites/${siteId}/verify-callback`;
     const trackUrl = `${baseUrl}/api/sites/${siteId}/track`;
+    const consentLogUrl = `${baseUrl}/api/sites/${siteId}/consent-log`;
 
     // Generate scripts
     const inlineBlocker = generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiHostname);
@@ -106,6 +107,7 @@ export async function generateAndUploadScript(siteId, options = {}) {
       showReject,
       verifyCallbackUrl,
       trackUrl,
+      consentLogUrl,
       style,
       showBranding
     );
