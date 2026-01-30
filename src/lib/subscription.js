@@ -223,17 +223,21 @@ export async function checkPageViewLimit(siteId) {
       return { exceeded: false, currentViews: 0, limit: Infinity };
     }
 
-    // Get period start (use subscription period or default to 30 days ago)
-    const periodStart = subscription.currentPeriodStart || 
+    // Get period start/end (use subscription period or default to 30 days ago)
+    const periodStart = subscription.currentPeriodStart ||
                         new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const periodEnd = subscription.currentPeriodEnd || new Date();
+    const periodStartMonth = new Date(Date.UTC(periodStart.getUTCFullYear(), periodStart.getUTCMonth(), 1));
 
-    // Count page views in current period
-    const currentViews = await prisma.pageView.count({
+    // Sum view counts from SiteViewCount (one row per site per month; no per-view rows)
+    const counts = await prisma.siteViewCount.findMany({
       where: {
         siteId: site.id,
-        viewedAt: { gte: periodStart },
+        periodStart: { gte: periodStartMonth, lte: periodEnd },
       },
+      select: { count: true },
     });
+    const currentViews = counts.reduce((sum, row) => sum + (row.count || 0), 0);
 
     return {
       exceeded: currentViews >= limit,

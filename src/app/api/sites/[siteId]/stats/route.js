@@ -42,73 +42,40 @@ export async function GET(req, { params }) {
     }
 
     try {
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      
-      // Get all statistics: unique pages (all-time and recent), total views, recent views
-      const [allTimeUniquePages, recentUniquePages, totalViews, recentViews] = await Promise.all([
-        // Count ALL unique pages where script has been added (all-time)
-        prisma.pageView.groupBy({
-          by: ["pagePath"],
-          where: {
-            siteId: site.id,
-          },
-          _count: true,
-        }),
-        // Count unique pages viewed in last 7 days (currently active pages)
-        prisma.pageView.groupBy({
-          by: ["pagePath"],
-          where: {
-            siteId: site.id,
-            viewedAt: {
-              gte: sevenDaysAgo,
-            },
-          },
-          _count: true,
-        }),
-        // Count total page views (all time)
-        prisma.pageView.count({
-          where: { siteId: site.id },
-        }),
-        // Get recent views (last 30 days)
-        prisma.pageView.count({
-          where: {
-            siteId: site.id,
-            viewedAt: {
-              gte: thirtyDaysAgo,
-            },
-          },
-        }),
-      ]);
+      const periodStartMonth = new Date(Date.UTC(thirtyDaysAgo.getUTCFullYear(), thirtyDaysAgo.getUTCMonth(), 1));
+
+      // Use SiteViewCount: one row per site per month (no per-view storage)
+      const allCounts = await prisma.siteViewCount.findMany({
+        where: { siteId: site.id },
+        select: { periodStart: true, count: true },
+      });
+      const totalViews = allCounts.reduce((sum, row) => sum + (row.count || 0), 0);
+      const recentViews = allCounts
+        .filter((row) => row.periodStart >= periodStartMonth)
+        .reduce((sum, row) => sum + (row.count || 0), 0);
 
       return Response.json({
         siteId: site.siteId,
         domain: site.domain,
-        totalUniquePages: allTimeUniquePages.length, // All pages where script has been added (all-time)
-        activeUniquePages: recentUniquePages.length, // Pages active in last 7 days
-        totalViews: totalViews, // Total page views (all time)
-        recentViews: recentViews, // Views in last 30 days
-        pages: allTimeUniquePages.map((p) => ({
-          path: p.pagePath,
-          views: p._count,
-        })),
+        totalUniquePages: 0, // No per-path storage with counter-only approach
+        activeUniquePages: 0,
+        totalViews,
+        recentViews,
+        pages: [], // No per-path breakdown with counter-only approach
       });
     } catch (dbError) {
-      // If PageView table doesn't exist, return zeros
       if (
         dbError.message &&
         (dbError.message.includes("does not exist") ||
-          dbError.message.includes("PageView") ||
-          dbError.message.includes("page_views"))
+          dbError.message.includes("SiteViewCount") ||
+          dbError.message.includes("site_view_counts"))
       ) {
-        console.warn(
-          "[Stats] PageView table not found, returning zero stats:",
-          dbError.message
-        );
         return Response.json({
           siteId: site.siteId,
           domain: site.domain,
-          uniquePages: 0,
+          totalUniquePages: 0,
+          activeUniquePages: 0,
           totalViews: 0,
           recentViews: 0,
           pages: [],

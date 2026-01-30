@@ -80,7 +80,7 @@ export async function GET(req) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const [usersLast30Days, sitesLast30Days] = await Promise.all([
+    const [usersLast30Days, sitesLast30Days, totalPageViews] = await Promise.all([
       prisma.user.count({
         where: {
           createdAt: {
@@ -95,6 +95,10 @@ export async function GET(req) {
           },
         },
       }),
+      prisma.siteViewCount
+        .aggregate({ _sum: { count: true } })
+        .then((r) => r._sum?.count ?? 0)
+        .catch(() => 0),
     ]);
 
     return Response.json({
@@ -105,6 +109,10 @@ export async function GET(req) {
         usersLast30Days,
         sitesLast30Days,
       },
+      users: totalUsers,
+      sites: totalSites,
+      subscriptions: totalSubscriptions,
+      pageViews: totalPageViews,
       planDistribution,
       recentUsers,
       recentSites,

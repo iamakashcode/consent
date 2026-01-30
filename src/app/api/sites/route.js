@@ -104,6 +104,24 @@ export async function GET(req) {
           return site;
         });
       }
+
+      // Add total page view count per site (from SiteViewCount; no per-view rows)
+      try {
+        const viewCounts = await prisma.siteViewCount.groupBy({
+          by: ["siteId"],
+          where: { siteId: { in: sites.map((s) => s.id) } },
+          _sum: { count: true },
+        });
+        const countBySiteId = Object.fromEntries(
+          viewCounts.map((row) => [row.siteId, row._sum?.count ?? 0])
+        );
+        sites = sites.map((site) => ({
+          ...site,
+          pageViews: countBySiteId[site.id] ?? 0,
+        }));
+      } catch (_) {
+        sites = sites.map((site) => ({ ...site, pageViews: 0 }));
+      }
     } catch (error) {
       // If columns don't exist yet, fetch without them and add defaults
       console.warn("Error fetching sites, trying fallback:", error.message);

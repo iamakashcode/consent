@@ -19,7 +19,7 @@ export async function GET(req) {
         }
       : {};
 
-    const [sites, total] = await Promise.all([
+    const [sitesRaw, total] = await Promise.all([
       prisma.site.findMany({
         where,
         skip,
@@ -45,10 +45,19 @@ export async function GET(req) {
               status: true,
             },
           },
+          siteViewCounts: {
+            select: { count: true },
+          },
         },
       }),
       prisma.site.count({ where }),
     ]);
+
+    const sites = sitesRaw.map((site) => {
+      const { siteViewCounts, ...rest } = site;
+      const pageViews = (siteViewCounts || []).reduce((sum, row) => sum + (row.count || 0), 0);
+      return { ...rest, _count: { pageViews } };
+    });
 
     return Response.json({
       sites,

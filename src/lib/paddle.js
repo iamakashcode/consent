@@ -48,7 +48,7 @@ export const ADDON_BRANDING_PRODUCT_NAME = "remove_branding";
 
 // Plan page view limits (per domain per month)
 export const PLAN_PAGE_VIEW_LIMITS = {
-  basic: 100,    // 100,000 page views per month
+  basic: 10,    // 100,000 page views per month
   starter: 300000,  // 300,000 page views per month
   pro: Infinity,    // Unlimited page views
 };
@@ -58,7 +58,7 @@ export const PLAN_DETAILS = {
   basic: {
     name: "Basic",
     price: 5,
-    pageViews: 100,
+    pageViews: 10,
     trialDays: 14,
     features: [
       "1 domain",

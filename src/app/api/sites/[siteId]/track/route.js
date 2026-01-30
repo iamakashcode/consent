@@ -76,20 +76,21 @@ export async function POST(req, { params }) {
       finalPagePath = finalPagePath.slice(0, -1);
     }
 
-    // Get user agent from body or headers
+    // Get user agent from body or headers (kept for lastSeenAt logic; not stored per view)
     const finalUserAgent = userAgent || req.headers.get("user-agent") || null;
     const finalReferer = referer || req.headers.get("referer") || null;
 
-    // Create page view record and update lastSeenAt
+    // Increment lightweight counter: one row per site per month instead of one per page view
+    const now = new Date();
+    const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
     try {
-      await prisma.pageView.create({
-        data: {
-          siteId: site.id,
-          pagePath: finalPagePath,
-          pageTitle: pageTitle || null,
-          userAgent: finalUserAgent,
-          referer: finalReferer,
+      await prisma.siteViewCount.upsert({
+        where: {
+          siteId_periodStart: { siteId: site.id, periodStart },
         },
+        create: { siteId: site.id, periodStart, count: 1 },
+        update: { count: { increment: 1 }, updatedAt: now },
       });
 
       // If view limit just exceeded, sync CDN to blank so script stops working
@@ -148,29 +149,17 @@ export async function POST(req, { params }) {
         }
       );
     } catch (dbError) {
-      // Check if PageView table exists, if not, return success (graceful degradation)
+      // Graceful degradation if site_view_counts table missing
       if (
         dbError.message &&
         (dbError.message.includes("does not exist") ||
-          dbError.message.includes("PageView") ||
-          dbError.message.includes("page_views"))
+          dbError.message.includes("SiteViewCount") ||
+          dbError.message.includes("site_view_counts"))
       ) {
-        console.warn(
-          "[Track] PageView table not found, skipping tracking:",
-          dbError.message
-        );
+        console.warn("[Track] SiteViewCount table not found, skipping:", dbError.message);
         return new Response(
-          JSON.stringify({
-            success: true,
-            message: "Page view tracking not available",
-          }),
-          {
-            status: 200,
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-            },
-          }
+          JSON.stringify({ success: true, message: "Page view tracking not available" }),
+          { status: 200, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
         );
       }
       throw dbError;
