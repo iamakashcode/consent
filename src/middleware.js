@@ -18,6 +18,7 @@ export async function middleware(req) {
     "/api/webhooks",
     "/api/sites/*/verify-callback",
     "/api/sites/*/track",
+    "/api/sites/*/consent-log",
   ];
   const isPublicApi = publicApiPaths.some(path => {
     if (path.includes("*")) {

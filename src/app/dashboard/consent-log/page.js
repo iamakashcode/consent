@@ -16,6 +16,8 @@ function ConsentLogContent() {
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [regenLoading, setRegenLoading] = useState(false);
+  const [regenMessage, setRegenMessage] = useState(null);
 
   const limit = 50;
 
@@ -69,6 +71,27 @@ function ConsentLogContent() {
       .finally(() => setLogsLoading(false));
   }, [selectedSiteId, page]);
 
+  const handleRegenerateScript = async () => {
+    if (!selectedSiteId) return;
+    setRegenLoading(true);
+    setRegenMessage(null);
+    try {
+      const res = await fetch(`/api/sites/${selectedSiteId}/regenerate-script`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRegenMessage("Script updated. Accept or reject consent again to test.");
+      } else {
+        setRegenMessage(data.error || "Failed to regenerate");
+      }
+    } catch (e) {
+      setRegenMessage("Request failed");
+    } finally {
+      setRegenLoading(false);
+    }
+  };
+
   const formatDate = (d) => {
     if (!d) return "—";
     const date = new Date(d);
@@ -99,9 +122,10 @@ function ConsentLogContent() {
         </p>
       </div>
 
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Domain</label>
-        <select
+      <div className="mb-6 flex flex-wrap items-end gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Domain</label>
+          <select
           value={selectedSiteId}
           onChange={(e) => {
             setSelectedSiteId(e.target.value);
@@ -116,7 +140,24 @@ function ConsentLogContent() {
             </option>
           ))}
         </select>
+        </div>
+        {selectedSiteId && (
+          <div>
+            <button
+              onClick={handleRegenerateScript}
+              disabled={regenLoading}
+              className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 disabled:opacity-50"
+            >
+              {regenLoading ? "Updating..." : "Update script (enable consent log)"}
+            </button>
+          </div>
+        )}
       </div>
+      {regenMessage && (
+        <div className={`mb-6 px-4 py-3 rounded-lg text-sm ${regenMessage.includes("Failed") ? "bg-red-50 text-red-800" : "bg-green-50 text-green-800"}`}>
+          {regenMessage}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {!selectedSiteId ? (
