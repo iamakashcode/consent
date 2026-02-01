@@ -1192,6 +1192,22 @@ function setConsent(value){
   }
 }
 
+function hasConsentChoice(){
+  try{
+    var c=localStorage.getItem(CONSENT_KEY);
+    return c==='accepted'||c==='rejected';
+  }catch(e){ return false; }
+}
+
+var consentLogUrl='${(consentLogUrl || "").replace(/'/g, "\\'")}';
+function sendConsentLog(status){
+  if(consentLogUrl){
+    try{
+      fetch(consentLogUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:status,pageUrl:location.href})}).catch(function(){});
+    }catch(e){}
+  }
+}
+
 var verificationAttempts=0;
 var maxVerificationAttempts=5;
 
@@ -1298,7 +1314,7 @@ var maxVerificationAttempts=5;
 })();
 
 (function showBanner(){
-  if(hasConsent())return;
+  if(hasConsentChoice())return;
   if(document.getElementById('consentflow-banner'))return;
   if(!document.body)return setTimeout(showBanner,50);
   
@@ -1339,18 +1355,12 @@ var maxVerificationAttempts=5;
   
   document.body.appendChild(banner);
   
-  var consentLogUrl='${(consentLogUrl || "").replace(/'/g, "\\'")}';
-  function sendConsentLog(status){
-    if(consentLogUrl){
-      try{
-        fetch(consentLogUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:status,pageUrl:location.href})}).catch(function(){});
-      }catch(e){}
-    }
-  }
+  function maybeShowFloatingButton(){ try{ if(typeof showFloatingButton==='function')showFloatingButton(); }catch(e){} }
   document.getElementById('consentflow-accept').onclick=function(){
     setConsent('accepted');
     sendConsentLog('accepted');
     banner.remove();
+    maybeShowFloatingButton();
     console.log('[ConsentFlow] User accepted consent - enabling trackers');
     if(window.__enableConsentTrackers){
       try{ 
@@ -1367,10 +1377,67 @@ var maxVerificationAttempts=5;
       setConsent('rejected');
       sendConsentLog('rejected');
       banner.remove();
+      maybeShowFloatingButton();
       console.log('[ConsentFlow] User rejected consent');
     };
   }` : ''}
 })();
+
+function showFloatingButton(){
+  if(!hasConsentChoice())return;
+  if(document.getElementById('consentflow-float-btn'))return;
+  if(!document.body){ setTimeout(showFloatingButton,50); return; }
+  
+  var templateStyleObj=${JSON.stringify(templateStyle || {})};
+  var btnBg=templateStyleObj.backgroundColor||'#1f2937';
+  var btnColor=templateStyleObj.textColor||'#ffffff';
+  var acceptBtnStyle='background:'+(templateStyleObj.buttonColor||'#22c55e')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;';
+  var rejectBtnStyle='background:transparent;color:'+(btnColor||'#1f2937')+';border:2px solid '+(btnColor||'#1f2937')+';padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;';
+  
+  var floatBtn=document.createElement('button');
+  floatBtn.id='consentflow-float-btn';
+  floatBtn.setAttribute('aria-label','Manage cookie preferences');
+  floatBtn.style.cssText='position:fixed;bottom:20px;right:20px;width:48px;height:48px;border-radius:50%;background:'+btnBg+';color:'+btnColor+';border:2px solid '+(btnColor||'rgba(255,255,255,0.5)')+';cursor:pointer;z-index:2147483646;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-size:22px;transition:transform 0.2s;';
+  floatBtn.innerHTML='🍪';
+  floatBtn.onmouseover=function(){ this.style.transform='scale(1.05)'; };
+  floatBtn.onmouseout=function(){ this.style.transform='scale(1)'; };
+  
+  var modal=document.createElement('div');
+  modal.id='consentflow-modal';
+  modal.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2147483647;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;';
+  modal.innerHTML=
+    '<div style="background:#fff;border-radius:12px;padding:24px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">'+
+    '<h3 style="margin:0 0 12px 0;font-size:18px;color:#111;">Change cookie preferences</h3>'+
+    '<p style="margin:0 0 20px 0;font-size:14px;color:#555;line-height:1.5;">You can update your choice at any time.</p>'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
+    '<button id="consentflow-modal-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept All'}</button>'+
+    (${showReject} ? '<button id="consentflow-modal-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject All'}</button>' : '')+
+    '<button id="consentflow-modal-close" style="background:#e5e7eb;color:#374151;border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;">Cancel</button>'+
+    '</div></div>';
+  
+  modal.onclick=function(e){ if(e.target===modal)modal.style.display='none'; };
+  floatBtn.onclick=function(){ modal.style.display='flex'; };
+  
+  document.body.appendChild(floatBtn);
+  document.body.appendChild(modal);
+  
+  document.getElementById('consentflow-modal-close').onclick=function(){
+    modal.style.display='none';
+  };
+  document.getElementById('consentflow-modal-accept').onclick=function(){
+    setConsent('accepted');
+    sendConsentLog('accepted');
+    modal.style.display='none';
+    if(window.__enableConsentTrackers){ try{ window.__enableConsentTrackers(); }catch(e){} }
+  };
+  ${showReject ? `var mRej=document.getElementById('consentflow-modal-reject');
+  if(mRej)mRej.onclick=function(){
+    setConsent('rejected');
+    sendConsentLog('rejected');
+    modal.style.display='none';
+  };` : ''}
+}
+showFloatingButton();
 })();
 `;
 }
