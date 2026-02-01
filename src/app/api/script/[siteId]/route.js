@@ -1340,7 +1340,7 @@ var maxVerificationAttempts=5;
   
   var templateStyleObj=${JSON.stringify(templateStyle || {})};
   var acceptBtnStyle='background:'+(templateStyleObj.buttonColor||'#22c55e')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
-  var rejectBtnStyle='background:transparent;color:'+(templateStyleObj.textColor||'#fff')+';border:2px solid '+(templateStyleObj.textColor||'#fff')+';padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
+  var rejectBtnStyle='background:#ff0202;color:'+(templateStyleObj.textColor||'#fff')+';border:2px solid '+(templateStyleObj.textColor||'#fff')+';padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
   
   banner.innerHTML=
     '<div style="flex:1;max-width:700px;">'+
@@ -1392,7 +1392,7 @@ function showFloatingButton(){
   var btnBg=templateStyleObj.backgroundColor||'#1f2937';
   var btnColor=templateStyleObj.textColor||'#ffffff';
   var acceptBtnStyle='background:'+(templateStyleObj.buttonColor||'#22c55e')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;';
-  var rejectBtnStyle='background:transparent;color:'+(btnColor||'#1f2937')+';border:2px solid '+(btnColor||'#1f2937')+';padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;';
+  var rejectBtnStyle='background:#ff0202;color:'+(btnColor||'#1f2937')+';border:2px solid '+(btnColor||'#1f2937')+';padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;';
   
   var floatBtn=document.createElement('button');
   floatBtn.id='consentflow-float-btn';
