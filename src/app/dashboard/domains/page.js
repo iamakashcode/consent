@@ -4,43 +4,29 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
-
-const CheckCircleIcon = () => (
-  <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-
-const ClockIcon = () => (
-  <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-
-const XCircleIcon = () => (
-  <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-
-const PencilIcon = () => (
-  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-  </svg>
-);
-
-const TrashIcon = () => (
-  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-  </svg>
-);
-
-const GlobeIcon = () => (
-  <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-  </svg>
-);
+import { getScriptPath } from "@/lib/script-urls";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Globe, CheckCircle2, Clock, XCircle, Pencil, Trash2, Plus, Copy, Upload } from "lucide-react";
 
 export default function DomainsPage() {
   const { data: session, status } = useSession();
@@ -48,18 +34,24 @@ export default function DomainsPage() {
   const [loading, setLoading] = useState(true);
   const [sites, setSites] = useState([]);
   const [subscriptions, setSubscriptions] = useState({});
+  const [scriptStatus, setScriptStatus] = useState({});
   const [deletingId, setDeletingId] = useState(null);
+  const [domain, setDomain] = useState("");
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState("");
+  const [addResult, setAddResult] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+  const [uploadingId, setUploadingId] = useState(null);
+  const [uploadMsg, setUploadMsg] = useState({});
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [siteToDelete, setSiteToDelete] = useState(null);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login");
-    }
+    if (status === "unauthenticated") router.push("/login");
   }, [status, router]);
 
   useEffect(() => {
-    if (session) {
-      fetchData();
-    }
+    if (session) fetchData();
   }, [session]);
 
   const fetchData = async () => {
@@ -68,12 +60,11 @@ export default function DomainsPage() {
         fetch("/api/sites"),
         fetch("/api/subscription"),
       ]);
-
+      let sitesData = [];
       if (sitesRes.ok) {
-        const data = await sitesRes.json();
-        setSites(data);
+        sitesData = await sitesRes.json();
+        setSites(sitesData);
       }
-
       if (subsRes.ok) {
         const data = await subsRes.json();
         const map = {};
@@ -87,28 +78,133 @@ export default function DomainsPage() {
         });
         setSubscriptions(map);
       }
+      if (sitesData.length > 0) {
+        const statusPromises = sitesData.map(async (site) => {
+          try {
+            const res = await fetch(`/api/sites/${site.siteId}/script-status`);
+            if (res.ok) {
+              const json = await res.json();
+              return { siteId: site.siteId, ...json };
+            }
+          } catch (_) { }
+          return { siteId: site.siteId, scriptInstalled: false, isVerified: site.isVerified ?? false };
+        });
+        const results = await Promise.all(statusPromises);
+        const statusMap = {};
+        results.forEach((r) => { statusMap[r.siteId] = r; });
+        setScriptStatus(statusMap);
+      } else {
+        setScriptStatus({});
+      }
     } catch (err) {
       console.error("Failed to load domains:", err);
+      toast.error("Failed to load domains");
     } finally {
       setLoading(false);
     }
   };
 
-  const deleteSite = async (siteId, siteDbId) => {
-    if (!confirm("Are you sure you want to delete this domain? This cannot be undone.")) return;
-    setDeletingId(siteDbId);
+  const confirmDelete = (site) => {
+    setSiteToDelete(site);
+    setDeleteOpen(true);
+  };
+
+  const deleteSite = async () => {
+    if (!siteToDelete) return;
+    setDeletingId(siteToDelete.id);
     try {
-      const response = await fetch(`/api/sites?id=${siteDbId}`, { method: "DELETE" });
+      const response = await fetch(`/api/sites?id=${siteToDelete.id}`, { method: "DELETE" });
       if (response.ok) {
+        setDeleteOpen(false);
+        setSiteToDelete(null);
         await fetchData();
+        toast.success("Domain deleted", { description: `${siteToDelete.domain} has been removed.` });
       } else {
         const data = await response.json();
-        alert(data.error || "Failed to delete domain");
+        toast.error(data.error || "Failed to delete domain");
       }
     } catch (err) {
-      alert("An error occurred while deleting the domain");
+      toast.error("Something went wrong");
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleAddDomain = async () => {
+    if (!domain.trim()) {
+      setAddError("Enter a domain name");
+      return;
+    }
+    setAddLoading(true);
+    setAddError("");
+    setAddResult(null);
+    try {
+      const response = await fetch("/api/crawl", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: domain.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to add domain");
+      setAddResult(data);
+      setDomain("");
+      await fetchData();
+      toast.success("Domain added", {
+        description: data.trackers?.length ? `${data.trackers.length} tracker(s) detected` : undefined,
+      });
+      if (data.needsPlan) {
+        router.push(`/plans?siteId=${data.siteId}&domain=${encodeURIComponent(data.domain)}`);
+      }
+    } catch (err) {
+      setAddError(err.message || "Something went wrong");
+      toast.error(err.message || "Failed to add domain");
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
+  const copyScript = async (site) => {
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+    const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL?.replace(/\/$/, "") || "";
+    const scriptSrc = r2Base
+      ? `${r2Base}/${getScriptPath(site.siteId, false)}`
+      : `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
+    const scriptTag = `<script src="${scriptSrc}"></script>`;
+    try {
+      await navigator.clipboard.writeText(scriptTag);
+      setCopiedId(site.id);
+      setTimeout(() => setCopiedId(null), 2000);
+      toast.success("Script copied to clipboard");
+    } catch (_) {
+      toast.error("Failed to copy");
+    }
+  };
+
+  const uploadToCdn = async (site) => {
+    setUploadMsg((prev) => ({ ...prev, [site.siteId]: null }));
+    setUploadingId(site.id);
+    try {
+      const res = await fetch(`/api/sites/${site.siteId}/upload-script`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setUploadMsg((prev) => ({ ...prev, [site.siteId]: "Uploaded" }));
+        toast.success("Uploaded to CDN", { description: site.domain });
+      } else {
+        setUploadMsg((prev) => ({ ...prev, [site.siteId]: data.error || "Failed" }));
+        toast.error(data.error || "Upload failed");
+      }
+    } catch (_) {
+      setUploadMsg((prev) => ({ ...prev, [site.siteId]: "Failed" }));
+      toast.error("Upload failed");
+    } finally {
+      setUploadingId(null);
+      setTimeout(() => {
+        setUploadMsg((prev) => {
+          const next = { ...prev };
+          delete next[site.siteId];
+          return next;
+        });
+      }, 4000);
     }
   };
 
@@ -116,7 +212,7 @@ export default function DomainsPage() {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full" />
+          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
         </div>
       </DashboardLayout>
     );
@@ -126,45 +222,68 @@ export default function DomainsPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Domains</h1>
-          <p className="text-gray-500 mt-1">Manage your domains, plans, and script</p>
-        </div>
-        <Link
-          href="/dashboard"
-          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          <span>+</span>
-          Add domain
-        </Link>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold tracking-tight">Domains</h1>
+        <p className="text-muted-foreground mt-1">Add domains, install script, and manage plans</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">All domains</h2>
-          <button
-            type="button"
-            onClick={fetchData}
-            className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
-          >
-            Refresh
-          </button>
-        </div>
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Add new domain</CardTitle>
+          <CardDescription>Scan your website to add it and get the consent script</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-3 flex-wrap">
+            <Input
+              value={domain}
+              onChange={(e) => setDomain(e.target.value)}
+              placeholder="e.g. example.com"
+              className="flex-1 min-w-[200px]"
+              onKeyDown={(e) => e.key === "Enter" && handleAddDomain()}
+            />
+            <Button onClick={handleAddDomain} disabled={addLoading}>
+              {addLoading ? (
+                <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              Add domain
+            </Button>
+          </div>
+          {addError && <p className="text-sm text-destructive">{addError}</p>}
+          {addResult && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              <span className="font-medium">Added: {addResult.domain}</span>
+              {addResult.trackers?.length > 0 && (
+                <span className="ml-1">· {addResult.trackers.length} tracker(s) detected</span>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        {sites.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/80 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  <th className="px-6 py-3">Domain</th>
-                  <th className="px-6 py-3">Plan</th>
-                  <th className="px-6 py-3">Status</th>
-                  <th className="px-6 py-3">Next renewal</th>
-                  <th className="px-6 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>All domains</CardTitle>
+            <CardDescription>Manage script, plan, and actions per domain</CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={fetchData}>Refresh</Button>
+        </CardHeader>
+        <CardContent>
+          {sites.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Domain</TableHead>
+                  <TableHead>Script</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Next renewal</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {sites.map((site) => {
                   const sub = subscriptions[site.siteId];
                   const subscription = sub?.subscription;
@@ -173,109 +292,121 @@ export default function DomainsPage() {
                   const isPending = statusLower === "pending";
                   const isTrial = statusLower === "trial" || sub?.userTrialActive;
                   const trialNotStarted = !sub?.subscription && !sub?.userTrialActive;
-
+                  const scriptInstalled = scriptStatus[site.siteId]?.scriptInstalled ?? false;
                   const nextRenewal = subscription?.currentPeriodEnd && isActive
                     ? new Date(subscription.currentPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                     : "—";
-
                   const planLabel = subscription?.plan
                     ? subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1) + (isTrial ? " (Trial)" : "")
                     : "No plan";
-
-                  const statusIcon = isActive ? <CheckCircleIcon /> : isPending ? <ClockIcon /> : <XCircleIcon />;
                   const statusText = isActive ? "Active" : isPending ? "Payment required" : trialNotStarted ? "No plan" : "Inactive";
 
                   return (
-                    <tr key={site.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-4">
+                    <TableRow key={site.id}>
+                      <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                            <GlobeIcon />
+                          <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                            <Globe className="h-5 w-5 text-muted-foreground" />
                           </div>
-                          <span className="font-medium text-gray-900">{site.domain}</span>
+                          <span className="font-medium">{site.domain}</span>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 text-gray-600">{planLabel}</td>
-                      <td className="px-6 py-4">
+                      </TableCell>
+                      <TableCell>
+                        {scriptInstalled ? (
+                          <span className="inline-flex items-center gap-1.5 text-sm text-emerald-600">
+                            <CheckCircle2 className="h-4 w-4" /> Installed
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-sm text-amber-600">
+                            <Clock className="h-4 w-4" /> Not detected
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{planLabel}</TableCell>
+                      <TableCell>
                         <div className="flex items-center gap-2">
-                          {statusIcon}
-                          <span className="text-sm text-gray-700">{statusText}</span>
+                          {isActive ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : isPending ? <Clock className="h-4 w-4 text-amber-500" /> : <XCircle className="h-4 w-4 text-red-500" />}
+                          <span className="text-sm">{statusText}</span>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 text-gray-600 text-sm">{nextRenewal}</td>
-                      <td className="px-6 py-4 text-right">
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">{nextRenewal}</TableCell>
+                      <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2 flex-wrap">
+                          {uploadMsg[site.siteId] && (
+                            <span className={`text-xs ${uploadMsg[site.siteId] === "Uploaded" ? "text-emerald-600" : "text-destructive"}`}>
+                              {uploadMsg[site.siteId]}
+                            </span>
+                          )}
                           {isActive && (
                             <>
-                              <Link
-                                href={`/banner?siteId=${site.siteId}`}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
-                              >
-                                <PencilIcon />
-                                Manage
-                              </Link>
-                              <Link
-                                href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                              >
-                                Change plan
-                              </Link>
+                              <Button variant="secondary" size="sm" onClick={() => copyScript(site)}>
+                                <Copy className="h-4 w-4" />
+                                {copiedId === site.id ? "Copied" : "Copy script"}
+                              </Button>
+                              <Button variant="secondary" size="sm" onClick={() => uploadToCdn(site)} disabled={uploadingId === site.id}>
+                                {uploadingId === site.id ? "Uploading…" : <><Upload className="h-4 w-4" /> Upload CDN</>}
+                              </Button>
+                              <Button variant="secondary" size="sm" asChild>
+                                <Link href={`/banner?siteId=${site.siteId}`}><Pencil className="h-4 w-4" /> Manage</Link>
+                              </Button>
+                              <Button variant="secondary" size="sm" asChild>
+                                <Link href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}>Change plan</Link>
+                              </Button>
                             </>
                           )}
-                          {!isActive && !trialNotStarted && (
-                            <Link
-                              href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
-                            >
-                              Select plan
-                            </Link>
+                          {!isActive && (
+                            <Button size="sm" asChild>
+                              <Link href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}>Select plan</Link>
+                            </Button>
                           )}
-                          {trialNotStarted && (
-                            <Link
-                              href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
-                            >
-                              Select plan
-                            </Link>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => deleteSite(site.siteId, site.id)}
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => confirmDelete(site)}
                             disabled={deletingId === site.id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors"
-                            title="Delete domain"
                           >
                             {deletingId === site.id ? (
-                              <span className="animate-spin w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full" />
+                              <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
                             ) : (
-                              <TrashIcon />
+                              <Trash2 className="h-4 w-4" />
                             )}
                             Delete
-                          </button>
+                          </Button>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="px-6 py-16 text-center">
-            <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
-              <GlobeIcon />
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="py-16 text-center">
+              <div className="h-14 w-14 rounded-xl bg-muted flex items-center justify-center mx-auto mb-4">
+                <Globe className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium mb-1">No domains yet</h3>
+              <p className="text-muted-foreground text-sm mb-4">Add your first domain using the form above.</p>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-1">No domains yet</h3>
-            <p className="text-gray-500 text-sm mb-4">Add your first domain from the dashboard to get started.</p>
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              Go to dashboard
-            </Link>
-          </div>
-        )}
-      </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete domain</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{siteToDelete?.domain}</strong>? This cannot be undone and the script will stop working on this domain.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={deleteSite} disabled={deletingId}>
+              {deletingId ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

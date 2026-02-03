@@ -4,14 +4,19 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
-
-
-const AlertIcon = () => (
-  <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-  </svg>
-);
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { AlertTriangle, CreditCard, Clock, CheckCircle2, XCircle } from "lucide-react";
 
 const PLAN_DETAILS = {
   basic: { name: "Basic", price: 5, pageViews: 100000 },
@@ -28,17 +33,18 @@ function BillingContent() {
   const [userTrialActive, setUserTrialActive] = useState(false);
   const [userTrialEndAt, setUserTrialEndAt] = useState(null);
   const [userTrialDaysLeft, setUserTrialDaysLeft] = useState(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelImmediateOpen, setCancelImmediateOpen] = useState(false);
+  const [cancelAllOpen, setCancelAllOpen] = useState(false);
+  const [siteToCancel, setSiteToCancel] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login");
-    }
+    if (status === "unauthenticated") router.push("/login");
   }, [status, router]);
 
   useEffect(() => {
-    if (session) {
-      fetchData();
-    }
+    if (session) fetchData();
   }, [session]);
 
   const fetchData = async () => {
@@ -47,56 +53,91 @@ function BillingContent() {
         fetch("/api/subscription"),
         fetch("/api/sites"),
       ]);
-
       if (subsRes.ok) {
         const data = await subsRes.json();
         setSubscriptions(data.subscriptions || []);
-        // Store user trial info if available
         if (data.userTrialActive !== undefined) {
           setUserTrialActive(data.userTrialActive);
           setUserTrialEndAt(data.userTrialEndAt);
           setUserTrialDaysLeft(data.userTrialDaysLeft);
         }
       }
-
       if (sitesRes.ok) {
         const data = await sitesRes.json();
         setSites(data);
       }
     } catch (err) {
       console.error("Error fetching data:", err);
+      toast.error("Failed to load billing data");
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancelSubscription = async (siteId, immediately = false) => {
-    const message = immediately
-      ? "Are you sure you want to cancel immediately? You will lose access right away."
-      : "Are you sure you want to cancel? You will have access until the end of your current period.";
-
-    if (!confirm(message)) return;
-
+    setCancelling(true);
     try {
       const response = await fetch("/api/subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "cancel",
-          siteId: siteId,
+          siteId,
           cancelAtPeriodEnd: !immediately,
         }),
       });
-
       const data = await response.json();
       if (response.ok) {
-        alert(data.message);
+        toast.success(data.message || "Subscription cancelled");
+        setCancelOpen(false);
+        setCancelImmediateOpen(false);
+        setCancelAllOpen(false);
+        setSiteToCancel(null);
         fetchData();
       } else {
-        alert(data.error || "Failed to cancel subscription");
+        toast.error(data.error || "Failed to cancel subscription");
       }
     } catch (err) {
-      alert("An error occurred");
+      toast.error("Something went wrong");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const confirmCancel = (sub, atEnd = true) => {
+    setSiteToCancel(sub);
+    atEnd ? setCancelOpen(true) : setCancelImmediateOpen(true);
+  };
+
+  const confirmCancelAll = () => {
+    setCancelAllOpen(true);
+  };
+
+  const doCancelAll = async () => {
+    setCancelling(true);
+    const toCancel = subscriptions.filter((s) => s.isActive);
+    try {
+      for (const sub of toCancel) {
+        const res = await fetch("/api/subscription", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "cancel", siteId: sub.siteId, cancelAtPeriodEnd: true }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          toast.error(data.error || "Failed to cancel " + sub.domain);
+        }
+      }
+      const ok = toCancel.length > 0;
+      if (ok) {
+        toast.success("All subscriptions will cancel at period end");
+        setCancelAllOpen(false);
+        fetchData();
+      }
+    } catch (err) {
+      toast.error("Something went wrong");
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -104,7 +145,7 @@ function BillingContent() {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
         </div>
       </DashboardLayout>
     );
@@ -120,213 +161,229 @@ function BillingContent() {
 
   return (
     <DashboardLayout>
-      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Billing & Subscriptions</h1>
-        <p className="text-gray-500 mt-1">Manage your domain subscriptions and billing. All plans include a <strong>14-day free trial</strong>.</p>
+        <h1 className="text-2xl font-bold tracking-tight">Billing & Subscriptions</h1>
+        <p className="text-muted-foreground mt-1">
+          Manage your domain subscriptions and billing. All plans include a <strong>14-day free trial</strong>.
+        </p>
       </div>
 
-      {/* User Trial Banner - when trial is active */}
       {userTrialActive && userTrialDaysLeft !== null && (
-        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-              <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+        <Card className="mb-6 border-blue-200 bg-blue-50/50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                <Clock className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-blue-900">Your 14-day free trial is active</h3>
+                <p className="text-sm text-blue-700">
+                  {userTrialDaysLeft > 0
+                    ? `${userTrialDaysLeft} day${userTrialDaysLeft !== 1 ? "s" : ""} remaining`
+                    : "Your trial ends today"}
+                  {userTrialEndAt && (
+                    <span className="ml-2">
+                      (ends {new Date(userTrialEndAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })})
+                    </span>
+                  )}
+                </p>
+              </div>
             </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-blue-900">Your 14-day free trial is active</h3>
-              <p className="text-sm text-blue-700">
-                {userTrialDaysLeft > 0
-                  ? `${userTrialDaysLeft} day${userTrialDaysLeft !== 1 ? 's' : ''} remaining`
-                  : 'Your trial ends today'}
-                {userTrialEndAt && (
-                  <span className="ml-2">
-                    (ends {new Date(userTrialEndAt).toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })})
-                  </span>
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm font-medium text-gray-500 mb-2">Active Subscriptions</p>
-          <p className="text-3xl font-bold text-gray-900">{activeSubscriptions.length}</p>
-          <p className="text-sm text-gray-500 mt-1">across {sites.length} domains</p>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm font-medium text-gray-500 mb-2">Monthly Total</p>
-          <p className="text-3xl font-bold text-gray-900">${totalMonthly}</p>
-          <p className="text-sm text-gray-500 mt-1">billed monthly</p>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm font-medium text-gray-500 mb-2">Next Billing</p>
-          <p className="text-3xl font-bold text-gray-900">
-            {activeSubscriptions.length > 0 ? "Various" : "—"}
-          </p>
-          <p className="text-sm text-gray-500 mt-1">per domain renewal</p>
-        </div>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Active Subscriptions</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{activeSubscriptions.length}</p>
+            <p className="text-xs text-muted-foreground mt-1">across {sites.length} domains</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Monthly Total</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">${totalMonthly}</p>
+            <p className="text-xs text-muted-foreground mt-1">billed monthly</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Next Billing</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{activeSubscriptions.length > 0 ? "Various" : "—"}</p>
+            <p className="text-xs text-muted-foreground mt-1">per domain renewal</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Subscriptions List */}
-      <div className="bg-white rounded-xl border border-gray-200 mb-8">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Domain Subscriptions</h2>
-          <p className="text-sm text-gray-500">Each domain has its own subscription</p>
-        </div>
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Domain Subscriptions</CardTitle>
+          <CardDescription>Each domain has its own subscription</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {subscriptions.length > 0 ? (
+            <div className="divide-y">
+              {subscriptions.map((sub) => {
+                const plan = sub.subscription?.plan || "basic";
+                const planDetails = PLAN_DETAILS[plan];
+                const status = sub.subscription?.status?.toLowerCase();
+                const isTrial = status === "trial";
+                const isActive = sub.isActive;
+                const cancelAtPeriodEnd = sub.subscription?.cancelAtPeriodEnd;
 
-        {subscriptions.length > 0 ? (
-          <div className="divide-y divide-gray-100">
-            {subscriptions.map((sub) => {
-              const plan = sub.subscription?.plan || "basic";
-              const planDetails = PLAN_DETAILS[plan];
-              const status = sub.subscription?.status?.toLowerCase();
-              const isTrial = status === "trial";
-              const isActive = sub.isActive;
-              const cancelAtPeriodEnd = sub.subscription?.cancelAtPeriodEnd;
-
-              return (
-                <div key={sub.siteId} className="px-6 py-5">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-semibold text-gray-900">{sub.domain}</h3>
-                        {(isTrial || userTrialActive) && (
-                          <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
-                            {userTrialActive
-                              ? `User Trial: ${userTrialDaysLeft || 0} days left`
-                              : `Trial: ${sub.trialDaysLeft || 0} days left`}
+                return (
+                  <div key={sub.siteId} className="py-5 first:pt-0">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <h3 className="font-semibold">{sub.domain}</h3>
+                          {(isTrial || userTrialActive) && (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
+                              {userTrialActive ? `User Trial: ${userTrialDaysLeft ?? 0} days left` : `Trial: ${sub.trialDaysLeft ?? 0} days left`}
+                            </span>
+                          )}
+                          {isActive && !isTrial && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded">
+                              <CheckCircle2 className="h-3 w-3" /> Active
+                            </span>
+                          )}
+                          {cancelAtPeriodEnd && (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded">Cancels Soon</span>
+                          )}
+                          {!isActive && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">
+                              <XCircle className="h-3 w-3" /> Inactive
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                          <span><strong className="text-foreground">{planDetails?.name}</strong> Plan</span>
+                          <span>${planDetails?.price}/{sub.subscription?.billingInterval === "yearly" ? "year" : "month"}</span>
+                          <span>
+                            {planDetails?.pageViews === Infinity ? "Unlimited" : planDetails?.pageViews?.toLocaleString()} page views
                           </span>
-                        )}
-                        {isActive && !isTrial && (
-                          <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">
-                            Active
-                          </span>
-                        )}
-                        {cancelAtPeriodEnd && (
-                          <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-700 rounded">
-                            Cancels Soon
-                          </span>
-                        )}
-                        {!isActive && (
-                          <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">
-                            Inactive
-                          </span>
+                        </div>
+                        {sub.subscription?.currentPeriodEnd && (
+                          <p className="text-sm text-muted-foreground mt-2">
+                            {cancelAtPeriodEnd ? "Access until" : "Renews on"}:{" "}
+                            {new Date(sub.subscription.currentPeriodEnd).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric",
+                            })}
+                          </p>
                         )}
                       </div>
-
-                      <div className="flex items-center gap-6 text-sm text-gray-500">
-                        <span>
-                          <strong className="text-gray-900">{planDetails?.name}</strong> Plan
-                        </span>
-                        <span>
-                          ${planDetails?.price}/{sub.subscription?.billingInterval === "yearly" ? "year" : "month"}
-                        </span>
-                        <span>
-                          {planDetails?.pageViews === Infinity
-                            ? "Unlimited"
-                            : planDetails?.pageViews?.toLocaleString()}{" "}
-                          page views
-                        </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button variant="secondary" size="sm" asChild>
+                          <Link href={`/plans?siteId=${sub.siteId}&domain=${encodeURIComponent(sub.domain)}`}>Change Plan</Link>
+                        </Button>
+                        {isActive && !cancelAtPeriodEnd && (
+                          <Button variant="outline" size="sm" onClick={() => confirmCancel(sub)}>
+                            Cancel
+                          </Button>
+                        )}
                       </div>
-
-                      {sub.subscription?.currentPeriodEnd && (
-                        <p className="text-sm text-gray-500 mt-2">
-                          {cancelAtPeriodEnd ? "Access until" : "Renews on"}:{" "}
-                          {new Date(sub.subscription.currentPeriodEnd).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={`/plans?siteId=${sub.siteId}&domain=${encodeURIComponent(sub.domain)}`}
-                        className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
-                      >
-                        Change Plan
-                      </Link>
-                      {isActive && !cancelAtPeriodEnd && (
-                        <button
-                          onClick={() => handleCancelSubscription(sub.siteId)}
-                          className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      )}
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="px-6 py-12 text-center">
-            <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-              </svg>
+                );
+              })}
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-1">No subscriptions yet</h3>
-            <p className="text-gray-500 text-sm mb-4">Add a domain and select a plan to get started</p>
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              Add Domain
-            </Link>
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="py-12 text-center">
+              <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-4">
+                <CreditCard className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium mb-1">No subscriptions yet</h3>
+              <p className="text-muted-foreground text-sm mb-4">Add a domain and select a plan to get started</p>
+              <Button asChild>
+                <Link href="/dashboard/domains">Add Domain</Link>
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Danger Zone */}
-      <div className="bg-white rounded-xl border border-red-200">
-        <div className="px-6 py-4 border-b border-red-200 bg-red-50 rounded-t-xl">
+      <Card className="border-destructive/50">
+        <CardHeader className="pb-4">
           <div className="flex items-center gap-2">
-            <AlertIcon />
-            <h2 className="text-lg font-semibold text-red-800">Danger Zone</h2>
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+            <CardTitle className="text-destructive">Danger Zone</CardTitle>
           </div>
-        </div>
-        <div className="p-6">
-          <div className="flex items-center justify-between">
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h3 className="font-medium text-gray-900">Cancel All Subscriptions</h3>
-              <p className="text-sm text-gray-500">
-                This will cancel all your domain subscriptions. Your domains will lose access at the end of their billing periods.
+              <h3 className="font-medium">Cancel All Subscriptions</h3>
+              <p className="text-sm text-muted-foreground">
+                This will cancel all your domain subscriptions. Access continues until the end of each billing period.
               </p>
             </div>
-            <button
-              onClick={() => {
-                if (confirm("Are you sure you want to cancel ALL subscriptions?")) {
-                  subscriptions.forEach((sub) => {
-                    if (sub.isActive) {
-                      handleCancelSubscription(sub.siteId);
-                    }
-                  });
-                }
-              }}
-              className="px-4 py-2 text-sm font-medium text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
-              disabled={activeSubscriptions.length === 0}
-            >
+            <Button variant="destructive" onClick={confirmCancelAll} disabled={activeSubscriptions.length === 0}>
               Cancel All
-            </button>
+            </Button>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel subscription</DialogTitle>
+            <DialogDescription>
+              Cancel <strong>{siteToCancel?.domain}</strong>? You will have access until the end of your current period.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelOpen(false)}>Keep</Button>
+            <Button variant="destructive" onClick={() => siteToCancel && handleCancelSubscription(siteToCancel.siteId, false)} disabled={cancelling}>
+              {cancelling ? "Cancelling…" : "Cancel at period end"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cancelImmediateOpen} onOpenChange={setCancelImmediateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel immediately</DialogTitle>
+            <DialogDescription>
+              Cancel <strong>{siteToCancel?.domain}</strong> now? You will lose access right away.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelImmediateOpen(false)}>Back</Button>
+            <Button variant="destructive" onClick={() => siteToCancel && handleCancelSubscription(siteToCancel.siteId, true)} disabled={cancelling}>
+              {cancelling ? "Cancelling…" : "Cancel now"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cancelAllOpen} onOpenChange={setCancelAllOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel all subscriptions</DialogTitle>
+            <DialogDescription>
+              Cancel all {activeSubscriptions.length} subscription(s)? You will keep access until the end of each billing period.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelAllOpen(false)}>Keep</Button>
+            <Button variant="destructive" onClick={doCancelAll} disabled={cancelling}>
+              {cancelling ? "Cancelling…" : "Cancel all"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
