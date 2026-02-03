@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
+import DashboardLayout from "@/components/DashboardLayout";
 import { getScriptPath } from "@/lib/script-urls";
 
 const POSITIONS = [
@@ -457,9 +458,11 @@ function BannerContent() {
 
   if (status === "loading" || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
-      </div>
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+        </div>
+      </DashboardLayout>
     );
   }
 
@@ -469,28 +472,8 @@ function BannerContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Simple Header without Sidebar */}
-      <header className="sticky top-0 z-30 h-16 bg-white border-b border-gray-200">
-        <div className="h-full flex items-center justify-between px-4 lg:px-8">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">C</span>
-            </div>
-            <span className="text-lg font-semibold text-gray-900">ConsentFlow</span>
-          </Link>
-          <Link
-            href="/dashboard"
-            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            ← Back to Dashboard
-          </Link>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="p-4 lg:p-8">
-      {/* Header */}
+    <DashboardLayout>
+      {/* Page header */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Banner Customization</h1>
@@ -1020,8 +1003,7 @@ function BannerContent() {
           </div>
         </div>
       )}
-      </main>
-    </div>
+    </DashboardLayout>
   );
 }
 
