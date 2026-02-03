@@ -279,12 +279,31 @@ function DashboardContent() {
   if (!session) return null;
 
   const activeCount = Object.values(subscriptions).filter((s) => s.isActive).length;
-  const trialCount = Object.values(subscriptions).filter((s) => s.subscription?.status === "trial").length;
+  const trialCount = Object.values(subscriptions).filter((s) => (s.subscription?.status === "trial" || s.userTrialActive)).length;
   const totalPageViews = Object.values(siteStats).reduce((acc, stats) => acc + (stats?.totalViews || 0), 0);
   const totalUniquePages = Object.values(siteStats).reduce((acc, stats) => acc + (stats?.totalUniquePages || 0), 0);
+  const verifiedCount = sites.filter((s) => s.isVerified).length;
+  const paymentSuccess = searchParams?.get("payment") === "success";
 
   return (
     <DashboardLayout>
+      {/* Payment success banner (verify / trial / paid domain) */}
+      {paymentSuccess && (
+        <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-center gap-3 text-emerald-800">
+          <CheckCircleIcon />
+          <div>
+            <p className="font-medium">Subscription active</p>
+            <p className="text-sm text-emerald-700">Your domain is now connected. Add the script to your site to start collecting consent.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Page header */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">Overview</h1>
+        <p className="text-gray-500 mt-1">Traffic, domains, and subscription status from your account</p>
+      </div>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -322,7 +341,7 @@ function DashboardContent() {
               </svg>
             </div>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{sites.filter((s) => s.isVerified).length}</p>
+          <p className="text-3xl font-bold text-gray-900">{verifiedCount}</p>
           <p className="text-sm text-gray-500 mt-1">Verified domains</p>
         </div>
 
