@@ -6,12 +6,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
 
-// Icons
-const CheckIcon = () => (
-  <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-  </svg>
-);
 
 const AlertIcon = () => (
   <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -130,21 +124,6 @@ function BillingContent() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Billing & Subscriptions</h1>
         <p className="text-gray-500 mt-1">Manage your domain subscriptions and billing. All plans include a <strong>14-day free trial</strong>.</p>
-      </div>
-
-      {/* 14-day trial info banner */}
-      <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
-            <span className="text-lg font-bold text-green-700">14</span>
-          </div>
-          <div className="flex-1">
-            <h3 className="font-semibold text-green-900">14-day free trial on every plan</h3>
-            <p className="text-sm text-green-800 mt-0.5">
-              You get 14 days free when you add a domain. No charge until the trial ends. Same 14-day trial in Paddle checkout.
-            </p>
-          </div>
-        </div>
       </div>
 
       {/* User Trial Banner - when trial is active */}
@@ -312,59 +291,6 @@ function BillingContent() {
             </Link>
           </div>
         )}
-      </div>
-
-      {/* Available Plans */}
-      <div className="bg-white rounded-xl border border-gray-200 mb-8">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Available Plans</h2>
-          <p className="text-sm text-gray-500">All plans include a <strong>14-day free trial</strong>. Compare and upgrade below.</p>
-        </div>
-
-        <div className="p-6">
-          <div className="grid md:grid-cols-3 gap-6">
-            {Object.entries(PLAN_DETAILS).map(([key, plan]) => (
-              <div
-                key={key}
-                className={`border rounded-xl p-6 ${key === "starter" ? "border-indigo-500 bg-indigo-50/50" : "border-gray-200"
-                  }`}
-              >
-                {key === "starter" && (
-                  <span className="inline-block px-2 py-0.5 text-xs font-medium bg-indigo-600 text-white rounded mb-3">
-                    Popular
-                  </span>
-                )}
-                <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
-                <div className="mt-2 mb-2">
-                  <span className="text-3xl font-bold text-gray-900">${plan.price}</span>
-                  <span className="text-gray-500">/month</span>
-                </div>
-                <p className="text-sm font-medium text-green-600 mb-4">14 days free, then ${plan.price}/month</p>
-                <ul className="space-y-2 mb-6">
-                  <li className="flex items-center gap-2 text-sm text-gray-600">
-                    <CheckIcon />1 domain
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-gray-600">
-                    <CheckIcon />
-                    {plan.pageViews === Infinity ? "Unlimited" : plan.pageViews.toLocaleString()} page views
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-gray-600">
-                    <CheckIcon /><strong>14-day free trial</strong> — $0 to start
-                  </li>
-                </ul>
-                <Link
-                  href="/plans"
-                  className={`block text-center py-2 text-sm font-medium rounded-lg transition-colors ${key === "starter"
-                      ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                >
-                  Select Plan
-                </Link>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* Danger Zone */}
