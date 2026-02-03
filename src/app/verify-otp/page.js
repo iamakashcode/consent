@@ -17,15 +17,14 @@ function VerifyOtpContent() {
   const emailParam = searchParams?.get("email");
   const callbackUrl = searchParams?.get("callbackUrl") || "/dashboard";
 
-  const [email, setEmail] = useState("");
+  const emailFromUrl = emailParam ? (() => { try { return decodeURIComponent(emailParam); } catch { return ""; } })() : "";
+  const [userEmailOverride, setUserEmailOverride] = useState("");
+  const email = userEmailOverride !== "" ? userEmailOverride : emailFromUrl;
+
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
-
-  useEffect(() => {
-    if (emailParam) setEmail(decodeURIComponent(emailParam));
-  }, [emailParam]);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -143,7 +142,7 @@ function VerifyOtpContent() {
                 type="email"
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => setUserEmailOverride(e.target.value)}
                 className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="you@example.com"
               />
