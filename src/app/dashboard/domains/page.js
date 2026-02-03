@@ -343,9 +343,9 @@ export default function DomainsPage() {
                                 <Copy className="h-4 w-4" />
                                 {copiedId === site.id ? "Copied" : "Copy script"}
                               </Button>
-                              <Button variant="secondary" size="sm" onClick={() => uploadToCdn(site)} disabled={uploadingId === site.id}>
+                              {/* <Button variant="secondary" size="sm" onClick={() => uploadToCdn(site)} disabled={uploadingId === site.id}>
                                 {uploadingId === site.id ? "Uploading…" : <><Upload className="h-4 w-4" /> Upload CDN</>}
-                              </Button>
+                              </Button> */}
                               <Button variant="secondary" size="sm" asChild>
                                 <Link href={`/banner?siteId=${site.siteId}`}><Pencil className="h-4 w-4" /> Manage</Link>
                               </Button>

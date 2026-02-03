@@ -150,7 +150,7 @@ function ConsentLogContent() {
                 ))}
               </select>
             </div>
-            {selectedSiteId && (
+            {/* {selectedSiteId && (
               <Button
                 variant="secondary"
                 onClick={handleRegenerateScript}
@@ -163,7 +163,7 @@ function ConsentLogContent() {
                 )}
                 Update script (enable consent log)
               </Button>
-            )}
+            )} */}
           </div>
         </CardContent>
       </Card>
