@@ -4,6 +4,11 @@ import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 
 function VerifyOtpContent() {
   const { data: session, status } = useSession();
@@ -148,16 +153,23 @@ function VerifyOtpContent() {
               <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
                 Verification code (6 digits)
               </label>
-              <input
+              <InputOTP
                 id="otp"
-                type="text"
-                inputMode="numeric"
                 maxLength={6}
                 value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center tracking-widest text-lg"
-                placeholder="000000"
-              />
+                onChange={(value) => setOtp(value)}
+                containerClassName="justify-center"
+              >
+                <InputOTPGroup className="justify-center gap-2 sm:gap-3 bg-white border-2 border-gray-200 rounded-xl p-3">
+                  {[0, 1, 2, 3, 4, 5].map((index) => (
+                    <InputOTPSlot
+                      key={index}
+                      index={index}
+                      className="h-14 w-12 sm:h-16 sm:w-14 text-2xl sm:text-3xl font-semibold border-2 border-gray-200 rounded-lg bg-gray-50 data-[active=true]:border-indigo-500 data-[active=true]:ring-2 data-[active=true]:ring-indigo-200"
+                    />
+                  ))}
+                </InputOTPGroup>
+              </InputOTP>
             </div>
 
             <button
