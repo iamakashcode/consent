@@ -15,10 +15,9 @@ const CheckIcon = () => (
 const PLAN_DETAILS = {
   basic: {
     name: "Basic",
-    price: "$5",
-    period: "per month",
+    monthly: 5,
+    yearly: 50,
     description: "Perfect for getting started",
-    pageViews: 100000,
     features: [
       "1 domain",
       "100,000 page views/month",
@@ -31,10 +30,9 @@ const PLAN_DETAILS = {
   },
   starter: {
     name: "Starter",
-    price: "$9",
-    period: "per month",
+    monthly: 9,
+    yearly: 90,
     description: "For growing businesses",
-    pageViews: 300000,
     features: [
       "1 domain",
       "300,000 page views/month",
@@ -48,10 +46,9 @@ const PLAN_DETAILS = {
   },
   pro: {
     name: "Pro",
-    price: "$20",
-    period: "per month",
+    monthly: 20,
+    yearly: 200,
     description: "For agencies and enterprises",
-    pageViews: Infinity,
     features: [
       "1 domain",
       "Unlimited page views",
@@ -72,9 +69,38 @@ function PlansContent() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
+  const [tab, setTab] = useState("monthly");
 
   const siteId = searchParams?.get("siteId") || null;
   const domain = searchParams?.get("domain") || null;
+  const [currentSubscription, setCurrentSubscription] = useState(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(!!siteId);
+
+  // Fetch current subscription for this domain when siteId is present
+  useEffect(() => {
+    if (!siteId || status !== "authenticated") {
+      if (siteId && status === "authenticated") setSubscriptionLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/subscription?siteId=${encodeURIComponent(siteId)}`);
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          setCurrentSubscription(data.subscription ? { plan: data.subscription.plan, status: data.subscription.status?.toLowerCase(), isActive: data.isActive } : null);
+        } else {
+          setCurrentSubscription(null);
+        }
+      } catch (_) {
+        if (!cancelled) setCurrentSubscription(null);
+      } finally {
+        if (!cancelled) setSubscriptionLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [siteId, status]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -97,12 +123,14 @@ function PlansContent() {
 
   if (!session) return null;
 
-  const handlePlanSelect = async (planKey, billingInterval = "monthly") => {
+  const handlePlanSelect = async (planKey) => {
     if (!siteId) {
       alert("Please add a domain first before selecting a plan.");
       router.push("/dashboard");
       return;
     }
+
+    const isUpgrade = currentSubscription?.isActive && ["active", "trial"].includes(currentSubscription?.status) && currentSubscription?.plan !== planKey;
 
     setLoading(true);
     setSelectedPlan(planKey);
@@ -111,7 +139,12 @@ function PlansContent() {
       const response = await fetch("/api/payment/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: planKey, siteId, billingInterval }),
+        body: JSON.stringify({
+          plan: planKey,
+          siteId,
+          billingInterval: tab,
+          upgrade: isUpgrade,
+        }),
       });
 
       const data = await response.json();
@@ -125,7 +158,7 @@ function PlansContent() {
 
       // Get checkout URL (prefer checkoutUrl, then subscriptionAuthUrl)
       let checkoutUrl = data.checkoutUrl || data.subscriptionAuthUrl;
-      
+
       // If checkout URL points to our domain (embedded checkout), redirect to our checkout page
       if (checkoutUrl && checkoutUrl.includes(window.location.origin)) {
         const transactionId = data.transactionId || checkoutUrl.match(/_ptxn=([^&]+)/)?.[1];
@@ -136,7 +169,7 @@ function PlansContent() {
       } else {
         console.log("[Plans] Using Paddle hosted checkout URL:", checkoutUrl);
       }
-      
+
       if (checkoutUrl) {
         if (data.subscriptionId) {
           sessionStorage.setItem("paddle_subscription_id", data.subscriptionId);
@@ -198,19 +231,31 @@ function PlansContent() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">
-          {siteId ? `Choose Plan for ${domain || "Your Domain"}` : "Choose Your Plan"}
+          {siteId ? (currentSubscription?.isActive ? `Change plan for ${domain || "Your Domain"}` : `Choose Plan for ${domain || "Your Domain"}`) : "Choose Your Plan"}
         </h1>
         <p className="text-gray-500 mt-1">
           {siteId
-            ? "Select a plan to activate consent tracking for this domain."
+            ? currentSubscription?.isActive
+              ? "Upgrade or change your plan. Your current subscription will be cancelled and replaced after payment."
+              : "Select a plan to activate consent tracking for this domain."
             : "Each domain requires its own subscription plan."}
         </p>
         {siteId && domain && (
-          <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-lg">
-            <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-            </svg>
-            <span className="text-sm font-medium text-indigo-700">{domain}</span>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+              <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+              </svg>
+              <span className="text-sm font-medium text-indigo-700">{domain}</span>
+            </div>
+            {subscriptionLoading ? (
+              <span className="text-sm text-gray-500">Loading current plan…</span>
+            ) : currentSubscription?.plan ? (
+              <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium">
+                Current plan: <span className="capitalize ml-1">{currentSubscription.plan}</span>
+                {currentSubscription.status === "trial" && <span className="ml-1 text-gray-500">(Trial)</span>}
+              </span>
+            ) : null}
           </div>
         )}
         {!siteId && (
@@ -236,83 +281,102 @@ function PlansContent() {
         </div>
       )}
 
+      {/* Billing tabs */}
+      {siteId && (
+        <div className="flex border-b border-gray-200 mb-6">
+          <button
+            type="button"
+            onClick={() => setTab("monthly")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === "monthly" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+          >
+            Monthly
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("yearly")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === "yearly" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+          >
+            Yearly (save 2 months)
+          </button>
+        </div>
+      )}
+
       {/* Plans Grid */}
       <div className="grid md:grid-cols-3 gap-6 mb-8">
-        {Object.entries(PLAN_DETAILS).map(([planKey, plan]) => (
-          <div
-            key={planKey}
-            className={`relative bg-white rounded-xl p-6 border-2 transition-all ${
-              plan.popular ? "border-indigo-500 shadow-lg" : "border-gray-200 hover:border-gray-300"
-            }`}
-          >
-            {plan.popular && (
-              <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                <span className="bg-indigo-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
-                  Most Popular
-                </span>
+        {Object.entries(PLAN_DETAILS).map(([planKey, plan]) => {
+          const price = tab === "monthly" ? plan.monthly : plan.yearly;
+          const period = tab === "monthly" ? "/month" : "/year";
+          const isCurrentPlan = currentSubscription?.plan === planKey;
+          const canUpgrade = currentSubscription?.isActive && ["active", "trial"].includes(currentSubscription?.status) && !isCurrentPlan;
+          const isNewSubscription = !currentSubscription?.plan || !currentSubscription?.isActive;
+          const buttonLabel = !siteId
+            ? "Add Domain First"
+            : loading && selectedPlan === planKey
+              ? "Processing..."
+              : isCurrentPlan
+                ? "Current plan"
+                : canUpgrade
+                  ? `Upgrade to ${plan.name}`
+                  : "Start 14-day free trial";
+          const disabled = !siteId || loading || isCurrentPlan;
+          return (
+            <div
+              key={planKey}
+              className={`relative bg-white rounded-xl p-6 border-2 transition-all ${isCurrentPlan ? "border-indigo-400 ring-2 ring-indigo-100" : plan.popular ? "border-indigo-500 shadow-lg" : "border-gray-200 hover:border-gray-300"
+                }`}
+            >
+              {plan.popular && !isCurrentPlan && (
+                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                  <span className="bg-indigo-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
+                    Most Popular
+                  </span>
+                </div>
+              )}
+              {isCurrentPlan && (
+                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                  <span className="bg-indigo-100 text-indigo-800 text-xs font-semibold px-3 py-1 rounded-full border border-indigo-200">
+                    Current plan
+                  </span>
+                </div>
+              )}
+
+              <h3 className="text-xl font-semibold text-gray-900 mb-1">{plan.name}</h3>
+              <p className="text-sm text-gray-500 mb-4">{plan.description}</p>
+
+              <div className="mb-6">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold text-gray-900">${price}</span>
+                  <span className="text-gray-500">{period}</span>
+                </div>
+                <p className="text-xs text-green-600 font-medium mt-1">{isNewSubscription || canUpgrade ? "14-day free trial • $0 now" : "—"}</p>
               </div>
-            )}
 
-            <h3 className="text-xl font-semibold text-gray-900 mb-1">{plan.name}</h3>
-            <p className="text-sm text-gray-500 mb-4">{plan.description}</p>
+              <ul className="space-y-3 mb-6">
+                {plan.features.map((feature, idx) => (
+                  <li key={idx} className="flex items-start gap-3 text-sm">
+                    <CheckIcon />
+                    <span className="text-gray-600">{feature}</span>
+                  </li>
+                ))}
+              </ul>
 
-            <div className="mb-6">
-              <div className="flex items-baseline gap-2">
-                <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
-                <span className="text-gray-500">{plan.period}</span>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">or ${Math.round(parseInt(plan.price.replace('$', '')) * 10)}/year</p>
-            </div>
-
-            <ul className="space-y-3 mb-6">
-              {plan.features.map((feature, idx) => (
-                <li key={idx} className="flex items-start gap-3 text-sm">
-                  <CheckIcon />
-                  <span className="text-gray-600">{feature}</span>
-                </li>
-              ))}
-            </ul>
-
-            <div className="space-y-2">
               <button
-                onClick={() => handlePlanSelect(planKey, "monthly")}
-                disabled={loading || !siteId}
-                className={`w-full py-3 text-sm font-medium rounded-lg transition-colors ${
-                  !siteId
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : loading && selectedPlan === planKey
-                    ? "bg-gray-100 text-gray-500"
-                    : plan.popular
+                onClick={() => !disabled && handlePlanSelect(planKey)}
+                disabled={disabled}
+                className={`w-full py-3 text-sm font-medium rounded-lg transition-colors ${disabled
+                  ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+                  : plan.popular || canUpgrade
                     ? "bg-indigo-600 text-white hover:bg-indigo-700"
                     : "bg-gray-100 text-gray-900 hover:bg-gray-200"
-                }`}
+                  }`}
               >
-                {!siteId
-                  ? "Add Domain First"
-                  : loading && selectedPlan === planKey
-                  ? "Processing..."
-                  : `Select ${plan.name} (Monthly)`}
-              </button>
-              <button
-                onClick={() => handlePlanSelect(planKey, "yearly")}
-                disabled={loading || !siteId}
-                className={`w-full py-2 text-xs font-medium rounded-lg transition-colors border ${
-                  !siteId
-                    ? "bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed"
-                    : loading && selectedPlan === planKey
-                    ? "bg-gray-50 text-gray-500 border-gray-200"
-                    : "bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-                }`}
-              >
-                {!siteId
-                  ? "Add Domain First"
-                  : loading && selectedPlan === planKey
-                  ? "Processing..."
-                  : `Select ${plan.name} (Yearly - Save 2 months)`}
+                {buttonLabel}
               </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* FAQ Section */}

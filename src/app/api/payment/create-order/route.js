@@ -9,6 +9,7 @@ import {
   createPaddleTransactionForPendingDomain,
   fetchPaddleSubscription,
   getSubscriptionCheckoutUrl,
+  cancelPaddleSubscription,
 } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
 
@@ -25,7 +26,7 @@ export async function POST(req) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { plan, siteId, billingInterval = "monthly" } = await req.json();
+    const { plan, siteId, billingInterval = "monthly", upgrade = false } = await req.json();
 
     // Validate plan
     if (!plan || !["basic", "starter", "pro"].includes(plan)) {
@@ -87,9 +88,30 @@ export async function POST(req) {
     // Check if domain already has an active subscription
     if (site.subscription) {
       const status = site.subscription.status?.toLowerCase();
+      const currentPlan = (site.subscription.plan || "").toLowerCase();
 
-      // If subscription is pending, allow re-attempting payment setup
-      if (status === "pending") {
+      // Upgrade: cancel current subscription (immediately), then proceed to create new one
+      if (upgrade && (status === "active" || status === "trial") && plan !== currentPlan) {
+        if (site.subscription.paddleSubscriptionId) {
+          try {
+            await cancelPaddleSubscription(site.subscription.paddleSubscriptionId, false);
+          } catch (err) {
+            console.error("[Payment] Upgrade: Paddle cancel failed", err);
+          }
+        }
+        await prisma.subscription.update({
+          where: { siteId: site.id },
+          data: {
+            status: "cancelled",
+            cancelAtPeriodEnd: false,
+            currentPeriodEnd: new Date(),
+            paddleSubscriptionId: null,
+            paddleTransactionId: null,
+            updatedAt: new Date(),
+          },
+        });
+        site.subscription = { ...site.subscription, status: "cancelled" };
+      } else if (status === "pending") {
         // Check if we have an existing Paddle subscription or transaction
         if (site.subscription.paddleSubscriptionId || site.subscription.paddleTransactionId) {
           try {
@@ -121,10 +143,10 @@ export async function POST(req) {
         }
       } else if (status === "active" || status === "trial") {
         return Response.json(
-          { error: `This domain already has an active ${site.subscription.plan} subscription.` },
+          { error: `This domain already has an active ${site.subscription.plan} subscription. Use "Upgrade" to change plan.` },
           { status: 400 }
         );
-      } else if (status === "cancelled" && site.subscription.currentPeriodEnd) {
+      } else if (site.subscription && status === "cancelled" && site.subscription.currentPeriodEnd) {
         const periodEnd = new Date(site.subscription.currentPeriodEnd);
         if (new Date() < periodEnd) {
           return Response.json(
@@ -257,11 +279,11 @@ export async function POST(req) {
       );
     } catch (error) {
       console.error("[Payment] Failed to create Paddle transaction:", error);
-      
+
       // Check for specific Paddle account configuration errors
       if (error.message?.includes("checkout_not_enabled") || error.message?.includes("Checkout has not yet been enabled")) {
         return Response.json(
-          { 
+          {
             error: "Paddle checkout is not enabled for your account. Please complete Paddle onboarding and enable checkout in your Paddle dashboard, or contact Paddle support.",
             errorCode: "PADDLE_CHECKOUT_NOT_ENABLED",
             details: error.message
@@ -269,9 +291,9 @@ export async function POST(req) {
           { status: 500 }
         );
       }
-      
+
       return Response.json(
-        { 
+        {
           error: "Failed to create payment transaction. Please try again.",
           details: error.message
         },
@@ -282,14 +304,14 @@ export async function POST(req) {
     // Get checkout URL from transaction response
     // Paddle returns checkout.url which is the actual checkout URL
     let checkoutUrl = paddleTransaction.checkout?.url;
-    
+
     console.log("[Payment] Transaction checkout response:", {
       transactionId: paddleTransaction.id,
       status: paddleTransaction.status,
       checkout: paddleTransaction.checkout,
       checkoutUrl: checkoutUrl,
     });
-    
+
     // If checkout URL is not provided, transaction might not be ready for checkout
     if (!checkoutUrl) {
       console.error("[Payment] No checkout URL in transaction response");
@@ -298,7 +320,7 @@ export async function POST(req) {
         { status: 500 }
       );
     }
-    
+
     // Paddle checkout URL format:
     // - If embedded: https://yourdomain.com?_ptxn=txn_xxx (this is valid, use as-is)
     // - If hosted: https://checkout.paddle.com/... (full Paddle URL)

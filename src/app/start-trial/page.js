@@ -6,6 +6,18 @@ import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
 
+const CheckIcon = () => (
+  <svg className="w-5 h-5 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+  </svg>
+);
+
+const PLANS = {
+  basic: { name: "Basic", monthly: 5, yearly: 50, features: ["1 domain", "100,000 page views/month", "Basic tracker detection", "Cookie consent banner", "14-day free trial"] },
+  starter: { name: "Starter", monthly: 9, yearly: 90, features: ["1 domain", "300,000 page views/month", "Advanced tracker detection", "Customizable banner", "Email support", "14-day free trial"], popular: true },
+  pro: { name: "Pro", monthly: 20, yearly: 200, features: ["1 domain", "Unlimited page views", "All tracker types", "White-label banner", "Priority support", "14-day free trial"] },
+};
+
 function StartTrialContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -14,69 +26,103 @@ function StartTrialContent() {
 
   const [profile, setProfile] = useState(null);
   const [domain, setDomain] = useState("");
+  const [siteId, setSiteId] = useState(null);
+  const [tab, setTab] = useState("monthly");
   const [loading, setLoading] = useState(true);
+  const [crawlError, setCrawlError] = useState("");
   const [starting, setStarting] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      const redirectUrl = "/start-trial" + (callbackUrl !== "/dashboard" ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : "");
-      router.push(`/login?callbackUrl=${encodeURIComponent(redirectUrl)}`);
+      router.push(`/login?callbackUrl=${encodeURIComponent("/start-trial" + (callbackUrl !== "/dashboard" ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""))}`);
       return;
     }
     if (status !== "authenticated") return;
 
-    const fetchProfile = async () => {
+    const run = async () => {
       try {
         const res = await fetch("/api/user/profile");
         const data = await res.json();
-        if (res.ok) {
-          setProfile(data);
-          if (data.websiteUrl) {
-            let d = data.websiteUrl.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
-            setDomain(d);
-          }
+        if (!res.ok) {
+          setLoading(false);
+          return;
+        }
+        setProfile(data);
+        let d = (data.websiteUrl || "").replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].trim();
+        if (d) setDomain(d);
+
+        if (data.trialEndAt && new Date(data.trialEndAt) > new Date()) {
+          router.push(callbackUrl);
+          return;
+        }
+
+        if (!d) {
+          setLoading(false);
+          return;
+        }
+
+        const crawlRes = await fetch("/api/crawl", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ domain: d }),
+        });
+        const crawlData = await crawlRes.json();
+        if (crawlRes.ok && crawlData.siteId) {
+          setSiteId(crawlData.siteId);
+          setCrawlError("");
+        } else {
+          setCrawlError(crawlData.error || "Could not add domain. Check the domain and try again.");
         }
       } catch (err) {
-        setError("Failed to load profile");
+        setCrawlError("Failed to load. Please try again.");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchProfile();
+    run();
   }, [status, router, callbackUrl]);
 
-  useEffect(() => {
-    if (profile?.trialEndAt && new Date(profile.trialEndAt) > new Date()) {
-      router.push(callbackUrl);
-    }
-  }, [profile, callbackUrl, router]);
-
-  const handleStartTrial = async () => {
-    const d = domain.trim();
-    if (!d) {
-      setError("Please enter your domain");
+  const handlePlanSelect = async (planKey) => {
+    if (!siteId) {
+      setError("Domain is not ready. Please wait or refresh.");
       return;
     }
     setStarting(true);
+    setSelectedPlan(planKey);
     setError("");
     try {
-      const res = await fetch("/api/auth/start-free-trial", {
+      const res = await fetch("/api/payment/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain: d }),
+        body: JSON.stringify({ plan: planKey, siteId, billingInterval: tab }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to start trial");
+        setError(data.error || "Failed to open checkout.");
         setStarting(false);
+        setSelectedPlan(null);
         return;
       }
-      router.push(callbackUrl);
+      const checkoutUrl = data.checkoutUrl || data.subscriptionAuthUrl;
+      if (checkoutUrl) {
+        if (checkoutUrl.includes(window.location.origin)) {
+          const txn = data.transactionId || checkoutUrl.match(/_ptxn=([^&]+)/)?.[1];
+          window.location.href = txn ? `/checkout?_ptxn=${txn}` : checkoutUrl;
+        } else {
+          window.location.href = checkoutUrl;
+        }
+        return;
+      }
+      setError("Checkout URL not available.");
+      setStarting(false);
+      setSelectedPlan(null);
     } catch (err) {
       setError("Something went wrong. Please try again.");
       setStarting(false);
+      setSelectedPlan(null);
     }
   };
 
@@ -94,76 +140,111 @@ function StartTrialContent() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Start your 14-day free trial</h1>
-        <p className="text-gray-500 mb-8">
-          Get full access to the Basic plan ($5/month after trial). No credit card required.
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Choose your plan</h1>
+        <p className="text-gray-500 mb-6">
+          Select one plan to start your 14-day free trial on your first domain. You will be taken to checkout (payment $0 during trial).
         </p>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center shrink-0">
-              <span className="text-xl font-bold text-indigo-600">$5</span>
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Basic plan</h2>
-              <p className="text-sm text-gray-500 mt-1">14-day free trial, then $5/month</p>
-              <ul className="mt-3 space-y-2 text-sm text-gray-600">
-                <li className="flex items-center gap-2">
-                  <span className="text-green-500">✓</span> 1 domain
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-green-500">✓</span> 100,000 page views/month
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-green-500">✓</span> Cookie consent banner
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-green-500">✓</span> Tracker detection
-                </li>
-              </ul>
-            </div>
+        {profile?.websiteUrl && (
+          <div className="mb-6 inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+            <span className="text-sm font-medium text-indigo-700">Domain: {domain || profile.websiteUrl}</span>
           </div>
-        </div>
+        )}
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Your domain</label>
-          <input
-            type="text"
-            value={domain}
-            onChange={(e) => setDomain(e.target.value)}
-            placeholder="example.com"
-            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent mb-4"
-          />
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              {error}
+        {!domain && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+            No domain from signup. Please add your domain on the dashboard first, then come back to select a plan.
+            <Link href="/dashboard" className="block mt-2 font-medium text-indigo-600 hover:text-indigo-700">Go to dashboard →</Link>
+          </div>
+        )}
+
+        {crawlError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            {crawlError}
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {siteId && (
+          <>
+            <div className="flex border-b border-gray-200 mb-6">
+              <button
+                type="button"
+                onClick={() => setTab("monthly")}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === "monthly"
+                    ? "border-indigo-600 text-indigo-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                  }`}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("yearly")}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === "yearly"
+                    ? "border-indigo-600 text-indigo-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                  }`}
+              >
+                Yearly (save 2 months)
+              </button>
             </div>
-          )}
-          <button
-            onClick={handleStartTrial}
-            disabled={starting}
-            className="w-full py-3 px-4 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          >
-            {starting ? (
-              <span className="flex items-center justify-center gap-2">
-                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                Starting trial...
-              </span>
-            ) : (
-              "Start Free trial"
-            )}
-          </button>
-          <p className="text-xs text-gray-500 mt-4 text-center">
-            By starting the trial you get 14 days of full access. You can add your script and verify your domain from the dashboard.
-          </p>
-        </div>
 
-        <p className="mt-6 text-center">
-          <Link href={callbackUrl} className="text-sm text-gray-500 hover:text-gray-700">
-            Skip for now → Go to dashboard
-          </Link>
-        </p>
+            <div className="grid md:grid-cols-3 gap-6">
+              {Object.entries(PLANS).map(([planKey, plan]) => {
+                const price = tab === "monthly" ? plan.monthly : plan.yearly;
+                const period = tab === "monthly" ? "/month" : "/year";
+                return (
+                  <div
+                    key={planKey}
+                    className={`relative bg-white rounded-xl p-6 border-2 transition-all ${plan.popular ? "border-indigo-500 shadow-lg" : "border-gray-200 hover:border-gray-300"
+                      }`}
+                  >
+                    {plan.popular && (
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                        <span className="bg-indigo-600 text-white text-xs font-semibold px-3 py-1 rounded-full">Popular</span>
+                      </div>
+                    )}
+                    <h3 className="text-xl font-semibold text-gray-900 mb-1">{plan.name}</h3>
+                    <div className="mb-4">
+                      <span className="text-3xl font-bold text-gray-900">${price}</span>
+                      <span className="text-gray-500">{period}</span>
+                    </div>
+                    <p className="text-xs text-green-600 font-medium mb-4">14-day free trial • $0 now</p>
+                    <ul className="space-y-2 mb-6">
+                      {plan.features.map((f, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
+                          <CheckIcon />
+                          <span>{f}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      onClick={() => handlePlanSelect(planKey)}
+                      disabled={starting}
+                      className={`w-full py-3 text-sm font-medium rounded-lg transition-colors ${plan.popular
+                          ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                          : "bg-gray-100 text-gray-900 hover:bg-gray-200"
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {starting && selectedPlan === planKey ? "Opening checkout…" : "Start 14-day free trial"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {domain && !siteId && !crawlError && loading === false && (
+          <div className="text-center py-8 text-gray-500">Preparing your domain…</div>
+        )}
       </div>
     </DashboardLayout>
   );

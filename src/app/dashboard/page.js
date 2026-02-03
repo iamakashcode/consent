@@ -70,30 +70,7 @@ function DashboardContent() {
   const [copiedId, setCopiedId] = useState(null);
   const [uploadingId, setUploadingId] = useState(null);
   const [uploadMessageBySite, setUploadMessageBySite] = useState({});
-  const [startingTrialSiteId, setStartingTrialSiteId] = useState(null);
   const hasRefreshed = useRef(false);
-
-  const handleStartFreeTrial = async (site) => {
-    setStartingTrialSiteId(site.siteId);
-    try {
-      const res = await fetch("/api/auth/start-free-trial", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain: site.domain }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        await fetchSites();
-        await fetchSubscriptions();
-      } else {
-        alert(data.error || "Failed to start trial");
-      }
-    } catch (err) {
-      alert("Something went wrong. Please try again.");
-    } finally {
-      setStartingTrialSiteId(null);
-    }
-  };
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -467,13 +444,14 @@ function DashboardContent() {
                       <td className="px-6 py-4 text-gray-600 capitalize">{siteName}</td>
                       <td className="px-6 py-4 text-gray-600">{createdDate}</td>
                       <td className="px-6 py-4">
-                        {isTrial || subData?.userTrialActive ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            Basic (Trial)
-                          </span>
-                        ) : isActive && subscription?.plan ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                        {isActive && subscription?.plan ? (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isTrial || subData?.userTrialActive ? "bg-blue-100 text-blue-800" : "bg-indigo-100 text-indigo-800"}`}>
                             {subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)}
+                            {(isTrial || subData?.userTrialActive) && " (Trial)"}
+                          </span>
+                        ) : !trialNotStarted && (isTrial || subData?.userTrialActive) ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            Trial
                           </span>
                         ) : (
                           <span className="text-gray-400">—</span>
@@ -485,15 +463,14 @@ function DashboardContent() {
                           <div className="flex items-center justify-end gap-2 flex-wrap">
                             <span className="text-sm text-red-600 font-medium flex items-center gap-1">
                               Trial activation failed
-                              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-600 text-xs" title="Start free trial to activate">?</span>
+                              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-600 text-xs" title="Select a plan to start 14-day free trial via checkout">?</span>
                             </span>
-                            <button
-                              onClick={() => handleStartFreeTrial(site)}
-                              disabled={startingTrialSiteId === site.siteId}
-                              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            <Link
+                              href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}
+                              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
                             >
-                              {startingTrialSiteId === site.siteId ? "Starting…" : "Start Free trial"}
-                            </button>
+                              Select plan
+                            </Link>
                           </div>
                         ) : isActive ? (
                           <div className="flex items-center justify-end gap-2 flex-wrap">
@@ -518,6 +495,12 @@ function DashboardContent() {
                             >
                               {uploadingId === site.id ? "Uploading…" : "Upload to CDN"}
                             </button>
+                            <Link
+                              href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+                            >
+                              Upgrade
+                            </Link>
                             <Link
                               href={`/banner?siteId=${site.siteId}`}
                               className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
@@ -570,7 +553,7 @@ function DashboardContent() {
               href="/start-trial"
               className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
             >
-              Start 14-day free trial with your signup domain →
+              Select plan & start 14-day free trial (Paddle checkout) →
             </Link>
           </div>
         )}
