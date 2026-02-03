@@ -18,10 +18,14 @@ export async function activatePendingDomain(pending, transaction) {
   const periodEnd = transaction.billing_period?.ends_at
     ? new Date(transaction.billing_period.ends_at)
     : (() => {
-        const end = new Date();
-        end.setMonth(end.getMonth() + 1);
-        return end;
-      })();
+      const end = new Date();
+      end.setMonth(end.getMonth() + 1);
+      return end;
+    })();
+
+  // Only start user trial for first domain (user has no sites yet)
+  const existingSitesCount = await prisma.site.count({ where: { userId: pending.userId } });
+  const isFirstDomain = existingSitesCount === 0;
 
   const createdSite = await prisma.site.create({
     data: {
@@ -33,12 +37,16 @@ export async function activatePendingDomain(pending, transaction) {
       isVerified: false,
     },
   });
-  await startUserTrial(pending.userId);
+
+  if (isFirstDomain) {
+    await startUserTrial(pending.userId);
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: pending.userId },
     select: { trialEndAt: true },
   });
-  const newStatus = user?.trialEndAt && new Date() < new Date(user.trialEndAt) ? "trial" : "active";
+  const newStatus = isFirstDomain && user?.trialEndAt && new Date() < new Date(user.trialEndAt) ? "trial" : "active";
   const createdSubscription = await prisma.subscription.create({
     data: {
       siteId: createdSite.id,

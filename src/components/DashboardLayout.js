@@ -77,7 +77,6 @@ const navItems = [
   { href: "/dashboard/domains", label: "Domains", icon: GlobeIcon },
   { href: "/dashboard/usage", label: "Usage", icon: ChartIcon },
   { href: "/dashboard/consent-log", label: "Consent Log", icon: ClipboardListIcon },
-  { href: "/banner", label: "Banner", icon: PaletteIcon },
   { href: "/billing", label: "Billing", icon: CreditCardIcon },
 ];
 
@@ -132,13 +131,6 @@ export default function DashboardLayout({ children }) {
             >
               <MenuIcon />
             </button>
-
-            <Link
-              href="/plans"
-              className="hidden sm:inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg"
-            >
-              Upgrade
-            </Link>
 
             <div className="relative">
               <button

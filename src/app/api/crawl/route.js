@@ -44,11 +44,11 @@ export async function POST(req) {
       );
     }
 
-    // Check if site already exists for this user - do not allow duplicate
+    // Check if site already exists for this user - case-insensitive (DIV.com = div.com)
     let existingSite = await prisma.site.findFirst({
       where: {
         userId: userId,
-        domain: cleanDomain,
+        domain: { equals: cleanDomain, mode: "insensitive" },
       },
       include: { subscription: true },
     });
@@ -60,9 +60,12 @@ export async function POST(req) {
       );
     }
 
-    // Check if user already has this domain as PendingDomain (pending payment)
+    // Check if user already has this domain as PendingDomain (pending payment) - case-insensitive
     const existingPending = await prisma.pendingDomain.findFirst({
-      where: { userId: userId, domain: cleanDomain },
+      where: {
+        userId: userId,
+        domain: { equals: cleanDomain, mode: "insensitive" },
+      },
     });
     if (existingPending) {
       return Response.json(
@@ -187,7 +190,7 @@ export async function POST(req) {
         // Handle race: same domain added by another request - check Site or PendingDomain
         if (createError.code === "P2002") {
           existingSite = await prisma.site.findFirst({
-            where: { userId: userId, domain: cleanDomain },
+            where: { userId: userId, domain: { equals: cleanDomain, mode: "insensitive" } },
             include: { subscription: true },
           });
           if (existingSite) {
@@ -195,7 +198,7 @@ export async function POST(req) {
             siteId = existingSite.siteId;
           } else {
             const existingPending = await prisma.pendingDomain.findFirst({
-              where: { userId: userId, domain: cleanDomain },
+              where: { userId: userId, domain: { equals: cleanDomain, mode: "insensitive" } },
             });
             if (existingPending) {
               site = {

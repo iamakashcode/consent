@@ -171,16 +171,20 @@ function BannerContent() {
 
           setSites(activeSites);
 
-          // Check if siteId is provided in URL
+          // Only allow siteId from URL if it's in active (verified/paid) list - no URL hack without payment
           const siteIdParam = searchParams?.get("siteId");
           let nextSite = null;
 
           if (siteIdParam && activeSites.length > 0) {
-            // Find site by siteId
             nextSite = activeSites.find(s => s.siteId === siteIdParam || s.id === siteIdParam);
+            // If URL has siteId but not in active list, clear it from URL (user can't access without payment)
+            if (!nextSite && typeof window !== "undefined") {
+              const u = new URL(window.location.href);
+              u.searchParams.delete("siteId");
+              window.history.replaceState({}, "", u.pathname + u.search);
+            }
           }
 
-          // Fallback to first active site if no match or no param
           if (!nextSite && activeSites.length > 0) {
             nextSite = activeSites[0];
           }
@@ -668,8 +672,8 @@ function BannerContent() {
                         key={pos.id}
                         onClick={() => setConfig({ ...config, position: pos.id })}
                         className={`flex items-center gap-2 px-4 py-3 rounded-lg border transition-all ${config.position === pos.id
-                            ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                            : "border-gray-200 hover:border-gray-300"
+                          ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                          : "border-gray-200 hover:border-gray-300"
                           }`}
                       >
                         <span>{pos.icon}</span>
@@ -830,12 +834,12 @@ function BannerContent() {
                     {/* Banner Preview */}
                     <div
                       className={`absolute left-0 right-0 p-4 ${config.position === "top"
-                          ? "top-0"
-                          : config.position === "bottom-left"
-                            ? "bottom-0 left-0 right-auto max-w-sm"
-                            : config.position === "bottom-right"
-                              ? "bottom-0 right-0 left-auto max-w-sm"
-                              : "bottom-0"
+                        ? "top-0"
+                        : config.position === "bottom-left"
+                          ? "bottom-0 left-0 right-auto max-w-sm"
+                          : config.position === "bottom-right"
+                            ? "bottom-0 right-0 left-auto max-w-sm"
+                            : "bottom-0"
                         }`}
                     >
                       <div
@@ -920,8 +924,8 @@ function BannerContent() {
                 <button
                   onClick={() => setActiveInstallTab("manual")}
                   className={`pb-3 text-sm font-medium ${activeInstallTab === "manual"
-                      ? "text-indigo-600 border-b-2 border-indigo-600"
-                      : "text-gray-500"
+                    ? "text-indigo-600 border-b-2 border-indigo-600"
+                    : "text-gray-500"
                     }`}
                 >
                   Install manually on website
@@ -929,8 +933,8 @@ function BannerContent() {
                 <button
                   onClick={() => setActiveInstallTab("gtm")}
                   className={`pb-3 text-sm font-medium ${activeInstallTab === "gtm"
-                      ? "text-indigo-600 border-b-2 border-indigo-600"
-                      : "text-gray-500"
+                    ? "text-indigo-600 border-b-2 border-indigo-600"
+                    : "text-gray-500"
                     }`}
                 >
                   Install with Google Tag Manager

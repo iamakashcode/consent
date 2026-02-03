@@ -75,6 +75,21 @@ function PlansContent() {
   const domain = searchParams?.get("domain") || null;
   const [currentSubscription, setCurrentSubscription] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(!!siteId);
+  const [isFirstDomain, setIsFirstDomain] = useState(true); // free trial only for first domain
+
+  // Fetch sites count to know if this is first domain (trial) or second+ (no trial)
+  useEffect(() => {
+    if (status !== "authenticated" || !siteId) return;
+    let cancelled = false;
+    fetch("/api/sites")
+      .then((r) => r.json())
+      .then((sites) => {
+        if (cancelled || !Array.isArray(sites)) return;
+        setIsFirstDomain(sites.length === 0);
+      })
+      .catch(() => { if (!cancelled) setIsFirstDomain(true); });
+    return () => { cancelled = true; };
+  }, [siteId, status]);
 
   // Fetch current subscription for this domain when siteId is present
   useEffect(() => {
@@ -319,7 +334,9 @@ function PlansContent() {
                 ? "Current plan"
                 : canUpgrade
                   ? `Upgrade to ${plan.name}`
-                  : "Start 14-day free trial";
+                  : isFirstDomain
+                    ? "Start 14-day free trial"
+                    : `Subscribe — $${price}${period}`;
           const disabled = !siteId || loading || isCurrentPlan;
           return (
             <div
@@ -350,7 +367,9 @@ function PlansContent() {
                   <span className="text-4xl font-bold text-gray-900">${price}</span>
                   <span className="text-gray-500">{period}</span>
                 </div>
-                <p className="text-xs text-green-600 font-medium mt-1">{isNewSubscription || canUpgrade ? "14-day free trial • $0 now" : "—"}</p>
+                <p className="text-xs text-green-600 font-medium mt-1">
+                  {isFirstDomain && (isNewSubscription || canUpgrade) ? "14-day free trial • $0 now" : !isFirstDomain && isNewSubscription ? `$${price}${period} — no trial for extra domains` : "—"}
+                </p>
               </div>
 
               <ul className="space-y-3 mb-6">
@@ -386,7 +405,7 @@ function PlansContent() {
           {[
             {
               q: "How does the trial work?",
-              a: "All new users get a 14-day free trial. Your trial starts when you add your first domain. All your domains share this trial period. You won't be charged until the trial ends.",
+              a: "Your first domain gets a 14-day free trial. Extra domains require a paid subscription from day one (no trial). You won't be charged for the first domain until the trial ends.",
             },
             {
               q: "Can I cancel anytime?",
@@ -394,7 +413,7 @@ function PlansContent() {
             },
             {
               q: "One subscription per domain?",
-              a: "Yes, each domain needs its own subscription. However, all your domains share the same 14-day user trial period.",
+              a: "Yes, each domain needs its own subscription. Only your first domain gets the 14-day free trial; additional domains are paid from day one.",
             },
             {
               q: "What happens if I exceed page views?",

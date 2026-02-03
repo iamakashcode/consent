@@ -33,6 +33,7 @@ function StartTrialContent() {
   const [starting, setStarting] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [error, setError] = useState("");
+  const [isFirstDomain, setIsFirstDomain] = useState(true);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -63,15 +64,16 @@ function StartTrialContent() {
           return;
         }
 
-        const crawlRes = await fetch("/api/crawl", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ domain: d }),
-        });
+        const [sitesRes, crawlRes] = await Promise.all([
+          fetch("/api/sites"),
+          fetch("/api/crawl", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain: d }) }),
+        ]);
+        const sitesData = sitesRes.ok ? await sitesRes.json() : [];
         const crawlData = await crawlRes.json();
         if (crawlRes.ok && crawlData.siteId) {
           setSiteId(crawlData.siteId);
           setCrawlError("");
+          setIsFirstDomain(Array.isArray(sitesData) && sitesData.length === 0);
         } else {
           setCrawlError(crawlData.error || "Could not add domain. Check the domain and try again.");
         }
@@ -222,7 +224,7 @@ function StartTrialContent() {
                       <span className="text-3xl font-bold text-gray-900">${price}</span>
                       <span className="text-gray-500">{period}</span>
                     </div>
-                    <p className="text-xs text-green-600 font-medium mb-4">14-day free trial • $0 now</p>
+                    <p className="text-xs text-green-600 font-medium mb-4">{isFirstDomain ? "14-day free trial • $0 now" : `$${price}${period} — no trial for extra domains`}</p>
                     <ul className="space-y-2 mb-6">
                       {plan.features.map((f, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
@@ -239,7 +241,7 @@ function StartTrialContent() {
                         : "bg-gray-100 text-gray-900 hover:bg-gray-200"
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
-                      {starting && selectedPlan === planKey ? "Opening checkout…" : "Start 14-day free trial"}
+                      {starting && selectedPlan === planKey ? "Opening checkout…" : isFirstDomain ? "Start 14-day free trial" : `Subscribe — $${price}${period}`}
                     </button>
                   </div>
                 );

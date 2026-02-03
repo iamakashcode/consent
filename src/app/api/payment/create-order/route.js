@@ -161,13 +161,18 @@ export async function POST(req) {
 
     const amount = PLAN_PRICING[plan];
 
-    // Get user info for Paddle
+    // Free trial only for user's first domain; second+ domain = no trial (Paddle + backend)
+    const userSitesCount = await prisma.site.count({ where: { userId: session.user.id } });
+    const isFirstDomain = pendingDomain
+      ? userSitesCount === 0
+      : userSitesCount === 1;
+    const trialDays = isFirstDomain ? 14 : 0;
+
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { name: true, email: true },
     });
 
-    // Get or create Paddle product
     let paddleProduct;
     try {
       paddleProduct = await getOrCreatePaddleProduct(plan);
@@ -179,10 +184,10 @@ export async function POST(req) {
       );
     }
 
-    // Get or create Paddle price (with billing interval)
+    // First domain = price with 14-day trial; second+ domain = price with no trial
     let paddlePrice;
     try {
-      paddlePrice = await getOrCreatePaddlePrice(paddleProduct.id, plan, amount, billingInterval);
+      paddlePrice = await getOrCreatePaddlePrice(paddleProduct.id, plan, amount, billingInterval, { trialDays });
     } catch (error) {
       console.error("[Payment] Failed to get/create Paddle price:", error);
       return Response.json(

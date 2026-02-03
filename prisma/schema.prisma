@@ -16,7 +16,7 @@ model User {
 
   // Registration: phone with country code, website URL
   phone       String?
-  countryCode String? @default("+91")
+  countryCode String? @default("+49")
   websiteUrl  String? @db.Text
 
   // Email verification (OTP)
