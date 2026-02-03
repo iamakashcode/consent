@@ -73,7 +73,7 @@ const ClipboardListIcon = () => (
 );
 
 const navItems = [
-  { href: "/dashboard", label: "Overview", icon: DashboardIcon },
+  { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/dashboard/domains", label: "Domains", icon: GlobeIcon },
   { href: "/dashboard/usage", label: "Usage", icon: ChartIcon },
   { href: "/dashboard/consent-log", label: "Consent Log", icon: ClipboardListIcon },
