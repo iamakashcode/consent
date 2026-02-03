@@ -23,19 +23,11 @@ export async function GET(req, { params }) {
     const resolvedParams = await params;
     const { siteId } = resolvedParams;
 
-    console.log(`[Verify Callback] Received request for siteId: ${siteId}`);
-    console.log(`[Verify Callback] Request URL: ${req.url}`);
-    console.log(`[Verify Callback] Request headers:`, {
-      referer: req.headers.get("referer"),
-      origin: req.headers.get("origin"),
-      host: req.headers.get("host"),
-    });
-
     if (!siteId) {
       console.error("[Verify Callback] Missing siteId");
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         connected: false,
-        error: "Site ID is required" 
+        error: "Site ID is required"
       }), {
         status: 400,
         headers: {
@@ -52,16 +44,16 @@ export async function GET(req, { params }) {
     const domainParam = searchParams.get("domain");
     const isPreview = searchParams.get("preview") === "1";
     console.log(`[Verify Callback] Domain param from query: ${domainParam}`);
-    
+
     // Extract domain from query param, referer, or origin header
     let requestDomain = null;
-    
+
     if (domainParam) {
       requestDomain = domainParam.toLowerCase().replace(/^www\./, "").split("/")[0];
     } else {
       const referer = req.headers.get("referer") || req.headers.get("origin");
       const origin = req.headers.get("origin");
-      
+
       if (referer) {
         try {
           const url = new URL(referer);
@@ -106,9 +98,9 @@ export async function GET(req, { params }) {
 
     if (!site) {
       console.error("[Verify Callback] Site not found for siteId:", siteId);
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         connected: false,
-        error: "Site not found" 
+        error: "Site not found"
       }), {
         status: 404,
         headers: {
@@ -161,8 +153,8 @@ export async function GET(req, { params }) {
       requestDomainNormalized.endsWith("." + storedDomain);
     if (!domainMatches) {
       console.warn(`[Verify Callback] Domain mismatch: ${requestDomainNormalized} !== ${storedDomain}`);
-      return new Response(JSON.stringify({ 
-        connected: false, 
+      return new Response(JSON.stringify({
+        connected: false,
         error: "Domain mismatch",
         requestDomain: requestDomainNormalized,
         storedDomain,
@@ -177,7 +169,7 @@ export async function GET(req, { params }) {
         },
       });
     }
-    
+
     console.log(`[Verify Callback] Domain match confirmed: ${requestDomain}`);
 
     // Check if already verified
@@ -192,24 +184,21 @@ export async function GET(req, { params }) {
 
     if (effectiveIsVerified) {
       // Already verified, just return success
-    return new Response(JSON.stringify({
-      connected: true,
-      message: "Domain already connected",
-      domain: site.domain,
-    }), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-    });
+      return new Response(JSON.stringify({
+        connected: true,
+        message: "Domain already connected",
+        domain: site.domain,
+      }), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
     }
 
-    // Mark as verified and update lastSeenAt
-    console.log(`[Verify Callback] Marking domain as connected...`);
-    
     // Check if lastSeenAt column exists
     const hasLastSeenAt = await prisma.$queryRaw`
       SELECT column_name 
@@ -218,7 +207,7 @@ export async function GET(req, { params }) {
       AND column_name = 'lastSeenAt'
       LIMIT 1
     `.then(result => Array.isArray(result) && result.length > 0).catch(() => false);
-    
+
     if (verificationColumns.allExist) {
       try {
         const updateData = {
@@ -232,7 +221,6 @@ export async function GET(req, { params }) {
           where: { id: site.id },
           data: updateData,
         });
-        console.log(`[Verify Callback] ✓ Successfully updated isVerified to true via Prisma`);
       } catch (updateError) {
         console.warn("[Verify Callback] Prisma update failed, using raw SQL:", updateError.message);
         try {
@@ -252,7 +240,7 @@ export async function GET(req, { params }) {
               WHERE "id" = ${site.id}
             `;
           }
-          console.log(`[Verify Callback] ✓ Successfully updated isVerified to true via raw SQL`);
+
         } catch (rawSqlError) {
           console.error(`[Verify Callback] ✗ Raw SQL update also failed:`, rawSqlError.message);
           throw rawSqlError;
@@ -286,8 +274,6 @@ export async function GET(req, { params }) {
         `;
       }
     }
-
-    console.log(`[Verify Callback] ✓ Domain connected: ${site.domain} (${requestDomain})`);
 
     return new Response(JSON.stringify({
       connected: true,

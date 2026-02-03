@@ -8,47 +8,65 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String?
-  isAdmin   Boolean  @default(false)
-  
+  id       String  @id @default(cuid())
+  email    String  @unique
+  password String
+  name     String?
+  isAdmin  Boolean @default(false)
+
+  // Registration: phone with country code, website URL
+  phone       String?
+  countryCode String? @default("+91")
+  websiteUrl  String? @db.Text
+
+  // Email verification (OTP)
+  emailVerified Boolean   @default(false)
+  otp           String?
+  otpExpiresAt  DateTime?
+
+  // One-time token for auto-login after OTP verify
+  verifyToken          String?
+  verifyTokenExpiresAt DateTime?
+
+  // Forgot password
+  resetToken          String?
+  resetTokenExpiresAt DateTime?
+
   // User-level trial (14 days for new users)
   // All domains share this trial period
-  trialStartedAt    DateTime?
-  trialEndAt        DateTime?
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  sites     Site[]
+  trialStartedAt DateTime?
+  trialEndAt     DateTime?
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  sites          Site[]
   pendingDomains PendingDomain[]
 
   @@map("users")
 }
 
 model Site {
-  id                String        @id @default(cuid())
+  id                String    @id @default(cuid())
   domain            String
-  siteId            String        @unique
+  siteId            String    @unique
   userId            String
-  trackers          Json          @default("[]")
+  trackers          Json      @default("[]")
   bannerConfig      Json?
-  isVerified        Boolean       @default(false)
+  isVerified        Boolean   @default(false)
   verificationToken String?
   verifiedAt        DateTime?
   lastSeenAt        DateTime?
-  
+
   // Note: Trial is now user-level, not domain-level
   // Domain-level trial fields kept for backward compatibility but not used
-  
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  siteViewCounts    SiteViewCount[]
+
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  siteViewCounts     SiteViewCount[]
   sitePathViewCounts SitePathViewCount[]
-  consentLogs       ConsentLog[]
-  subscription      Subscription?
+  consentLogs        ConsentLog[]
+  subscription       Subscription?
 
   @@unique([userId, domain])
   @@map("sites")
@@ -56,17 +74,17 @@ model Site {
 
 // Domain awaiting payment - converted to Site only when payment succeeds
 model PendingDomain {
-  id                    String   @id @default(cuid())
-  userId                String
-  domain                String
-  siteId                String   @unique  // pre-generated so plans/checkout can use it
-  trackers              Json     @default("[]")
-  verificationToken     String
-  plan                  String   @default("basic")
-  billingInterval       String   @default("monthly")
-  paddleTransactionId   String?  // Paddle txn id from checkout; webhook finds by this when custom_data is missing
-  createdAt             DateTime @default(now())
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  String   @id @default(cuid())
+  userId              String
+  domain              String
+  siteId              String   @unique // pre-generated so plans/checkout can use it
+  trackers            Json     @default("[]")
+  verificationToken   String
+  plan                String   @default("basic")
+  billingInterval     String   @default("monthly")
+  paddleTransactionId String? // Paddle txn id from checkout; webhook finds by this when custom_data is missing
+  createdAt           DateTime @default(now())
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, domain])
   @@map("pending_domains")
@@ -74,12 +92,12 @@ model PendingDomain {
 
 // Lightweight page view counting: one row per site per calendar month instead of one per view
 model SiteViewCount {
-  id         String   @id @default(cuid())
-  siteId     String
+  id          String   @id @default(cuid())
+  siteId      String
   periodStart DateTime // first day of month (UTC)
-  count      Int      @default(0)
-  updatedAt  DateTime @updatedAt
-  site       Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  count       Int      @default(0)
+  updatedAt   DateTime @updatedAt
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@unique([siteId, periodStart])
   @@index([siteId])
@@ -91,7 +109,7 @@ model SitePathViewCount {
   id          String   @id @default(cuid())
   siteId      String
   periodStart DateTime
-  pagePath    String   // path only, max 2048
+  pagePath    String // path only, max 2048
   count       Int      @default(0)
   updatedAt   DateTime @updatedAt
   site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
@@ -104,7 +122,7 @@ model SitePathViewCount {
 model ConsentLog {
   id        String   @id @default(cuid())
   siteId    String
-  status    String   // "accepted" | "rejected"
+  status    String // "accepted" | "rejected"
   visitorIp String?
   pageUrl   String?  @db.Text
   createdAt DateTime @default(now())
@@ -116,16 +134,16 @@ model ConsentLog {
 }
 
 model Subscription {
-  id                     String    @id @default(cuid())
-  siteId                 String    @unique
-  
-  plan                   String    @default("basic") // basic, starter, pro
-  billingInterval        String    @default("monthly") // monthly, yearly
-  status                 String    @default("pending") // pending, trial, active, cancelled, expired, payment_failed
-  currentPeriodStart     DateTime?
-  currentPeriodEnd       DateTime?
-  cancelAtPeriodEnd      Boolean   @default(false)
-  
+  id     String @id @default(cuid())
+  siteId String @unique
+
+  plan               String    @default("basic") // basic, starter, pro
+  billingInterval    String    @default("monthly") // monthly, yearly
+  status             String    @default("pending") // pending, trial, active, cancelled, expired, payment_failed
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean   @default(false)
+
   // Paddle fields
   paddleSubscriptionId String?
   paddlePriceId        String?
@@ -134,12 +152,12 @@ model Subscription {
   paddleTransactionId  String?
 
   // Add-on: remove "Powered by" branding from banner ($3/mo)
-  removeBrandingAddon  Boolean   @default(false)
+  removeBrandingAddon       Boolean @default(false)
   paddleAddonSubscriptionId String? // add-on subscription id when purchased
 
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
-  site                   Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@map("subscriptions")
 }

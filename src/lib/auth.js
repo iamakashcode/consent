@@ -1,5 +1,19 @@
+import crypto from 'crypto';
 import { compare, hash } from 'bcryptjs';
 import { prisma } from './prisma';
+import { sendOtpEmail } from './email';
+
+const OTP_EXPIRY_MINUTES = 10;
+const VERIFY_TOKEN_EXPIRY_MINUTES = 5;
+const RESET_TOKEN_EXPIRY_MINUTES = 60;
+
+function generateOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function generateToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
 
 export async function hashPassword(password) {
   return hash(password, 12);
@@ -9,16 +23,24 @@ export async function verifyPassword(password, hashedPassword) {
   return compare(password, hashedPassword);
 }
 
-export async function createUser(email, password, name) {
+/** Create user with phone, websiteUrl; set emailVerified false and send OTP */
+export async function createUser(email, password, name, { phone, countryCode, websiteUrl } = {}) {
   try {
     const hashedPassword = await hashPassword(password);
-    
+    const otp = generateOtp();
+    const otpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
     const user = await prisma.user.create({
       data: {
         email,
         password: hashedPassword,
         name,
-        // Don't create subscription automatically - user must choose a plan
+        phone: phone || null,
+        countryCode: countryCode || '+91',
+        websiteUrl: websiteUrl || null,
+        emailVerified: false,
+        otp,
+        otpExpiresAt,
       },
       select: {
         id: true,
@@ -27,12 +49,128 @@ export async function createUser(email, password, name) {
         createdAt: true,
       },
     });
-    
+
+    await sendOtpEmail(email, otp);
     return user;
   } catch (error) {
     console.error('createUser error:', error);
     throw error;
   }
+}
+
+/** Set new OTP for user (resend); returns true if sent */
+export async function setOtpAndSendEmail(email) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, emailVerified: true },
+  });
+  if (!user || user.emailVerified) return false;
+  const otp = generateOtp();
+  const otpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+  await prisma.user.update({
+    where: { email },
+    data: { otp, otpExpiresAt },
+  });
+  await sendOtpEmail(email, otp);
+  return true;
+}
+
+/** Verify OTP and mark email verified; returns user if valid, null otherwise */
+export async function verifyOtpAndMarkVerified(email, otp) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true, name: true, otp: true, otpExpiresAt: true, emailVerified: true },
+  });
+  if (!user || user.emailVerified) return null;
+  if (user.otp !== otp || !user.otpExpiresAt || new Date() > user.otpExpiresAt) return null;
+  const verifyToken = generateToken();
+  const verifyTokenExpiresAt = new Date(Date.now() + VERIFY_TOKEN_EXPIRY_MINUTES * 60 * 1000);
+  await prisma.user.update({
+    where: { email },
+    data: {
+      emailVerified: true,
+      otp: null,
+      otpExpiresAt: null,
+      verifyToken,
+      verifyTokenExpiresAt,
+    },
+  });
+  return { id: user.id, email: user.email, name: user.name, verifyToken };
+}
+
+/** Consume verify token and return user for session; clears token */
+export async function consumeVerifyToken(token) {
+  if (!token) return null;
+  const user = await prisma.user.findFirst({
+    where: {
+      verifyToken: token,
+      verifyTokenExpiresAt: { gt: new Date() },
+    },
+    select: { id: true, email: true, name: true, isAdmin: true },
+  });
+  if (!user) return null;
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { verifyToken: null, verifyTokenExpiresAt: null },
+  });
+  return user;
+}
+
+/** Create reset token and send email; baseUrl e.g. https://yourapp.com. Returns true if user exists and email sent */
+export async function setResetTokenAndSendEmail(email, baseUrl) {
+  const { sendResetPasswordEmail } = await import('./email');
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+  if (!user) return false;
+  const resetToken = generateToken();
+  const resetTokenExpiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MINUTES * 60 * 1000);
+  await prisma.user.update({
+    where: { email },
+    data: { resetToken, resetTokenExpiresAt },
+  });
+  const resetLink = `${baseUrl.replace(/\/$/, '')}/reset-password?token=${resetToken}`;
+  await sendResetPasswordEmail(email, resetLink);
+  return true;
+}
+
+/** Verify reset token and return user id; does not clear token (call clearResetToken after password update) */
+export async function verifyResetToken(token) {
+  if (!token) return null;
+  const user = await prisma.user.findFirst({
+    where: {
+      resetToken: token,
+      resetTokenExpiresAt: { gt: new Date() },
+    },
+    select: { id: true },
+  });
+  return user ? user.id : null;
+}
+
+export async function clearResetToken(userId) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { resetToken: null, resetTokenExpiresAt: null },
+  });
+}
+
+export async function updatePassword(userId, newPassword) {
+  const hashedPassword = await hashPassword(newPassword);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { password: hashedPassword },
+  });
+}
+
+/** For login page: check if email exists and is unverified */
+export async function getEmailStatus(email) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, emailVerified: true },
+  });
+  if (!user) return { exists: false, verified: false };
+  return { exists: true, verified: !!user.emailVerified };
 }
 
 // Simple check if user exists (for signup) - doesn't require isAdmin field
@@ -62,7 +200,6 @@ export async function userExists(email) {
 }
 
 export async function getUserByEmail(email) {
-  // First, try with all fields including isAdmin
   try {
     const user = await prisma.user.findUnique({
       where: { email },
@@ -72,29 +209,22 @@ export async function getUserByEmail(email) {
         password: true,
         name: true,
         isAdmin: true,
+        emailVerified: true,
         createdAt: true,
         updatedAt: true,
       },
     });
-    
-    if (user) {
-      return user;
-    }
-    
+    if (user) return user;
     return null;
   } catch (error) {
-    console.error('[getUserByEmail] Error with isAdmin field:', error.message);
-    
-    // If isAdmin field doesn't exist, try without it
     if (
-      error.message?.includes('Unknown column') || 
-      error.message?.includes('column') || 
+      error.message?.includes('Unknown column') ||
+      error.message?.includes('column') ||
       error.message?.includes('isAdmin') ||
-      error.message?.includes('does not exist') ||
+      error.message?.includes('emailVerified') ||
       error.code === 'P2021' ||
       error.code === 'P2009'
     ) {
-      console.warn('[getUserByEmail] Retrying without isAdmin field');
       try {
         const user = await prisma.user.findUnique({
           where: { email },
@@ -107,42 +237,21 @@ export async function getUserByEmail(email) {
             updatedAt: true,
           },
         });
-        // Add isAdmin as false if not in database
-        return user ? { ...user, isAdmin: false } : null;
+        return user ? { ...user, isAdmin: false, emailVerified: true } : null;
       } catch (fallbackError) {
-        console.error('[getUserByEmail] Fallback query failed:', fallbackError.message);
-        // Last resort: try raw SQL
         try {
           const users = await prisma.$queryRaw`
             SELECT id, email, password, name, "createdAt", "updatedAt"
-            FROM users
-            WHERE email = ${email}
-            LIMIT 1
+            FROM users WHERE email = ${email} LIMIT 1
           `;
-          const user = users && users.length > 0 ? users[0] : null;
-          return user ? { ...user, isAdmin: false } : null;
+          const user = users?.[0] ? { ...users[0], isAdmin: false, emailVerified: true } : null;
+          return user;
         } catch (rawError) {
-          console.error('[getUserByEmail] Raw SQL also failed:', rawError.message);
           throw fallbackError;
         }
       }
     }
-    
-    // For other database errors, try raw SQL as fallback
-    console.warn('[getUserByEmail] Attempting raw SQL query as fallback');
-    try {
-      const users = await prisma.$queryRaw`
-        SELECT id, email, password, name, "createdAt", "updatedAt"
-        FROM users
-        WHERE email = ${email}
-        LIMIT 1
-      `;
-      const user = users && users.length > 0 ? users[0] : null;
-      return user ? { ...user, isAdmin: false } : null;
-    } catch (rawError) {
-      console.error('[getUserByEmail] All methods failed');
-      throw error; // Throw the original error
-    }
+    throw error;
   }
 }
 
@@ -156,17 +265,14 @@ export async function getUserById(id) {
         password: true,
         name: true,
         isAdmin: true,
+        emailVerified: true,
         createdAt: true,
         updatedAt: true,
-        // Note: Subscriptions are now domain-based (on Site), not user-based
       },
     });
     return user;
   } catch (error) {
-    console.error('[getUserById] Database error:', error);
-    // If it's a column not found error, try without isAdmin
     if (error.message?.includes('Unknown column') || error.message?.includes('column') || error.code === 'P2021') {
-      console.warn('[getUserById] isAdmin column might not exist, trying without it');
       try {
         const user = await prisma.user.findUnique({
           where: { id },
@@ -179,15 +285,11 @@ export async function getUserById(id) {
             updatedAt: true,
           },
         });
-        // Add isAdmin as false if not in database
-        return user ? { ...user, isAdmin: false } : null;
+        return user ? { ...user, isAdmin: false, emailVerified: true } : null;
       } catch (fallbackError) {
-        console.error('[getUserById] Fallback also failed:', fallbackError);
-        return null; // Return null instead of throwing to prevent session invalidation
+        return null;
       }
     }
-    // Return null instead of throwing to prevent session invalidation
-    console.error('[getUserById] Error fetching user, returning null:', error);
     return null;
   }
 }

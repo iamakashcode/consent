@@ -1,10 +1,11 @@
 import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { verifyPassword, getUserByEmail, getUserById } from '@/lib/auth';
+import { verifyPassword, getUserByEmail, getUserById, consumeVerifyToken } from '@/lib/auth';
 
 export const authOptions = {
   providers: [
     CredentialsProvider({
+      id: 'credentials',
       name: 'Credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
@@ -12,66 +13,43 @@ export const authOptions = {
       },
       async authorize(credentials) {
         try {
-          if (!credentials?.email || !credentials?.password) {
-            console.log('[NextAuth] Missing credentials');
-            return null;
-          }
-
-          console.log('[NextAuth] Attempting login for:', credentials.email);
-          
-          let user;
-          try {
-            user = await getUserByEmail(credentials.email);
-          } catch (dbError) {
-            console.error('[NextAuth] Database error fetching user:', dbError);
-            console.error('[NextAuth] Error details:', {
-              message: dbError.message,
-              code: dbError.code,
-              name: dbError.name,
-            });
-            return null;
-          }
-          
-          if (!user) {
-            console.log('[NextAuth] User not found:', credentials.email);
-            return null;
-          }
-
-          if (!user.password) {
-            console.error('[NextAuth] User has no password field:', credentials.email);
-            console.error('[NextAuth] User object:', { id: user.id, email: user.email, hasPassword: !!user.password });
-            return null;
-          }
-
-          console.log('[NextAuth] Verifying password for:', credentials.email);
-          let isValid;
-          try {
-            isValid = await verifyPassword(credentials.password, user.password);
-          } catch (verifyError) {
-            console.error('[NextAuth] Password verification error:', verifyError);
-            return null;
-          }
-
-          if (!isValid) {
-            console.log('[NextAuth] Invalid password for:', credentials.email);
-            return null;
-          }
-
-          console.log('[NextAuth] Login successful for:', credentials.email);
+          if (!credentials?.email || !credentials?.password) return null;
+          let user = await getUserByEmail(credentials.email);
+          if (!user?.password) return null;
+          const isValid = await verifyPassword(credentials.password, user.password);
+          if (!isValid) return null;
+          // Block unverified users (must verify email via OTP first)
+          if (user.emailVerified === false) return null;
           return {
             id: user.id,
             email: user.email,
             name: user.name,
-            plan: null, // Plans are now domain-based, not user-based
+            plan: null,
             isAdmin: user.isAdmin || false,
           };
         } catch (error) {
           console.error('[NextAuth] Authorize error:', error);
-          console.error('[NextAuth] Error stack:', error.stack);
-          console.error('[NextAuth] Error name:', error.name);
-          console.error('[NextAuth] Error code:', error.code);
           return null;
         }
+      },
+    }),
+    CredentialsProvider({
+      id: 'verify-token',
+      name: 'VerifyToken',
+      credentials: {
+        token: { label: 'Token', type: 'text' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.token) return null;
+        const user = await consumeVerifyToken(credentials.token);
+        if (!user) return null;
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          plan: null,
+          isAdmin: user.isAdmin || false,
+        };
       },
     }),
   ],

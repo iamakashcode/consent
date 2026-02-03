@@ -70,7 +70,30 @@ function DashboardContent() {
   const [copiedId, setCopiedId] = useState(null);
   const [uploadingId, setUploadingId] = useState(null);
   const [uploadMessageBySite, setUploadMessageBySite] = useState({});
+  const [startingTrialSiteId, setStartingTrialSiteId] = useState(null);
   const hasRefreshed = useRef(false);
+
+  const handleStartFreeTrial = async (site) => {
+    setStartingTrialSiteId(site.siteId);
+    try {
+      const res = await fetch("/api/auth/start-free-trial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: site.domain }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchSites();
+        await fetchSubscriptions();
+      } else {
+        alert(data.error || "Failed to start trial");
+      }
+    } catch (err) {
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setStartingTrialSiteId(null);
+    }
+  };
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -143,7 +166,7 @@ function DashboardContent() {
         }
         return { siteId: site.siteId, stats: null };
       });
-      
+
       const results = await Promise.all(statsPromises);
       const statsMap = {};
       results.forEach(({ siteId, stats }) => {
@@ -388,8 +411,8 @@ function DashboardContent() {
         )}
       </div>
 
-      {/* Domains List */}
-      <div className="bg-white rounded-xl border border-gray-200">
+      {/* Domains List - Table style with trial status */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Your Domains</h2>
           <button
@@ -409,130 +432,130 @@ function DashboardContent() {
         </div>
 
         {sites.length > 0 ? (
-          <div className="divide-y divide-gray-100">
-            {sites.map((site) => {
-              const subData = subscriptions[site.siteId];
-              const isActive = subData?.isActive;
-              const subscription = subData?.subscription;
-              const isPending = subscription?.status?.toLowerCase() === "pending";
-              const isTrial = subscription?.status?.toLowerCase() === "trial" || subData?.userTrialActive;
-              const trialDaysLeft = subData?.userTrialDaysLeft || subData?.trialDaysLeft;
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50/80 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3">Site URL</th>
+                  <th className="px-6 py-3">Site name</th>
+                  <th className="px-6 py-3">Created date</th>
+                  <th className="px-6 py-3">Plan</th>
+                  <th className="px-6 py-3">Next renewal</th>
+                  <th className="px-6 py-3 text-right">Status / Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sites.map((site) => {
+                  const subData = subscriptions[site.siteId];
+                  const isActive = subData?.isActive;
+                  const subscription = subData?.subscription;
+                  const isPending = subscription?.status?.toLowerCase() === "pending";
+                  const isTrial = subscription?.status?.toLowerCase() === "trial" || subData?.userTrialActive;
+                  const trialDaysLeft = subData?.userTrialDaysLeft || subData?.trialDaysLeft;
+                  const trialNotStarted = !subData?.subscription && !subData?.userTrialActive;
+                  const siteName = site.domain.replace(/^www\./, "").split(".")[0];
+                  const createdDate = site.createdAt ? new Date(site.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—";
+                  const nextRenewal = subscription?.currentPeriodEnd && isActive
+                    ? new Date(subscription.currentPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                    : "—";
 
-              return (
-                <div key={site.id} className="px-6 py-4 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      {/* Status Icon */}
-                      {isActive ? (
-                        <CheckCircleIcon />
-                      ) : isPending ? (
-                        <ClockIcon />
-                      ) : (
-                        <XCircleIcon />
-                      )}
-
-                      <div>
-                        <div className="flex items-center gap-3">
-                          <h3 className="font-medium text-gray-900">{site.domain}</h3>
-                          {site.isVerified && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">
-                              Connected
+                  return (
+                    <tr key={site.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="font-medium text-gray-900">{site.domain}</span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-600 capitalize">{siteName}</td>
+                      <td className="px-6 py-4 text-gray-600">{createdDate}</td>
+                      <td className="px-6 py-4">
+                        {isTrial || subData?.userTrialActive ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            Basic (Trial)
+                          </span>
+                        ) : isActive && subscription?.plan ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                            {subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">{nextRenewal}</td>
+                      <td className="px-6 py-4 text-right">
+                        {trialNotStarted ? (
+                          <div className="flex items-center justify-end gap-2 flex-wrap">
+                            <span className="text-sm text-red-600 font-medium flex items-center gap-1">
+                              Trial activation failed
+                              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-600 text-xs" title="Start free trial to activate">?</span>
                             </span>
-                          )}
-                          {(isTrial || subData?.userTrialActive) && (trialDaysLeft || subData?.userTrialDaysLeft) && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
-                              {subData?.userTrialActive 
-                                ? `User Trial: ${subData.userTrialDaysLeft || 0} days left`
-                                : `Trial: ${trialDaysLeft || 0} days left`}
-                            </span>
-                          )}
-                          {isActive && !isTrial && subscription?.plan && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-700 rounded">
-                              {subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)}
-                            </span>
-                          )}
-                          {!isActive && !subData?.userTrialActive && !isPending && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">
-                              No Plan
-                            </span>
-                          )}
-                          {isPending && !subData?.userTrialActive && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-700 rounded">
-                              Payment Required
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-500 mt-0.5">
-                          {Array.isArray(site.trackers) ? site.trackers.length : 0} trackers detected
-                          {siteStats[site.siteId] ? (
-                            <>
-                              {" • "}
-                              <span className="font-medium text-indigo-600">{siteStats[site.siteId].totalUniquePages || 0} pages</span>
-                              {" • "}
-                              <span className="font-medium text-indigo-600">{siteStats[site.siteId].totalViews?.toLocaleString() || 0} views</span>
-                            </>
-                          ) : (
-                            <span className="text-gray-400"> • Loading stats...</span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {uploadMessageBySite[site.siteId] && (
-                        <span className={`text-sm ${uploadMessageBySite[site.siteId].type === "success" ? "text-green-600" : "text-red-600"}`}>
-                          {uploadMessageBySite[site.siteId].text}
-                        </span>
-                      )}
-                      {isActive ? (
-                        <>
-                          <button
-                            onClick={() => copyScript(site)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                              copiedId === site.id
-                                ? "bg-green-100 text-green-700"
-                                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                            }`}
-                          >
-                            <CopyIcon />
-                            {copiedId === site.id ? "Copied!" : "Copy Script"}
-                          </button>
-                          <button
-                            onClick={() => uploadToCdn(site)}
-                            disabled={uploadingId === site.id}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 disabled:opacity-50 transition-colors"
-                            title="Upload script to R2/CDN so the install link works"
-                          >
-                            {uploadingId === site.id ? "Uploading…" : "Upload to CDN"}
-                          </button>
-                          <Link
-                            href={`/banner?siteId=${site.siteId}`}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                          >
-                            Manage
-                            <ArrowRightIcon />
-                          </Link>
-                        </>
-                      ) : (
-                        <Link
-                          href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}
-                          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
-                        >
-                          {isPending ? "Complete Payment" : "Select Plan"}
-                        </Link>
-                      )}
-                      <button
-                        onClick={() => deleteSite(site.id)}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete domain"
-                      >
-                        <TrashIcon />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                            <button
+                              onClick={() => handleStartFreeTrial(site)}
+                              disabled={startingTrialSiteId === site.siteId}
+                              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {startingTrialSiteId === site.siteId ? "Starting…" : "Start Free trial"}
+                            </button>
+                          </div>
+                        ) : isActive ? (
+                          <div className="flex items-center justify-end gap-2 flex-wrap">
+                            {uploadMessageBySite[site.siteId] && (
+                              <span className={`text-sm ${uploadMessageBySite[site.siteId].type === "success" ? "text-green-600" : "text-red-600"}`}>
+                                {uploadMessageBySite[site.siteId].text}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => copyScript(site)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${copiedId === site.id ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                }`}
+                            >
+                              <CopyIcon />
+                              {copiedId === site.id ? "Copied!" : "Copy Script"}
+                            </button>
+                            <button
+                              onClick={() => uploadToCdn(site)}
+                              disabled={uploadingId === site.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 disabled:opacity-50 transition-colors"
+                              title="Upload script to CDN"
+                            >
+                              {uploadingId === site.id ? "Uploading…" : "Upload to CDN"}
+                            </button>
+                            <Link
+                              href={`/banner?siteId=${site.siteId}`}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                            >
+                              Manage
+                              <ArrowRightIcon />
+                            </Link>
+                            <button
+                              onClick={() => deleteSite(site.id)}
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete domain"
+                            >
+                              <TrashIcon />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-2">
+                            <Link
+                              href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}
+                              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+                            >
+                              {isPending ? "Complete Payment" : "Select Plan"}
+                            </Link>
+                            <button
+                              onClick={() => deleteSite(site.id)}
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete domain"
+                            >
+                              <TrashIcon />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="px-6 py-12 text-center">
@@ -542,7 +565,13 @@ function DashboardContent() {
               </svg>
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-1">No domains yet</h3>
-            <p className="text-gray-500 text-sm">Add your first domain above to get started</p>
+            <p className="text-gray-500 text-sm mb-4">Add your first domain above to get started</p>
+            <Link
+              href="/start-trial"
+              className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+            >
+              Start 14-day free trial with your signup domain →
+            </Link>
           </div>
         )}
       </div>
