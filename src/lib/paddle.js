@@ -23,6 +23,7 @@ if (typeof console !== "undefined") {
   const envType = isUsingLive ? "LIVE" : "SANDBOX (Testing)"
 }
 
+// Trial: only first domain gets 14-day trial (see create-order: trialDays = 0 for upgrade + second domain)
 // Plan pricing (in USD cents)
 export const PLAN_PRICING = {
   basic: 500,   // $5 = 500 cents
@@ -319,13 +320,12 @@ export async function getOrCreatePaddleCustomer(email, name) {
  * Pass plan and billingInterval so webhook can update subscription only after payment success.
  * Docs: https://developer.paddle.com/api-reference/overview
  */
-export async function createPaddleTransaction(priceId, customerId, siteId, domain, plan = null, billingInterval = null) {
+export async function createPaddleTransaction(priceId, customerId, siteId, domain, plan = null, billingInterval = null, isUpgrade = false) {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-
     const customData = { siteId, domain };
     if (plan) customData.plan = plan;
     if (billingInterval) customData.billingInterval = billingInterval;
+    if (isUpgrade) customData.upgrade = true;
 
     // Create transaction with recurring price - Paddle will create subscription on payment
     const transaction = await paddleRequest("POST", "/transactions", {

@@ -60,13 +60,14 @@ export async function POST(req) {
       );
     }
 
-    // Check if user already has this domain as PendingDomain (pending payment) - case-insensitive
-    const existingPending = await prisma.pendingDomain.findFirst({
-      where: {
-        userId: userId,
-        domain: { equals: cleanDomain, mode: "insensitive" },
-      },
+    // Check if user already has this exact domain as PendingDomain (same domain = block; different domain = allow)
+    const userPendingList = await prisma.pendingDomain.findMany({
+      where: { userId: userId },
+      select: { domain: true },
     });
+    const existingPending = userPendingList.find(
+      (p) => p.domain && p.domain.trim().toLowerCase() === cleanDomain
+    );
     if (existingPending) {
       return Response.json(
         { error: "This domain is already added and is pending payment. Complete payment or try again later." },
@@ -197,9 +198,13 @@ export async function POST(req) {
             site = existingSite;
             siteId = existingSite.siteId;
           } else {
-            const existingPending = await prisma.pendingDomain.findFirst({
-              where: { userId: userId, domain: { equals: cleanDomain, mode: "insensitive" } },
+            const pendingList = await prisma.pendingDomain.findMany({
+              where: { userId: userId },
+              select: { domain: true, siteId: true, trackers: true, verificationToken: true },
             });
+            const existingPending = pendingList.find(
+              (p) => p.domain && p.domain.trim().toLowerCase() === cleanDomain
+            );
             if (existingPending) {
               site = {
                 id: null,

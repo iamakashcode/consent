@@ -1,6 +1,6 @@
 -- Add phone, countryCode, websiteUrl, email verification and reset token fields to users
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "phone" TEXT;
-ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "countryCode" TEXT DEFAULT '+91';
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "countryCode" TEXT DEFAULT '+49';
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "websiteUrl" TEXT;
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "emailVerified" BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "otp" TEXT;

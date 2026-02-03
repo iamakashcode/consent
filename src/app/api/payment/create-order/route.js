@@ -161,12 +161,13 @@ export async function POST(req) {
 
     const amount = PLAN_PRICING[plan];
 
-    // Free trial only for user's first domain; second+ domain = no trial (Paddle + backend)
+    // Free trial only for user's first domain; upgrade + second domain = no trial (Paddle)
     const userSitesCount = await prisma.site.count({ where: { userId: session.user.id } });
+    const isUpgradeFlow = Boolean(upgrade);
     const isFirstDomain = pendingDomain
       ? userSitesCount === 0
       : userSitesCount === 1;
-    const trialDays = isFirstDomain ? 14 : 0;
+    const trialDays = isUpgradeFlow ? 0 : (isFirstDomain ? 14 : 0);
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
@@ -283,7 +284,8 @@ export async function POST(req) {
         site.id,
         site.domain,
         plan,
-        billingInterval
+        billingInterval,
+        isUpgradeFlow
       );
     } catch (error) {
       console.error("[Payment] Failed to create Paddle transaction:", error);

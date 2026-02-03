@@ -36,7 +36,7 @@ export async function createUser(email, password, name, { phone, countryCode, we
         password: hashedPassword,
         name,
         phone: phone || null,
-        countryCode: countryCode || '+91',
+        countryCode: countryCode || '+49',
         websiteUrl: websiteUrl || null,
         emailVerified: false,
         otp,

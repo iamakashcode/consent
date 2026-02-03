@@ -1,4 +1,7 @@
-
+/**
+ * Trial is only applied to the user's first domain (see subscription.js isDomainActive, getUserSubscriptions).
+ * Second domain and plan upgrade use no trial (Paddle price with trialDays: 0 in create-order).
+ */
 export function getRemainingTrialDays(trialEndAt) {
   if (!trialEndAt) return null;
 

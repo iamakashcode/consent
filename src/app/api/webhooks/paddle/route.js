@@ -341,24 +341,23 @@ async function handleTransactionCompleted(event) {
     return;
   }
 
-  // Start user trial if not already started (14 days)
-  await startUserTrial(site.userId);
+  const isUpgrade = customData.upgrade === true || customData.upgrade === "true";
+  if (!isUpgrade) {
+    await startUserTrial(site.userId);
+  }
 
-  // Plan/interval only updated after payment success (from custom_data we sent at checkout)
   const planFromPayment = customData.plan || dbSubscription.plan;
   const billingIntervalFromPayment = customData.billingInterval || customData.billing_interval || dbSubscription.billingInterval;
 
   const currentStatus = dbSubscription.status?.toLowerCase();
   let newStatus = "active";
-  if (currentStatus === "trial" || currentStatus === "pending") {
+  if (!isUpgrade && (currentStatus === "trial" || currentStatus === "pending")) {
     const user = await prisma.user.findUnique({
       where: { id: site.userId },
       select: { trialEndAt: true },
     });
     if (user?.trialEndAt && new Date() < new Date(user.trialEndAt)) {
       newStatus = "trial";
-    } else {
-      newStatus = "active";
     }
   }
 
