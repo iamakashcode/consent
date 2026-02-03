@@ -143,11 +143,11 @@ function BannerContent() {
           fetch("/api/sites"),
           fetch("/api/subscription"),
         ]);
-        
+
         if (sitesRes.ok) {
           const sitesData = await sitesRes.json();
           let activeSites = [];
-          
+
           // Get subscription data to filter only active domains
           if (subsRes.ok) {
             const subsData = await subsRes.json();
@@ -158,7 +158,7 @@ function BannerContent() {
                 userTrialActive: subsData.userTrialActive || false,
               };
             });
-            
+
             // Filter sites that have active subscriptions or user trial
             activeSites = sitesData.filter(site => {
               const subData = subscriptionsMap[site.siteId];
@@ -168,23 +168,23 @@ function BannerContent() {
             // If subscription API fails, show all sites (fallback)
             activeSites = sitesData;
           }
-          
+
           setSites(activeSites);
-          
+
           // Check if siteId is provided in URL
           const siteIdParam = searchParams?.get("siteId");
           let nextSite = null;
-          
+
           if (siteIdParam && activeSites.length > 0) {
             // Find site by siteId
             nextSite = activeSites.find(s => s.siteId === siteIdParam || s.id === siteIdParam);
           }
-          
+
           // Fallback to first active site if no match or no param
           if (!nextSite && activeSites.length > 0) {
             nextSite = activeSites[0];
           }
-          
+
           if (nextSite) {
             setSelectedSite(nextSite);
             selectedSiteRef.current = nextSite;
@@ -414,7 +414,7 @@ function BannerContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ domain: selectedSite.domain }),
       });
-      
+
       if (!crawlRes.ok) {
         setVerifyStatus("Crawl failed");
         return;
@@ -427,7 +427,7 @@ function BannerContent() {
       setVerifyStatus("Checking verification...");
       const res = await fetch(`/api/sites/${selectedSite.siteId}/verify`, { method: "POST" });
       const data = await res.json();
-      
+
       if (res.ok && data.verified) {
         setIsVerified(true);
         setVerifyStatus("Verified ✓");
@@ -583,186 +583,185 @@ function BannerContent() {
 
             {/* Colors - only when customization is allowed */}
             {canCustomizeBanner && (
-            <>
-            {/* Colors */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Colors</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-2">Background</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={config.backgroundColor}
-                      onChange={(e) => setConfig({ ...config, backgroundColor: e.target.value })}
-                      className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200"
-                    />
-                    <input
-                      type="text"
-                      value={config.backgroundColor}
-                      onChange={(e) => setConfig({ ...config, backgroundColor: e.target.value })}
-                      className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
-                    />
+              <>
+                {/* Colors */}
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Colors</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-2">Background</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={config.backgroundColor}
+                          onChange={(e) => setConfig({ ...config, backgroundColor: e.target.value })}
+                          className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200"
+                        />
+                        <input
+                          type="text"
+                          value={config.backgroundColor}
+                          onChange={(e) => setConfig({ ...config, backgroundColor: e.target.value })}
+                          className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-2">Text</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={config.textColor}
+                          onChange={(e) => setConfig({ ...config, textColor: e.target.value })}
+                          className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200"
+                        />
+                        <input
+                          type="text"
+                          value={config.textColor}
+                          onChange={(e) => setConfig({ ...config, textColor: e.target.value })}
+                          className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-2">Button</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={config.buttonColor}
+                          onChange={(e) => setConfig({ ...config, buttonColor: e.target.value })}
+                          className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200"
+                        />
+                        <input
+                          type="text"
+                          value={config.buttonColor}
+                          onChange={(e) => setConfig({ ...config, buttonColor: e.target.value })}
+                          className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-2">Button Text</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={config.buttonTextColor}
+                          onChange={(e) => setConfig({ ...config, buttonTextColor: e.target.value })}
+                          className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200"
+                        />
+                        <input
+                          type="text"
+                          value={config.buttonTextColor}
+                          onChange={(e) => setConfig({ ...config, buttonTextColor: e.target.value })}
+                          className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-2">Text</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={config.textColor}
-                      onChange={(e) => setConfig({ ...config, textColor: e.target.value })}
-                      className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200"
-                    />
-                    <input
-                      type="text"
-                      value={config.textColor}
-                      onChange={(e) => setConfig({ ...config, textColor: e.target.value })}
-                      className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-2">Button</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={config.buttonColor}
-                      onChange={(e) => setConfig({ ...config, buttonColor: e.target.value })}
-                      className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200"
-                    />
-                    <input
-                      type="text"
-                      value={config.buttonColor}
-                      onChange={(e) => setConfig({ ...config, buttonColor: e.target.value })}
-                      className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-2">Button Text</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={config.buttonTextColor}
-                      onChange={(e) => setConfig({ ...config, buttonTextColor: e.target.value })}
-                      className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200"
-                    />
-                    <input
-                      type="text"
-                      value={config.buttonTextColor}
-                      onChange={(e) => setConfig({ ...config, buttonTextColor: e.target.value })}
-                      className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            {/* Position */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Position</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {POSITIONS.map((pos) => (
-                  <button
-                    key={pos.id}
-                    onClick={() => setConfig({ ...config, position: pos.id })}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-lg border transition-all ${
-                      config.position === pos.id
-                        ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    <span>{pos.icon}</span>
-                    <span className="text-sm font-medium">{pos.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Text */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Text</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-2">Title</label>
-                  <input
-                    type="text"
-                    value={config.title}
-                    onChange={(e) => setConfig({ ...config, title: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-2">Description</label>
-                  <textarea
-                    value={config.description}
-                    onChange={(e) => setConfig({ ...config, description: e.target.value })}
-                    rows={3}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Buttons */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Buttons</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-2">Accept Button Text</label>
-                  <input
-                    type="text"
-                    value={config.acceptText}
-                    onChange={(e) => setConfig({ ...config, acceptText: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 mr-4">
-                    <label className="block text-xs font-medium text-gray-500 mb-2">Reject Button Text</label>
-                    <input
-                      type="text"
-                      value={config.rejectText}
-                      onChange={(e) => setConfig({ ...config, rejectText: e.target.value })}
-                      disabled={!config.showRejectButton}
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                    />
+                {/* Position */}
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Position</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {POSITIONS.map((pos) => (
+                      <button
+                        key={pos.id}
+                        onClick={() => setConfig({ ...config, position: pos.id })}
+                        className={`flex items-center gap-2 px-4 py-3 rounded-lg border transition-all ${config.position === pos.id
+                            ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                            : "border-gray-200 hover:border-gray-300"
+                          }`}
+                      >
+                        <span>{pos.icon}</span>
+                        <span className="text-sm font-medium">{pos.label}</span>
+                      </button>
+                    ))}
                   </div>
-                  <label className="flex items-center gap-2 cursor-pointer mt-5">
-                    <input
-                      type="checkbox"
-                      checked={config.showRejectButton}
-                      onChange={(e) => setConfig({ ...config, showRejectButton: e.target.checked })}
-                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-600">Show</span>
-                  </label>
                 </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 mr-4">
-                    <label className="block text-xs font-medium text-gray-500 mb-2">Customize Button Text</label>
-                    <input
-                      type="text"
-                      value={config.customizeText}
-                      onChange={(e) => setConfig({ ...config, customizeText: e.target.value })}
-                      disabled={!config.showCustomizeButton}
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                    />
+
+                {/* Text */}
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Text</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-2">Title</label>
+                      <input
+                        type="text"
+                        value={config.title}
+                        onChange={(e) => setConfig({ ...config, title: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-2">Description</label>
+                      <textarea
+                        value={config.description}
+                        onChange={(e) => setConfig({ ...config, description: e.target.value })}
+                        rows={3}
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                      />
+                    </div>
                   </div>
-                  <label className="flex items-center gap-2 cursor-pointer mt-5">
-                    <input
-                      type="checkbox"
-                      checked={config.showCustomizeButton}
-                      onChange={(e) => setConfig({ ...config, showCustomizeButton: e.target.checked })}
-                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-600">Show</span>
-                  </label>
                 </div>
-              </div>
-            </div>
-            </>
+
+                {/* Buttons */}
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Buttons</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-2">Accept Button Text</label>
+                      <input
+                        type="text"
+                        value={config.acceptText}
+                        onChange={(e) => setConfig({ ...config, acceptText: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 mr-4">
+                        <label className="block text-xs font-medium text-gray-500 mb-2">Reject Button Text</label>
+                        <input
+                          type="text"
+                          value={config.rejectText}
+                          onChange={(e) => setConfig({ ...config, rejectText: e.target.value })}
+                          disabled={!config.showRejectButton}
+                          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer mt-5">
+                        <input
+                          type="checkbox"
+                          checked={config.showRejectButton}
+                          onChange={(e) => setConfig({ ...config, showRejectButton: e.target.checked })}
+                          className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-gray-600">Show</span>
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 mr-4">
+                        <label className="block text-xs font-medium text-gray-500 mb-2">Customize Button Text</label>
+                        <input
+                          type="text"
+                          value={config.customizeText}
+                          onChange={(e) => setConfig({ ...config, customizeText: e.target.value })}
+                          disabled={!config.showCustomizeButton}
+                          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer mt-5">
+                        <input
+                          type="checkbox"
+                          checked={config.showCustomizeButton}
+                          onChange={(e) => setConfig({ ...config, showCustomizeButton: e.target.checked })}
+                          className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-gray-600">Show</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
           </div>
 
@@ -830,15 +829,14 @@ function BannerContent() {
 
                     {/* Banner Preview */}
                     <div
-                      className={`absolute left-0 right-0 p-4 ${
-                        config.position === "top"
+                      className={`absolute left-0 right-0 p-4 ${config.position === "top"
                           ? "top-0"
                           : config.position === "bottom-left"
-                          ? "bottom-0 left-0 right-auto max-w-sm"
-                          : config.position === "bottom-right"
-                          ? "bottom-0 right-0 left-auto max-w-sm"
-                          : "bottom-0"
-                      }`}
+                            ? "bottom-0 left-0 right-auto max-w-sm"
+                            : config.position === "bottom-right"
+                              ? "bottom-0 right-0 left-auto max-w-sm"
+                              : "bottom-0"
+                        }`}
                     >
                       <div
                         className="rounded-lg p-4 shadow-lg"
@@ -921,21 +919,19 @@ function BannerContent() {
               <div className="flex gap-4 border-b border-gray-200">
                 <button
                   onClick={() => setActiveInstallTab("manual")}
-                  className={`pb-3 text-sm font-medium ${
-                    activeInstallTab === "manual"
+                  className={`pb-3 text-sm font-medium ${activeInstallTab === "manual"
                       ? "text-indigo-600 border-b-2 border-indigo-600"
                       : "text-gray-500"
-                  }`}
+                    }`}
                 >
                   Install manually on website
                 </button>
                 <button
                   onClick={() => setActiveInstallTab("gtm")}
-                  className={`pb-3 text-sm font-medium ${
-                    activeInstallTab === "gtm"
+                  className={`pb-3 text-sm font-medium ${activeInstallTab === "gtm"
                       ? "text-indigo-600 border-b-2 border-indigo-600"
                       : "text-gray-500"
-                  }`}
+                    }`}
                 >
                   Install with Google Tag Manager
                 </button>
@@ -950,7 +946,7 @@ function BannerContent() {
                   </p>
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                     <pre className="text-xs text-gray-800 whitespace-pre-wrap">
-{getInstallCode()}
+                      {getInstallCode()}
                     </pre>
                   </div>
                   <div className="mt-3 flex items-center gap-3">
@@ -1011,9 +1007,11 @@ export default function BannerPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
-        </div>
+        <DashboardLayout>
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+          </div>
+        </DashboardLayout>
       }
     >
       <BannerContent />
