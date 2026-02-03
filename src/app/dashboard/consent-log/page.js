@@ -15,7 +15,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { RefreshCw, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function ConsentLogContent() {
