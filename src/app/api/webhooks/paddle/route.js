@@ -344,12 +344,13 @@ async function handleTransactionCompleted(event) {
   // Start user trial if not already started (14 days)
   await startUserTrial(site.userId);
 
-  // Update subscription with subscription ID and transaction info
-  // If subscription status is already trial, keep it; otherwise set to active
+  // Plan/interval only updated after payment success (from custom_data we sent at checkout)
+  const planFromPayment = customData.plan || dbSubscription.plan;
+  const billingIntervalFromPayment = customData.billingInterval || customData.billing_interval || dbSubscription.billingInterval;
+
   const currentStatus = dbSubscription.status?.toLowerCase();
   let newStatus = "active";
   if (currentStatus === "trial" || currentStatus === "pending") {
-    // Check if user trial is active
     const user = await prisma.user.findUnique({
       where: { id: site.userId },
       select: { trialEndAt: true },
@@ -364,6 +365,8 @@ async function handleTransactionCompleted(event) {
   await prisma.subscription.update({
     where: { id: dbSubscription.id },
     data: {
+      plan: planFromPayment,
+      billingInterval: billingIntervalFromPayment,
       paddleSubscriptionId: subscriptionId || dbSubscription.paddleSubscriptionId,
       paddleTransactionId: transaction.id,
       status: newStatus,
@@ -373,10 +376,10 @@ async function handleTransactionCompleted(event) {
       currentPeriodEnd: transaction.billing_period?.ends_at
         ? new Date(transaction.billing_period.ends_at)
         : (() => {
-            const end = new Date();
-            end.setMonth(end.getMonth() + 1);
-            return end;
-          })(),
+          const end = new Date();
+          end.setMonth(end.getMonth() + 1);
+          return end;
+        })(),
       updatedAt: new Date(),
     },
   });

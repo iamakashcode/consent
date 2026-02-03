@@ -315,15 +315,19 @@ export async function getOrCreatePaddleCustomer(email, name) {
 
 /**
  * Create Paddle transaction with checkout URL for subscription
- * Note: Paddle creates subscriptions automatically when customer pays via checkout
+ * Note: Paddle creates subscriptions automatically when customer pays via checkout.
+ * Pass plan and billingInterval so webhook can update subscription only after payment success.
  * Docs: https://developer.paddle.com/api-reference/overview
  */
-export async function createPaddleTransaction(priceId, customerId, siteId, domain) {
+export async function createPaddleTransaction(priceId, customerId, siteId, domain, plan = null, billingInterval = null) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
+    const customData = { siteId, domain };
+    if (plan) customData.plan = plan;
+    if (billingInterval) customData.billingInterval = billingInterval;
+
     // Create transaction with recurring price - Paddle will create subscription on payment
-    // Note: Paddle returns checkout.url in the response which is the actual checkout URL
     const transaction = await paddleRequest("POST", "/transactions", {
       items: [
         {
@@ -334,10 +338,7 @@ export async function createPaddleTransaction(priceId, customerId, siteId, domai
       customer_id: customerId,
       collection_mode: "automatic",
       currency_code: "USD",
-      custom_data: {
-        siteId,
-        domain,
-      },
+      custom_data: customData,
       // Optionally set checkout URL - if null, Paddle uses default
       // If we want hosted checkout, we can pass null or omit this
       // If we want embedded checkout, we pass our domain URL

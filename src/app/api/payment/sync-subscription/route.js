@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
-import { fetchPaddleSubscription } from "@/lib/paddle";
+import { fetchPaddleSubscription, fetchPaddleTransaction } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
 import { startUserTrial } from "@/lib/subscription";
 
@@ -25,7 +25,7 @@ export async function POST(req) {
       );
     }
 
-    // Find subscription by Paddle subscription ID or siteId
+    // Find subscription by siteId, Paddle subscription ID, or Paddle transaction ID (return URL may have any of these)
     let dbSubscription = null;
     if (siteId) {
       const site = await prisma.site.findFirst({
@@ -43,7 +43,12 @@ export async function POST(req) {
 
     if (!dbSubscription) {
       dbSubscription = await prisma.subscription.findFirst({
-        where: { paddleSubscriptionId: subscriptionId },
+        where: {
+          OR: [
+            { paddleSubscriptionId: subscriptionId },
+            { paddleTransactionId: subscriptionId },
+          ],
+        },
         include: { site: true },
       });
     }
@@ -63,13 +68,33 @@ export async function POST(req) {
       );
     }
 
-    // Fetch current status from Paddle
+    // Resolve Paddle subscription: we may have been given a transaction ID (return URL)
+    let paddleSubId = dbSubscription.paddleSubscriptionId;
+    if (!paddleSubId) {
+      try {
+        const txn = await fetchPaddleTransaction(subscriptionId);
+        paddleSubId = txn.subscription_id || txn.subscriptionId;
+        if (paddleSubId && !dbSubscription.paddleSubscriptionId) {
+          await prisma.subscription.update({
+            where: { id: dbSubscription.id },
+            data: { paddleSubscriptionId: paddleSubId, updatedAt: new Date() },
+          });
+          dbSubscription = { ...dbSubscription, paddleSubscriptionId: paddleSubId };
+        }
+      } catch (e) {
+        console.warn("[Sync] Could not resolve subscription from transaction:", e.message);
+      }
+    }
+    if (!paddleSubId) {
+      paddleSubId = subscriptionId;
+    }
+
     let paddleStatus;
     let paddleSub;
     try {
-      paddleSub = await fetchPaddleSubscription(subscriptionId);
+      paddleSub = await fetchPaddleSubscription(paddleSubId);
       paddleStatus = paddleSub.status;
-      console.log(`[Sync] Paddle subscription ${subscriptionId} status: ${paddleStatus}`);
+      console.log(`[Sync] Paddle subscription ${paddleSubId} status: ${paddleStatus}`);
     } catch (error) {
       console.error("[Sync] Error fetching from Paddle:", error);
       return Response.json(

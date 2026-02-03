@@ -44,7 +44,7 @@ export async function POST(req) {
       );
     }
 
-    // Check if site already exists for this user
+    // Check if site already exists for this user - do not allow duplicate
     let existingSite = await prisma.site.findFirst({
       where: {
         userId: userId,
@@ -53,25 +53,38 @@ export async function POST(req) {
       include: { subscription: true },
     });
 
+    if (existingSite) {
+      return Response.json(
+        { error: "This domain is already in your account. You cannot add the same domain again." },
+        { status: 400 }
+      );
+    }
+
+    // Check if user already has this domain as PendingDomain (pending payment)
+    const existingPending = await prisma.pendingDomain.findFirst({
+      where: { userId: userId, domain: cleanDomain },
+    });
+    if (existingPending) {
+      return Response.json(
+        { error: "This domain is already added and is pending payment. Complete payment or try again later." },
+        { status: 400 }
+      );
+    }
+
     let site;
     let siteId;
     let isNewSite = false;
-
-    if (existingSite) {
-      // Site already exists
-      site = existingSite;
-      siteId = existingSite.siteId;
-    } else {
+    {
       // Crawl the website for trackers
       let html;
       let trackers = [];
-      
+
       try {
         // Try HTTPS first
         let url = `https://${cleanDomain}`;
         let response;
         let lastError;
-        
+
         try {
           response = await fetch(url, {
             headers: {
@@ -93,7 +106,7 @@ export async function POST(req) {
         } catch (httpsError) {
           console.log(`[Crawl] HTTPS failed for ${cleanDomain}, trying HTTP:`, httpsError.message);
           lastError = httpsError;
-          
+
           // Try HTTP as fallback
           try {
             url = `http://${cleanDomain}`;
@@ -219,11 +232,11 @@ export async function POST(req) {
     const isSubscriptionActive = subscriptionStatus === "active" || subscriptionStatus === "trial";
 
     // Determine if user needs to select a plan
-    const needsPlan = !hasSubscription || 
-                      subscriptionStatus === "pending" || 
-                      subscriptionStatus === "cancelled" ||
-                      subscriptionStatus === "expired" ||
-                      subscriptionStatus === "payment_failed";
+    const needsPlan = !hasSubscription ||
+      subscriptionStatus === "pending" ||
+      subscriptionStatus === "cancelled" ||
+      subscriptionStatus === "expired" ||
+      subscriptionStatus === "payment_failed";
 
     // Build success message
     let message;

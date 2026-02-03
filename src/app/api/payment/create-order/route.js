@@ -269,13 +269,16 @@ export async function POST(req) {
     }
 
     // Existing site: create Paddle transaction and Subscription (pending until payment)
+    // Pass plan/billingInterval in custom_data so webhook updates subscription only after payment success
     let paddleTransaction;
     try {
       paddleTransaction = await createPaddleTransaction(
         paddlePrice.id,
         paddleCustomer.id,
         site.id,
-        site.domain
+        site.domain,
+        plan,
+        billingInterval
       );
     } catch (error) {
       console.error("[Payment] Failed to create Paddle transaction:", error);
@@ -331,25 +334,21 @@ export async function POST(req) {
     const transactionId = paddleTransaction.id;
 
     // Create or update subscription in database (pending until payment)
-    // Note: paddleSubscriptionId will be set via webhook after payment
+    // Do NOT set plan/billingInterval here for existing subscription - only webhook sets them after payment success
     try {
       if (site.subscription) {
-        // Update existing subscription
         await prisma.subscription.update({
           where: { siteId: site.id },
           data: {
-            plan: plan,
-            billingInterval: billingInterval,
             status: "pending",
             paddleProductId: paddleProduct.id,
             paddlePriceId: paddlePrice.id,
             paddleCustomerId: paddleCustomer.id,
-            paddleTransactionId: transactionId, // Store transaction ID temporarily
+            paddleTransactionId: transactionId,
             updatedAt: new Date(),
           },
         });
       } else {
-        // Create new subscription
         await prisma.subscription.create({
           data: {
             siteId: site.id,
@@ -359,7 +358,7 @@ export async function POST(req) {
             paddleProductId: paddleProduct.id,
             paddlePriceId: paddlePrice.id,
             paddleCustomerId: paddleCustomer.id,
-            paddleTransactionId: transactionId, // Store transaction ID temporarily
+            paddleTransactionId: transactionId,
           },
         });
       }
