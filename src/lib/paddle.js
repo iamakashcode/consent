@@ -20,12 +20,7 @@ const PADDLE_BASE_URL = process.env.PADDLE_BASE_URL ||
 // Log which environment is being used (only once on module load)
 if (typeof console !== "undefined") {
   const isUsingLive = PADDLE_BASE_URL === LIVE_API_URL;
-  const envType = isUsingLive ? "LIVE" : "SANDBOX (Testing)";
-  console.log(`[Paddle] Environment: ${envType}`);
-  console.log(`[Paddle] API URL: ${PADDLE_BASE_URL}`);
-  console.log(`[Paddle] NODE_ENV: ${process.env.NODE_ENV || "undefined"}`);
-  console.log(`[Paddle] PADDLE_BASE_URL: ${process.env.PADDLE_BASE_URL || "auto-detected"}`);
-  console.log(`[Paddle] PADDLE_USE_LIVE: ${process.env.PADDLE_USE_LIVE || "false"}`);
+  const envType = isUsingLive ? "LIVE" : "SANDBOX (Testing)"
 }
 
 // Plan pricing (in USD cents)
@@ -237,26 +232,28 @@ export async function getOrCreatePaddlePrice(productId, planName, amount, billin
   try {
     const interval = billingInterval === "yearly" ? "year" : "month";
     const frequency = billingInterval === "yearly" ? 1 : 1;
-    
+
     // Calculate yearly amount (10 months price for yearly - 2 months discount)
-    const finalAmount = billingInterval === "yearly" 
+    const finalAmount = billingInterval === "yearly"
       ? Math.round(amount * 10) // 10 months price for yearly
       : amount;
 
-    // Check if price exists for this interval
+    // We only use prices with 14-day trial (so checkout shows "14 days free", not 7)
+    const trialDays = PLAN_TRIAL_DAYS[planName] || 14;
+
+    // Check if price exists for this interval AND has 14-day trial
     const prices = await paddleRequest("GET", `/prices?product_id=${productId}`);
     const existingPrice = prices.data?.find(
-      (p) => p.billing_cycle?.interval === interval && 
-            p.billing_cycle?.frequency === frequency &&
-            p.unit_price?.amount === String(finalAmount)
+      (p) => p.billing_cycle?.interval === interval &&
+        p.billing_cycle?.frequency === frequency &&
+        p.unit_price?.amount === String(finalAmount) &&
+        p.trial_period?.interval === "day" &&
+        Number(p.trial_period?.frequency) === trialDays
     );
 
     if (existingPrice) {
       return existingPrice;
     }
-
-    // Create new price with trial
-    const trialDays = PLAN_TRIAL_DAYS[planName] || 14;
 
     // Ensure amount is a string integer (in cents)
     const amountInCents = String(Math.round(finalAmount));

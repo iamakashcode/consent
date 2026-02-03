@@ -27,7 +27,7 @@ function PaymentReturnContent() {
     const urlSubscriptionId = subscriptionId || transactionId;
     const storedSubscriptionId = typeof window !== 'undefined' ? (sessionStorage.getItem('paddle_subscription_id') || sessionStorage.getItem('paddle_transaction_id')) : null;
     const finalSubscriptionId = urlSubscriptionId || storedSubscriptionId;
-    const fallbackRedirect = redirectParam || "/dashboard/usage?payment=success";
+    const fallbackRedirect = redirectParam || "/dashboard?payment=success";
     const siteIdFromUrl = searchParams.get("siteId");
     const siteIdFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('paddle_site_id') : null;
     const transactionIdFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('paddle_transaction_id') : null;
@@ -59,9 +59,9 @@ function PaymentReturnContent() {
           return;
         }
       }
-      // Fallback: redirect to usage
+      // Fallback: redirect to dashboard
       setTimeout(() => {
-        router.push("/dashboard/usage");
+        router.push("/dashboard");
       }, 2000);
       return;
     }
@@ -94,14 +94,15 @@ function PaymentReturnContent() {
                 sessionStorage.removeItem("paddle_redirect_url");
                 sessionStorage.removeItem("paddle_return_url");
               }
-              const target = `/dashboard/usage?payment=success&siteId=${confirmData.site.siteId}`;
+              // Redirect to main dashboard so "Your Domains" table shows the new domain
+              const target = `/dashboard?payment=success&siteId=${confirmData.site.siteId}`;
               setTimeout(() => {
                 if (window.opener && !window.opener.closed) {
                   try {
                     window.opener.location.href = target;
                     window.close();
                     return;
-                  } catch (e) {}
+                  } catch (e) { }
                 }
                 router.push(target);
               }, 800);
@@ -117,10 +118,10 @@ function PaymentReturnContent() {
         }
 
         setStatusMessage("Syncing subscription status from Paddle...");
-        
+
         // Use the final subscription ID (from URL or sessionStorage)
         const subIdToCheck = finalSubscriptionId;
-        
+
         // First, sync subscription status directly from Paddle
         try {
           const syncResponse = await fetch("/api/payment/sync-subscription", {
@@ -134,16 +135,16 @@ function PaymentReturnContent() {
           if (syncResponse.ok) {
             const syncData = await syncResponse.json();
             console.log("[Return] Synced subscription:", syncData);
-            
+
             // Check if subscription is active or trial (both mean user has access)
             const subscriptionStatus = syncData.subscription?.status?.toLowerCase();
             if (syncData.subscription && (subscriptionStatus === "active" || subscriptionStatus === "trial")) {
               setStatusMessage("✅ Payment successful! Your subscription is now active.");
               setRedirecting(true);
-              
+
               // Refresh session to get updated subscription data
               await update();
-              
+
               // Clear sessionStorage
               if (typeof window !== 'undefined') {
                 sessionStorage.removeItem('paddle_subscription_id');
@@ -152,11 +153,11 @@ function PaymentReturnContent() {
                 sessionStorage.removeItem('paddle_redirect_url');
                 sessionStorage.removeItem('paddle_return_url');
               }
-              
+
               // Redirect and close Paddle tab if possible
               setTimeout(() => {
                 const siteId = syncData.site?.siteId || siteIdFromUrl;
-                const target = siteId ? `/dashboard/usage?payment=success&siteId=${siteId}` : fallbackRedirect;
+                const target = siteId ? `/dashboard?payment=success&siteId=${siteId}` : fallbackRedirect;
                 if (typeof window !== "undefined") {
                   if (window.opener && !window.opener.closed) {
                     try {
@@ -184,7 +185,7 @@ function PaymentReturnContent() {
         const response = await fetch(`/api/subscription?subscriptionId=${subIdToCheck}`);
         if (response.ok) {
           const data = await response.json();
-          
+
           // Check if subscription is active
           const subscription = data.subscriptions?.find(
             (sub) => sub.subscription?.paddleSubscriptionId === subIdToCheck
@@ -194,10 +195,10 @@ function PaymentReturnContent() {
           if (subscription && (subscriptionStatus === "active" || subscriptionStatus === "trial")) {
             setStatusMessage("✅ Payment successful! Your subscription is now active.");
             setRedirecting(true);
-            
+
             // Refresh session to get updated subscription data
             await update();
-            
+
             // Clear sessionStorage
             if (typeof window !== 'undefined') {
               sessionStorage.removeItem('paddle_subscription_id');
@@ -205,11 +206,11 @@ function PaymentReturnContent() {
               sessionStorage.removeItem('paddle_redirect_url');
               sessionStorage.removeItem('paddle_return_url');
             }
-            
+
             // Redirect and close Paddle tab if possible
             setTimeout(() => {
               const siteId = subscription.siteId || data.siteId || siteIdFromUrl;
-              const target = siteId ? `/dashboard/usage?payment=success&siteId=${siteId}` : fallbackRedirect;
+              const target = siteId ? `/dashboard?payment=success&siteId=${siteId}` : fallbackRedirect;
               if (typeof window !== "undefined") {
                 if (window.opener && !window.opener.closed) {
                   try {
@@ -226,13 +227,13 @@ function PaymentReturnContent() {
           } else {
             // Subscription might still be pending, try syncing again with polling
             setStatusMessage("Payment completed! Syncing subscription status...");
-            
+
             // Poll for subscription activation by syncing from Paddle
             let attempts = 0;
             const maxAttempts = 10;
             const pollInterval = setInterval(async () => {
               attempts++;
-              
+
               try {
                 // Try syncing from Paddle
                 const syncResponse = await fetch("/api/payment/sync-subscription", {
@@ -252,7 +253,7 @@ function PaymentReturnContent() {
                     setStatusMessage("✅ Payment successful! Your subscription is now active.");
                     setRedirecting(true);
                     await update();
-                    
+
                     // Clear sessionStorage
                     if (typeof window !== 'undefined') {
                       sessionStorage.removeItem('paddle_subscription_id');
@@ -261,10 +262,10 @@ function PaymentReturnContent() {
                       sessionStorage.removeItem('paddle_redirect_url');
                       sessionStorage.removeItem('paddle_return_url');
                     }
-                    
+
                     setTimeout(() => {
                       const siteId = syncData.site?.siteId || siteIdFromUrl;
-                      const target = siteId ? `/dashboard/usage?payment=success&siteId=${siteId}` : fallbackRedirect;
+                      const target = siteId ? `/dashboard?payment=success&siteId=${siteId}` : fallbackRedirect;
                       if (typeof window !== "undefined") {
                         if (window.opener && !window.opener.closed) {
                           try {
@@ -282,19 +283,19 @@ function PaymentReturnContent() {
                     return;
                   }
                 }
-                
+
                 // Fallback: check our database
                 const pollResponse = await fetch(`/api/subscription?subscriptionId=${subIdToCheck}`);
                 if (pollResponse.ok) {
                   const pollData = await pollResponse.json();
                   const pollSubscription = pollData.subscriptions?.find(
-            (sub) => {
-              const subData = sub.subscription;
-              return subData?.paddleSubscriptionId === subIdToCheck || 
-                     subData?.paddleTransactionId === subIdToCheck ||
-                     subIdToCheck === subData?.paddleSubscriptionId ||
-                     subIdToCheck === subData?.paddleTransactionId;
-            }
+                    (sub) => {
+                      const subData = sub.subscription;
+                      return subData?.paddleSubscriptionId === subIdToCheck ||
+                        subData?.paddleTransactionId === subIdToCheck ||
+                        subIdToCheck === subData?.paddleSubscriptionId ||
+                        subIdToCheck === subData?.paddleTransactionId;
+                    }
                   )?.subscription;
 
                   const pollStatus = pollSubscription?.status?.toLowerCase();
@@ -303,7 +304,7 @@ function PaymentReturnContent() {
                     setStatusMessage("✅ Payment successful! Your subscription is now active.");
                     setRedirecting(true);
                     await update();
-                    
+
                     // Clear sessionStorage
                     if (typeof window !== 'undefined') {
                       sessionStorage.removeItem('paddle_subscription_id');
@@ -311,10 +312,10 @@ function PaymentReturnContent() {
                       sessionStorage.removeItem('paddle_redirect_url');
                       sessionStorage.removeItem('paddle_return_url');
                     }
-                    
+
                     setTimeout(() => {
                       const siteId = pollSubscription.siteId || pollData.siteId || siteIdFromUrl;
-                      const target = siteId ? `/dashboard/usage?payment=success&siteId=${siteId}` : fallbackRedirect;
+                      const target = siteId ? `/dashboard?payment=success&siteId=${siteId}` : fallbackRedirect;
                       if (typeof window !== "undefined") {
                         if (window.opener && !window.opener.closed) {
                           try {
@@ -333,7 +334,7 @@ function PaymentReturnContent() {
                     setStatusMessage("Payment received! Your subscription will be activated shortly. Redirecting...");
                     setRedirecting(true);
                     await update();
-                    
+
                     // Clear sessionStorage
                     if (typeof window !== 'undefined') {
                       sessionStorage.removeItem('paddle_subscription_id');
@@ -341,7 +342,7 @@ function PaymentReturnContent() {
                       sessionStorage.removeItem('paddle_redirect_url');
                       sessionStorage.removeItem('paddle_return_url');
                     }
-                    
+
                     setTimeout(() => {
                       if (typeof window !== "undefined") {
                         if (window.opener && !window.opener.closed) {
@@ -364,7 +365,7 @@ function PaymentReturnContent() {
                   clearInterval(pollInterval);
                   setStatusMessage("Payment received! Redirecting to profile...");
                   setRedirecting(true);
-                  
+
                   // Clear sessionStorage
                   if (typeof window !== 'undefined') {
                     sessionStorage.removeItem('paddle_subscription_id');
@@ -372,7 +373,7 @@ function PaymentReturnContent() {
                     sessionStorage.removeItem('paddle_redirect_url');
                     sessionStorage.removeItem('paddle_return_url');
                   }
-                  
+
                   setTimeout(() => {
                     if (typeof window !== "undefined") {
                       if (window.opener && !window.opener.closed) {
@@ -397,7 +398,7 @@ function PaymentReturnContent() {
               if (!redirecting) {
                 setStatusMessage("Payment received! Redirecting to profile...");
                 setRedirecting(true);
-                
+
                 // Clear sessionStorage
                 if (typeof window !== 'undefined') {
                   sessionStorage.removeItem('paddle_subscription_id');
@@ -405,7 +406,7 @@ function PaymentReturnContent() {
                   sessionStorage.removeItem('paddle_redirect_url');
                   sessionStorage.removeItem('paddle_return_url');
                 }
-                
+
                 router.push(fallbackRedirect);
               }
             }, 30000);
@@ -415,7 +416,7 @@ function PaymentReturnContent() {
           setStatusMessage("Payment completed! Redirecting to usage...");
           setRedirecting(true);
           await update();
-          
+
           // Clear sessionStorage
           if (typeof window !== 'undefined') {
             sessionStorage.removeItem('paddle_subscription_id');
@@ -423,7 +424,7 @@ function PaymentReturnContent() {
             sessionStorage.removeItem('paddle_redirect_url');
             sessionStorage.removeItem('paddle_return_url');
           }
-          
+
           setTimeout(() => {
             if (typeof window !== "undefined") {
               if (window.opener && !window.opener.closed) {
@@ -443,7 +444,7 @@ function PaymentReturnContent() {
         console.error("Error checking subscription:", error);
         setStatusMessage("Payment completed! Redirecting to usage...");
         setRedirecting(true);
-        
+
         // Clear sessionStorage
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem('paddle_subscription_id');
@@ -451,7 +452,7 @@ function PaymentReturnContent() {
           sessionStorage.removeItem('paddle_redirect_url');
           sessionStorage.removeItem('paddle_return_url');
         }
-        
+
         setTimeout(() => {
           if (typeof window !== "undefined") {
             if (window.opener && !window.opener.closed) {
@@ -512,10 +513,10 @@ function PaymentReturnContent() {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Processing Payment</h1>
             <p className="text-gray-600 mb-6">{statusMessage}</p>
             <Link
-              href="/dashboard/usage"
+              href="/dashboard"
               className="inline-block bg-indigo-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
             >
-              Go to Usage
+              Go to Dashboard
             </Link>
           </>
         )}

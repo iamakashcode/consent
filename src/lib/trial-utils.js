@@ -1,13 +1,4 @@
-/**
- * Utility functions for trial period calculations
- * Domain-first: Each domain has its own trial period
- */
 
-/**
- * Calculate remaining trial days for a domain
- * @param {Date|string} trialEndAt - Trial end date
- * @returns {number|null} Days remaining or null if no trial
- */
 export function getRemainingTrialDays(trialEndAt) {
   if (!trialEndAt) return null;
 

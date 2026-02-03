@@ -108,6 +108,12 @@ function StartTrialContent() {
       }
       const checkoutUrl = data.checkoutUrl || data.subscriptionAuthUrl;
       if (checkoutUrl) {
+        // Store for return page so domain can be confirmed even if Paddle doesn't pass transaction_id in URL
+        if (typeof sessionStorage !== "undefined") {
+          if (data.transactionId) sessionStorage.setItem("paddle_transaction_id", data.transactionId);
+          if (siteId) sessionStorage.setItem("paddle_site_id", siteId);
+          sessionStorage.setItem("paddle_redirect_url", "/dashboard?payment=success");
+        }
         if (checkoutUrl.includes(window.location.origin)) {
           const txn = data.transactionId || checkoutUrl.match(/_ptxn=([^&]+)/)?.[1];
           window.location.href = txn ? `/checkout?_ptxn=${txn}` : checkoutUrl;
@@ -178,8 +184,8 @@ function StartTrialContent() {
                 type="button"
                 onClick={() => setTab("monthly")}
                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === "monthly"
-                    ? "border-indigo-600 text-indigo-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
+                  ? "border-indigo-600 text-indigo-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
                   }`}
               >
                 Monthly
@@ -188,8 +194,8 @@ function StartTrialContent() {
                 type="button"
                 onClick={() => setTab("yearly")}
                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === "yearly"
-                    ? "border-indigo-600 text-indigo-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
+                  ? "border-indigo-600 text-indigo-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
                   }`}
               >
                 Yearly (save 2 months)
@@ -229,8 +235,8 @@ function StartTrialContent() {
                       onClick={() => handlePlanSelect(planKey)}
                       disabled={starting}
                       className={`w-full py-3 text-sm font-medium rounded-lg transition-colors ${plan.popular
-                          ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                          : "bg-gray-100 text-gray-900 hover:bg-gray-200"
+                        ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                        : "bg-gray-100 text-gray-900 hover:bg-gray-200"
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       {starting && selectedPlan === planKey ? "Opening checkout…" : "Start 14-day free trial"}

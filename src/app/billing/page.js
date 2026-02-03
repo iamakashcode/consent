@@ -129,10 +129,25 @@ function BillingContent() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Billing & Subscriptions</h1>
-        <p className="text-gray-500 mt-1">Manage your domain subscriptions and billing</p>
+        <p className="text-gray-500 mt-1">Manage your domain subscriptions and billing. All plans include a <strong>14-day free trial</strong>.</p>
       </div>
 
-      {/* User Trial Banner */}
+      {/* 14-day trial info banner */}
+      <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
+            <span className="text-lg font-bold text-green-700">14</span>
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-green-900">14-day free trial on every plan</h3>
+            <p className="text-sm text-green-800 mt-0.5">
+              You get 14 days free when you add a domain. No charge until the trial ends. Same 14-day trial in Paddle checkout.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* User Trial Banner - when trial is active */}
       {userTrialActive && userTrialDaysLeft !== null && (
         <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
           <div className="flex items-center gap-3">
@@ -142,10 +157,10 @@ function BillingContent() {
               </svg>
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold text-blue-900">14-Day Free Trial Active</h3>
+              <h3 className="font-semibold text-blue-900">Your 14-day free trial is active</h3>
               <p className="text-sm text-blue-700">
-                {userTrialDaysLeft > 0 
-                  ? `${userTrialDaysLeft} day${userTrialDaysLeft !== 1 ? 's' : ''} remaining in your free trial`
+                {userTrialDaysLeft > 0
+                  ? `${userTrialDaysLeft} day${userTrialDaysLeft !== 1 ? 's' : ''} remaining`
                   : 'Your trial ends today'}
                 {userTrialEndAt && (
                   <span className="ml-2">
@@ -210,7 +225,7 @@ function BillingContent() {
                         <h3 className="font-semibold text-gray-900">{sub.domain}</h3>
                         {(isTrial || userTrialActive) && (
                           <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
-                            {userTrialActive 
+                            {userTrialActive
                               ? `User Trial: ${userTrialDaysLeft || 0} days left`
                               : `Trial: ${sub.trialDaysLeft || 0} days left`}
                           </span>
@@ -303,7 +318,7 @@ function BillingContent() {
       <div className="bg-white rounded-xl border border-gray-200 mb-8">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Available Plans</h2>
-          <p className="text-sm text-gray-500">Compare and upgrade your plans</p>
+          <p className="text-sm text-gray-500">All plans include a <strong>14-day free trial</strong>. Compare and upgrade below.</p>
         </div>
 
         <div className="p-6">
@@ -311,9 +326,8 @@ function BillingContent() {
             {Object.entries(PLAN_DETAILS).map(([key, plan]) => (
               <div
                 key={key}
-                className={`border rounded-xl p-6 ${
-                  key === "starter" ? "border-indigo-500 bg-indigo-50/50" : "border-gray-200"
-                }`}
+                className={`border rounded-xl p-6 ${key === "starter" ? "border-indigo-500 bg-indigo-50/50" : "border-gray-200"
+                  }`}
               >
                 {key === "starter" && (
                   <span className="inline-block px-2 py-0.5 text-xs font-medium bg-indigo-600 text-white rounded mb-3">
@@ -321,10 +335,11 @@ function BillingContent() {
                   </span>
                 )}
                 <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
-                <div className="mt-2 mb-4">
+                <div className="mt-2 mb-2">
                   <span className="text-3xl font-bold text-gray-900">${plan.price}</span>
                   <span className="text-gray-500">/month</span>
                 </div>
+                <p className="text-sm font-medium text-green-600 mb-4">14 days free, then ${plan.price}/month</p>
                 <ul className="space-y-2 mb-6">
                   <li className="flex items-center gap-2 text-sm text-gray-600">
                     <CheckIcon />1 domain
@@ -334,16 +349,15 @@ function BillingContent() {
                     {plan.pageViews === Infinity ? "Unlimited" : plan.pageViews.toLocaleString()} page views
                   </li>
                   <li className="flex items-center gap-2 text-sm text-gray-600">
-                    <CheckIcon />14-day free trial (per user)
+                    <CheckIcon /><strong>14-day free trial</strong> — $0 to start
                   </li>
                 </ul>
                 <Link
                   href="/plans"
-                  className={`block text-center py-2 text-sm font-medium rounded-lg transition-colors ${
-                    key === "starter"
+                  className={`block text-center py-2 text-sm font-medium rounded-lg transition-colors ${key === "starter"
                       ? "bg-indigo-600 text-white hover:bg-indigo-700"
                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
+                    }`}
                 >
                   Select Plan
                 </Link>
