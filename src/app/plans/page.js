@@ -119,33 +119,7 @@ function PlansContent() {
     setSelectedPlan(planKey);
 
     try {
-      // First domain + new subscription: try free trial without Paddle (0 payment) so domain is not stuck in pending
-      if (isFirstDomain && isNewSubscription && !isUpgrade) {
-        const trialRes = await fetch("/api/payment/start-free-trial-pending", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            siteId,
-            plan: planKey,
-            billingInterval: tab,
-          }),
-        });
-        const trialData = await trialRes.json();
-        if (trialRes.ok && trialData.success) {
-          setLoading(false);
-          setSelectedPlan(null);
-          router.push(`/dashboard/domains?payment=success&siteId=${trialData.siteId}`);
-          return;
-        }
-        // If 404/400 (e.g. not pending domain, or not first domain), fall through to create-order
-        if (trialRes.status !== 404 && trialRes.status !== 400) {
-          alert(trialData.error || "Failed to start free trial. Try again.");
-          setLoading(false);
-          setSelectedPlan(null);
-          return;
-        }
-      }
-
+      // Always use Paddle for free trial too: 14-day trial, EUR 0 now, card on file so we charge after trial
       const response = await fetch("/api/payment/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
