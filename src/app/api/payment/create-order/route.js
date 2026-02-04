@@ -31,8 +31,8 @@ export async function POST(req) {
     }
 
     const { plan, siteId, billingInterval = "monthly", upgrade = false, addons = {} } = await req.json();
-    // UI may send this, but we enforce rules server-side too.
-    const requestedAddonRemoveBranding = Boolean(addons?.removeBranding);
+    // Only add 3 EUR addon when user explicitly checked the box — never add by default
+    const requestedAddonRemoveBranding = addons?.removeBranding === true;
 
     // Validate plan
     if (!plan || !["basic", "starter", "pro"].includes(plan)) {

@@ -389,7 +389,7 @@ function PlansContent() {
                     <div>
                       <p className="text-sm font-semibold text-gray-900">Remove branding (optional)</p>
                       <p className="text-sm text-gray-700">
-                        We&apos;ll remove &quot;Powered by Cookie Access&quot; from your banner.{" "}
+                        Only if you check this: we&apos;ll remove &quot;Powered by Cookie Access&quot; and add {PLAN_CURRENCY} 3. Unchecked = not added.{" "}
                         {addonTrialCopy ? (
                           <span className="font-semibold text-green-700">14 days free, then {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}{tab === "monthly" ? "/month" : "/year"}</span>
                         ) : (
