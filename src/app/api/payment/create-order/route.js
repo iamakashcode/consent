@@ -31,7 +31,8 @@ export async function POST(req) {
     }
 
     const { plan, siteId, billingInterval = "monthly", upgrade = false, addons = {} } = await req.json();
-    const addonRemoveBranding = Boolean(addons?.removeBranding);
+    // UI may send this, but we enforce rules server-side too.
+    const requestedAddonRemoveBranding = Boolean(addons?.removeBranding);
 
     // Validate plan
     if (!plan || !["basic", "starter", "pro"].includes(plan)) {
@@ -174,6 +175,9 @@ export async function POST(req) {
       : userSitesCount === 1;
     const trialDays = isUpgradeFlow ? 0 : (isFirstDomain ? 14 : 0);
 
+    // Addon allowed in free trial too: same 14 days free, then plan + addon both charge.
+    const addonRemoveBranding = Boolean(requestedAddonRemoveBranding);
+
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { name: true, email: true },
@@ -207,7 +211,7 @@ export async function POST(req) {
     if (addonRemoveBranding) {
       try {
         const addonProduct = await getOrCreatePaddleAddonProduct(ADDON_BRANDING_PRODUCT_NAME);
-        addonPrice = await getOrCreatePaddleAddonPrice(addonProduct.id, ADDON_BRANDING_PRICE_CENTS, billingInterval);
+        addonPrice = await getOrCreatePaddleAddonPrice(addonProduct.id, ADDON_BRANDING_PRICE_CENTS, billingInterval, { trialDays });
       } catch (error) {
         console.error("[Payment] Failed to get/create add-on price:", error);
         return Response.json(

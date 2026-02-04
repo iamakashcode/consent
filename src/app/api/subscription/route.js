@@ -3,6 +3,7 @@ import { authOptions } from "../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { getUserSubscriptions, isDomainActive } from "@/lib/subscription";
 import { cancelPaddleSubscription } from "@/lib/paddle";
+import { syncSiteScriptWithSubscription } from "@/lib/script-generator";
 
 /**
  * GET /api/subscription
@@ -151,10 +152,13 @@ export async function POST(req) {
     switch (action) {
       case "cancel":
         return await handleCancel(site, cancelAtPeriodEnd);
-      
+
+      case "cancelAddon":
+        return await handleCancelAddon(site);
+
       case "reactivate":
         return await handleReactivate(site);
-      
+
       default:
         return Response.json({ error: "Invalid action" }, { status: 400 });
     }
@@ -238,5 +242,47 @@ async function handleReactivate(site) {
   return Response.json({
     success: true,
     message: "Subscription reactivated. It will continue to renew automatically.",
+  });
+}
+
+/**
+ * Cancel remove-branding addon: turn branding back on and stop addon billing if separate subscription.
+ */
+async function handleCancelAddon(site) {
+  const subscription = site.subscription;
+
+  if (!subscription.removeBrandingAddon) {
+    return Response.json(
+      { error: "You do not have the remove-branding add-on on this domain." },
+      { status: 400 }
+    );
+  }
+
+  if (subscription.paddleAddonSubscriptionId) {
+    try {
+      await cancelPaddleSubscription(subscription.paddleAddonSubscriptionId, true);
+    } catch (err) {
+      console.error("[Subscription] Error cancelling addon in Paddle:", err);
+    }
+  }
+
+  await prisma.subscription.update({
+    where: { siteId: site.id },
+    data: {
+      removeBrandingAddon: false,
+      paddleAddonSubscriptionId: null,
+      updatedAt: new Date(),
+    },
+  });
+
+  try {
+    await syncSiteScriptWithSubscription(site.siteId);
+  } catch (err) {
+    console.error("[Subscription] Script sync after cancel addon:", err);
+  }
+
+  return Response.json({
+    success: true,
+    message: "Remove-branding add-on cancelled. Branding will show on your banner again.",
   });
 }

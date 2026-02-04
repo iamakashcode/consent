@@ -33,9 +33,11 @@ export default function DomainsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [sites, setSites] = useState([]);
+  const [pendingDomains, setPendingDomains] = useState([]);
   const [subscriptions, setSubscriptions] = useState({});
   const [scriptStatus, setScriptStatus] = useState({});
   const [deletingId, setDeletingId] = useState(null);
+  const [deletingPendingId, setDeletingPendingId] = useState(null);
   const [domain, setDomain] = useState("");
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState("");
@@ -45,6 +47,8 @@ export default function DomainsPage() {
   const [uploadMsg, setUploadMsg] = useState({});
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [siteToDelete, setSiteToDelete] = useState(null);
+  const [pendingDeleteOpen, setPendingDeleteOpen] = useState(false);
+  const [pendingToDelete, setPendingToDelete] = useState(null);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -56,14 +60,19 @@ export default function DomainsPage() {
 
   const fetchData = async () => {
     try {
-      const [sitesRes, subsRes] = await Promise.all([
+      const [sitesRes, pendingRes, subsRes] = await Promise.all([
         fetch("/api/sites"),
+        fetch("/api/pending-domains"),
         fetch("/api/subscription"),
       ]);
       let sitesData = [];
       if (sitesRes.ok) {
         sitesData = await sitesRes.json();
         setSites(sitesData);
+      }
+      if (pendingRes.ok) {
+        const pendingData = await pendingRes.json();
+        setPendingDomains(Array.isArray(pendingData) ? pendingData : []);
       }
       if (subsRes.ok) {
         const data = await subsRes.json();
@@ -107,6 +116,36 @@ export default function DomainsPage() {
   const confirmDelete = (site) => {
     setSiteToDelete(site);
     setDeleteOpen(true);
+  };
+
+  const confirmDeletePending = (pending) => {
+    setPendingToDelete(pending);
+    setPendingDeleteOpen(true);
+  };
+
+  const deletePendingDomain = async () => {
+    if (!pendingToDelete) return;
+    setDeletingPendingId(pendingToDelete.siteId);
+    try {
+      const res = await fetch("/api/pending-domains", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ siteId: pendingToDelete.siteId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPendingDeleteOpen(false);
+        setPendingToDelete(null);
+        toast.success(data.message || "Pending domain removed");
+        await fetchData();
+      } else {
+        toast.error(data.error || "Failed to remove");
+      }
+    } catch (err) {
+      toast.error("Something went wrong");
+    } finally {
+      setDeletingPendingId(null);
+    }
   };
 
   const deleteSite = async () => {
@@ -271,7 +310,7 @@ export default function DomainsPage() {
           <Button variant="outline" size="sm" onClick={fetchData}>Refresh</Button>
         </CardHeader>
         <CardContent>
-          {sites.length > 0 ? (
+          {sites.length > 0 || pendingDomains.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -284,6 +323,48 @@ export default function DomainsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {pendingDomains.map((pending) => (
+                  <TableRow key={pending.id} className="bg-amber-50/50">
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                          <Clock className="h-5 w-5 text-amber-600" />
+                        </div>
+                        <span className="font-medium">{pending.domain}</span>
+                        <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded">Pending</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">—</TableCell>
+                    <TableCell className="text-muted-foreground">No plan yet</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-amber-500" />
+                        <span className="text-sm">Select plan or remove</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">—</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2 flex-wrap">
+                        <Button size="sm" asChild>
+                          <Link href={`/plans?siteId=${pending.siteId}&domain=${encodeURIComponent(pending.domain)}`}>Select plan</Link>
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => confirmDeletePending(pending)}
+                          disabled={deletingPendingId === pending.siteId}
+                        >
+                          {deletingPendingId === pending.siteId ? (
+                            <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full inline-block" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                          Delete
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
                 {sites.map((site) => {
                   const sub = subscriptions[site.siteId];
                   const subscription = sub?.subscription;
@@ -388,6 +469,23 @@ export default function DomainsPage() {
               <p className="text-muted-foreground text-sm mb-4">Add your first domain using the form above.</p>
             </div>
           )}
+
+          <Dialog open={pendingDeleteOpen} onOpenChange={setPendingDeleteOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Remove pending domain</DialogTitle>
+                <DialogDescription>
+                  Remove <strong>{pendingToDelete?.domain}</strong> from pending? You can add it again later and choose a plan.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPendingDeleteOpen(false)}>Cancel</Button>
+                <Button variant="destructive" onClick={deletePendingDomain} disabled={deletingPendingId}>
+                  {deletingPendingId ? "Removing…" : "Remove"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
 

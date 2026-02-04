@@ -245,10 +245,9 @@ function StartTrialContent() {
                         <div>
                           <p className="text-sm font-semibold text-gray-900">Remove branding (optional)</p>
                           <p className="text-sm text-gray-700">
-                            Checkout me add hoga. Isse banner se &quot;Powered by Cookie Access&quot; remove ho jayega.{" "}
-                            <span className="font-semibold text-gray-900">
-                              + {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}
-                              {tab === "monthly" ? "/month" : "/year"}
+                            Banner se &quot;Powered by Cookie Access&quot; hata denge.{" "}
+                            <span className="font-semibold text-green-700">
+                              14 din free, phir {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}{tab === "monthly" ? "/month" : "/year"}
                             </span>
                           </p>
                         </div>

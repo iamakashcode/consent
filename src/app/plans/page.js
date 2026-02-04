@@ -36,7 +36,8 @@ function PlansContent() {
       .then((r) => r.json())
       .then((sites) => {
         if (cancelled || !Array.isArray(sites)) return;
-        setIsFirstDomain(sites.length === 0);
+        // First domain means user has 0 pending-paid sites (pending-domain flow) or exactly 1 created Site (this one)
+        setIsFirstDomain(sites.length <= 1);
       })
       .catch(() => { if (!cancelled) setIsFirstDomain(true); });
     return () => { cancelled = true; };
@@ -279,6 +280,7 @@ function PlansContent() {
           const isCurrentPlan = currentSubscription?.plan === planKey;
           const canUpgrade = currentSubscription?.isActive && ["active", "trial"].includes(currentSubscription?.status) && !isCurrentPlan;
           const isNewSubscription = !currentSubscription?.plan || !currentSubscription?.isActive;
+          const addonTrialCopy = isFirstDomain && isNewSubscription;
           const buttonLabel = !siteId
             ? "Add Domain First"
             : loading && selectedPlan === planKey
@@ -334,29 +336,35 @@ function PlansContent() {
                 ))}
               </ul>
 
-              <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
-                    checked={addonSelected}
-                    onChange={(e) =>
-                      setAddonChoiceByPlan((prev) => ({ ...(prev || {}), [planKey]: e.target.checked }))
-                    }
-                    disabled={disabled}
-                  />
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">Remove branding (optional)</p>
-                    <p className="text-sm text-gray-700">
-                      Checkout me add hoga. Isse banner se &quot;Powered by Cookie Access&quot; remove ho jayega.{" "}
-                      <span className="font-semibold text-gray-900">
-                        + {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}
-                        {tab === "monthly" ? "/month" : "/year"}
-                      </span>
-                    </p>
-                  </div>
-                </label>
-              </div>
+              {siteId && (
+                <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                      checked={addonSelected}
+                      onChange={(e) =>
+                        setAddonChoiceByPlan((prev) => ({ ...(prev || {}), [planKey]: e.target.checked }))
+                      }
+                      disabled={disabled}
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">Remove branding (optional)</p>
+                      <p className="text-sm text-gray-700">
+                        Banner se &quot;Powered by Cookie Access&quot; hata denge.{" "}
+                        {addonTrialCopy ? (
+                          <span className="font-semibold text-green-700">14 din free, phir {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}{tab === "monthly" ? "/month" : "/year"}</span>
+                        ) : (
+                          <span className="font-semibold text-gray-900">
+                            + {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}
+                            {tab === "monthly" ? "/month" : "/year"}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
 
               <button
                 onClick={() => !disabled && handlePlanSelect(planKey)}

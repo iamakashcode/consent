@@ -214,33 +214,42 @@ export async function getOrCreatePaddleAddonProduct(addonName) {
 }
 
 /**
- * Get or create Paddle price for add-on (no trial)
+ * Get or create Paddle price for add-on.
+ * @param {{ trialDays?: number }} options - trialDays: 14 for first-domain trial (addon free for 14 days), 0 otherwise
  */
-export async function getOrCreatePaddleAddonPrice(productId, amountCents, billingInterval = "monthly") {
+export async function getOrCreatePaddleAddonPrice(productId, amountCents, billingInterval = "monthly", options = {}) {
   try {
     const interval = billingInterval === "yearly" ? "year" : "month";
     const frequency = 1;
     const finalAmount = billingInterval === "yearly"
       ? Math.round(amountCents * 10)
       : amountCents;
+    const trialDays = options.trialDays !== undefined ? options.trialDays : 0;
+    const withTrial = trialDays > 0;
 
     const prices = await paddleRequest("GET", `/prices?product_id=${productId}`);
-    const existing = prices.data?.find(
-      (p) =>
-        p.billing_cycle?.interval === interval &&
-        p.billing_cycle?.frequency === frequency &&
-        p.unit_price?.amount === String(finalAmount) &&
-        (!p.trial_period || !p.trial_period.frequency)
-    );
+    const existing = prices.data?.find((p) => {
+      if (p.billing_cycle?.interval !== interval || p.billing_cycle?.frequency !== frequency) return false;
+      if (p.unit_price?.amount !== String(finalAmount)) return false;
+      if (withTrial) {
+        return p.trial_period?.interval === "day" && Number(p.trial_period?.frequency) === trialDays;
+      }
+      return !p.trial_period || !p.trial_period.frequency;
+    });
     if (existing) return existing;
-    const price = await paddleRequest("POST", "/prices", {
+
+    const priceData = {
       product_id: productId,
-      description: billingInterval === "yearly" ? "Yearly" : "Monthly",
-      name: billingInterval === "yearly" ? "Yearly" : "Monthly",
+      description: withTrial ? `Monthly (${trialDays}-day trial)` : (billingInterval === "yearly" ? "Yearly" : "Monthly"),
+      name: withTrial ? `Monthly (${trialDays}-day trial)` : (billingInterval === "yearly" ? "Yearly" : "Monthly"),
       unit_price: { amount: String(finalAmount), currency_code: PLAN_CURRENCY },
       billing_cycle: { interval: interval, frequency: frequency },
       tax_mode: "account_setting",
-    });
+    };
+    if (withTrial) {
+      priceData.trial_period = { interval: "day", frequency: trialDays };
+    }
+    const price = await paddleRequest("POST", "/prices", priceData);
     return price.data;
   } catch (error) {
     console.error(`[Paddle] Error getOrCreate addon price:`, error);

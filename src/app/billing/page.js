@@ -33,6 +33,7 @@ function BillingContent() {
   const [cancelAllOpen, setCancelAllOpen] = useState(false);
   const [siteToCancel, setSiteToCancel] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [cancellingAddonId, setCancellingAddonId] = useState(null);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -106,6 +107,28 @@ function BillingContent() {
 
   const confirmCancelAll = () => {
     setCancelAllOpen(true);
+  };
+
+  const handleCancelAddon = async (siteId) => {
+    setCancellingAddonId(siteId);
+    try {
+      const res = await fetch("/api/subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancelAddon", siteId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || "Add-on cancelled");
+        fetchData();
+      } else {
+        toast.error(data.error || "Failed to cancel add-on");
+      }
+    } catch (err) {
+      toast.error("Something went wrong");
+    } finally {
+      setCancellingAddonId(null);
+    }
   };
 
   const doCancelAll = async () => {
@@ -233,6 +256,7 @@ function BillingContent() {
                 const isTrial = status === "trial";
                 const isActive = sub.isActive;
                 const cancelAtPeriodEnd = sub.subscription?.cancelAtPeriodEnd;
+                const hasRemoveBrandingAddon = sub.subscription?.removeBrandingAddon === true;
 
                 return (
                   <div key={sub.siteId} className="py-5 first:pt-0">
@@ -258,6 +282,9 @@ function BillingContent() {
                               <XCircle className="h-3 w-3" /> Inactive
                             </span>
                           )}
+                          {hasRemoveBrandingAddon && (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 rounded">Remove branding</span>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                           <span><strong className="text-foreground">{planDetails?.name}</strong> Plan</span>
@@ -277,10 +304,20 @@ function BillingContent() {
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <Button variant="secondary" size="sm" asChild>
                           <Link href={`/plans?siteId=${sub.siteId}&domain=${encodeURIComponent(sub.domain)}`}>Change Plan</Link>
                         </Button>
+                        {hasRemoveBrandingAddon && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCancelAddon(sub.siteId)}
+                            disabled={cancellingAddonId === sub.siteId}
+                          >
+                            {cancellingAddonId === sub.siteId ? "Cancelling…" : "Cancel add-on"}
+                          </Button>
+                        )}
                         {isActive && !cancelAtPeriodEnd && (
                           <Button variant="outline" size="sm" onClick={() => confirmCancel(sub)}>
                             Cancel
