@@ -28,7 +28,7 @@ function PlansContent() {
   const [subscriptionLoading, setSubscriptionLoading] = useState(!!siteId);
   const [isFirstDomain, setIsFirstDomain] = useState(true); // free trial only for first domain
 
-  // Fetch sites count to know if this is first domain (trial) or second+ (no trial)
+  // Fetch sites count: first domain = 0 existing sites (trial); 1+ sites = no trial / upgrade
   useEffect(() => {
     if (status !== "authenticated" || !siteId) return;
     let cancelled = false;
@@ -36,8 +36,8 @@ function PlansContent() {
       .then((r) => r.json())
       .then((sites) => {
         if (cancelled || !Array.isArray(sites)) return;
-        // First domain means user has 0 pending-paid sites (pending-domain flow) or exactly 1 created Site (this one)
-        setIsFirstDomain(sites.length <= 1);
+        // Only 0 existing sites = first domain (free trial). Pending domain not in sites until paid.
+        setIsFirstDomain(sites.length === 0);
       })
       .catch(() => { if (!cancelled) setIsFirstDomain(true); });
     return () => { cancelled = true; };
@@ -322,8 +322,8 @@ function PlansContent() {
                   <span className="text-4xl font-bold text-gray-900">{PLAN_CURRENCY} {price}</span>
                   <span className="text-gray-500">{period}</span>
                 </div>
-                <p className="text-xs text-green-600 font-medium mt-1">
-                  {isFirstDomain && (isNewSubscription || canUpgrade) ? `14-day free trial • ${PLAN_CURRENCY} 0 now` : !isFirstDomain && isNewSubscription ? `${PLAN_CURRENCY} ${price}${period} — no trial for extra domains` : "—"}
+                <p className={`text-xs font-medium mt-1 ${isFirstDomain && isNewSubscription ? "text-green-600" : "text-gray-500"}`}>
+                  {isFirstDomain && isNewSubscription ? `14-day free trial • ${PLAN_CURRENCY} 0 now` : canUpgrade ? `Upgrade — ${PLAN_CURRENCY} ${price}${period} after payment` : !isFirstDomain && isNewSubscription ? `${PLAN_CURRENCY} ${price}${period} — no trial for extra domains` : "—"}
                 </p>
               </div>
 

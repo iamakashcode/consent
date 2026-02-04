@@ -35,6 +35,16 @@ function UsageContent() {
     if (session) fetchData();
   }, [session]);
 
+  // After payment success we redirect to Domains; if user lands here (e.g. Paddle or old link), send to domains
+  useEffect(() => {
+    if (searchParams?.get("payment") !== "success") return;
+    const siteId = searchParams.get("siteId");
+    const target = siteId
+      ? `/dashboard/domains?payment=success&siteId=${siteId}`
+      : "/dashboard/domains?payment=success";
+    router.replace(target);
+  }, [searchParams, router]);
+
   useEffect(() => {
     if (status !== "authenticated" || !session?.user) return;
     const txnId = typeof window !== "undefined" ? sessionStorage.getItem("paddle_transaction_id") : null;
