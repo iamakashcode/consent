@@ -128,7 +128,7 @@ function PlansContent() {
           siteId,
           billingInterval: tab,
           upgrade: isUpgrade,
-          addons: { removeBranding: addonChoiceByPlan?.[planKey] === true },
+          addons: { removeBranding: addonChoiceByPlan?.[planKey] === true ? true : false },
         }),
       });
 
@@ -309,6 +309,12 @@ function PlansContent() {
         </div>
       )}
 
+      {siteId && (
+        <p className="text-sm text-gray-500 mb-4">
+          Prices are final (no extra tax at checkout). e.g. {PLAN_CURRENCY} 15 + {PLAN_CURRENCY} 3 addon = {PLAN_CURRENCY} 18/month.
+        </p>
+      )}
+
       {/* Plans Grid */}
       <div className="grid md:grid-cols-3 gap-6 mb-8">
         {Object.entries(PLAN_DETAILS).map(([planKey, plan]) => {
@@ -388,16 +394,11 @@ function PlansContent() {
                     />
                     <div>
                       <p className="text-sm font-semibold text-gray-900">Remove branding (optional)</p>
-                      <p className="text-sm text-gray-700">
-                        Only if you check this: we&apos;ll remove &quot;Powered by Cookie Access&quot; and add {PLAN_CURRENCY} 3. Unchecked = not added.{" "}
-                        {addonTrialCopy ? (
-                          <span className="font-semibold text-green-700">14 days free, then {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}{tab === "monthly" ? "/month" : "/year"}</span>
-                        ) : (
-                          <span className="font-semibold text-gray-900">
-                            + {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}
-                            {tab === "monthly" ? "/month" : "/year"}
-                          </span>
-                        )}
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        <strong>Unchecked</strong> = you pay only the plan price ({PLAN_CURRENCY} {price}{period}). No {PLAN_CURRENCY} 3 charge.
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        <strong>Checked</strong> = we remove &quot;Powered by Cookie Access&quot; and add {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}{tab === "monthly" ? "/month" : "/year"}. Total: {PLAN_CURRENCY} {price} + {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10} = {PLAN_CURRENCY} {tab === "monthly" ? price + ADDON_BRANDING_PRICE_EUR : price + ADDON_BRANDING_PRICE_EUR * 10}{tab === "monthly" ? "/month" : "/year"}.
                       </p>
                     </div>
                   </label>

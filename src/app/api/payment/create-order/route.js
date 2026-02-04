@@ -206,7 +206,7 @@ export async function POST(req) {
       );
     }
 
-    // Optional add-on (remove branding) – can be purchased together with plan checkout
+    // Optional add-on (remove branding) – only when user explicitly checked the box; never add by default
     let addonPrice = null;
     if (addonRemoveBranding) {
       try {
