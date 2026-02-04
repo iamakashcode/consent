@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AlertTriangle, CreditCard, Clock, CheckCircle2, XCircle } from "lucide-react";
-import { PLAN_DETAILS, PLAN_CURRENCY } from "@/lib/paddle";
+import { PLAN_DETAILS, PLAN_CURRENCY, ADDON_BRANDING_PRICE_EUR } from "@/lib/paddle";
 
 function BillingContent() {
   const { data: session, status } = useSession();
@@ -174,7 +174,11 @@ function BillingContent() {
   const activeSubscriptions = subscriptions.filter((s) => s.isActive);
   const totalMonthly = activeSubscriptions.reduce((acc, sub) => {
     const plan = sub.subscription?.plan || "basic";
-    return acc + (PLAN_DETAILS[plan]?.price || 0);
+    const details = PLAN_DETAILS[plan];
+    const isYearly = sub.subscription?.billingInterval === "yearly";
+    const planAmount = isYearly && details?.yearly ? details.yearly / 12 : (details?.monthly ?? details?.price ?? 0);
+    const addonAmount = sub.subscription?.removeBrandingAddon ? ADDON_BRANDING_PRICE_EUR : 0;
+    return acc + planAmount + addonAmount;
   }, 0);
 
   return (
@@ -257,6 +261,11 @@ function BillingContent() {
                 const isActive = sub.isActive;
                 const cancelAtPeriodEnd = sub.subscription?.cancelAtPeriodEnd;
                 const hasRemoveBrandingAddon = sub.subscription?.removeBrandingAddon === true;
+                const isYearly = sub.subscription?.billingInterval === "yearly";
+                const planPrice = isYearly ? (planDetails?.yearly ?? planDetails?.price) : (planDetails?.monthly ?? planDetails?.price);
+                const planPeriod = isYearly ? "year" : "month";
+                const showTrialBadge = (sub.isFirstDomain && userTrialActive) || (isTrial && !sub.isFirstDomain);
+                const trialDaysDisplay = sub.trialDaysLeft ?? userTrialDaysLeft ?? 0;
 
                 return (
                   <div key={sub.siteId} className="py-5 first:pt-0">
@@ -264,18 +273,18 @@ function BillingContent() {
                       <div className="flex-1">
                         <div className="flex flex-wrap items-center gap-2 mb-2">
                           <h3 className="font-semibold">{sub.domain}</h3>
-                          {(isTrial || userTrialActive) && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
-                              {userTrialActive ? `User Trial: ${userTrialDaysLeft ?? 0} days left` : `Trial: ${sub.trialDaysLeft ?? 0} days left`}
+                          {showTrialBadge && (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">
+                              Free trial — {trialDaysDisplay} day{trialDaysDisplay !== 1 ? "s" : ""} left
                             </span>
                           )}
-                          {isActive && !isTrial && (
+                          {isActive && !(sub.isFirstDomain && userTrialActive) && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded">
                               <CheckCircle2 className="h-3 w-3" /> Active
                             </span>
                           )}
                           {cancelAtPeriodEnd && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded">Cancels Soon</span>
+                            <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded">Cancels at period end</span>
                           )}
                           {!isActive && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">
@@ -283,12 +292,12 @@ function BillingContent() {
                             </span>
                           )}
                           {hasRemoveBrandingAddon && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 rounded">Remove branding</span>
+                            <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded">Remove branding ({PLAN_CURRENCY} {ADDON_BRANDING_PRICE_EUR}/mo)</span>
                           )}
                         </div>
                         <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                           <span><strong className="text-foreground">{planDetails?.name}</strong> Plan</span>
-                          <span>{PLAN_CURRENCY} {planDetails?.price}/{sub.subscription?.billingInterval === "yearly" ? "year" : "month"}</span>
+                          <span>{PLAN_CURRENCY} {planPrice ?? 0}/{planPeriod}</span>
                           <span>
                             {planDetails?.pageViews === Infinity ? "Unlimited" : planDetails?.pageViews?.toLocaleString()} page views
                           </span>

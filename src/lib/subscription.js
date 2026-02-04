@@ -513,6 +513,9 @@ export async function getUserSubscriptions(userId) {
     });
     const firstSiteId = firstSite?.id ?? null;
     const userTrialInFuture = user?.trialEndAt && now < new Date(user.trialEndAt);
+    const userTrialDaysLeft = user?.trialEndAt
+      ? Math.max(0, Math.ceil((new Date(user.trialEndAt) - now) / (1000 * 60 * 60 * 24)))
+      : null;
 
     const subscriptions = sites
       .filter(site => site.subscription)
@@ -535,6 +538,8 @@ export async function getUserSubscriptions(userId) {
           }
         }
 
+        const trialDaysLeft = (userTrialInFuture && isFirstDomain) ? userTrialDaysLeft : null;
+
         return {
           siteId: site.siteId,
           siteDbId: site.id,
@@ -543,6 +548,8 @@ export async function getUserSubscriptions(userId) {
           trialEndAt: user?.trialEndAt || null,
           trialStartedAt: user?.trialStartedAt || null,
           isActive,
+          isFirstDomain,
+          trialDaysLeft,
         };
       });
 
@@ -554,11 +561,7 @@ export async function getUserSubscriptions(userId) {
       subscriptions.some(s => s.siteDbId === firstSiteId && s.isActive);
     const userTrialActive = Boolean(firstDomainHasActiveTrial);
     const userTrialEndAt = userTrialActive ? user.trialEndAt : null;
-    const userTrialDaysLeft =
-      userTrialActive && user?.trialEndAt
-        ? Math.max(0, Math.ceil((new Date(user.trialEndAt) - now) / (1000 * 60 * 60 * 24)))
-        : null;
-
+    // userTrialDaysLeft already computed above (before subscriptions map)
     return {
       subscriptions,
       count: subscriptions.length,

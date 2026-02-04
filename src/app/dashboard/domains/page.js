@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Globe, CheckCircle2, Clock, XCircle, Pencil, Trash2, Plus, Copy } from "lucide-react";
 
-export default function DomainsPage() {
+function DomainsContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -520,5 +520,21 @@ export default function DomainsPage() {
         </DialogContent>
       </Dialog>
     </DashboardLayout>
+  );
+}
+
+export default function DomainsPage() {
+  return (
+    <Suspense
+      fallback={
+        <DashboardLayout>
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+          </div>
+        </DashboardLayout>
+      }
+    >
+      <DomainsContent />
+    </Suspense>
   );
 }
