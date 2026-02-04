@@ -22,16 +22,15 @@ export default function Navigation() {
 
   const navLinks = session
     ? [
-        { href: "/dashboard", label: "Dashboard", icon: "📊" },
-        { href: "/profile", label: "Profile", icon: "👤" },
-        { href: "/banner", label: "Banner", icon: "🎨" },
-        { href: "/plans", label: "Plans", icon: "💳" },
-        ...(session.user?.isAdmin ? [{ href: "/admin", label: "Admin", icon: "⚙️" }] : []),
-      ]
+      { href: "/dashboard", label: "Dashboard", icon: "📊" },
+      { href: "/profile", label: "Profile", icon: "👤" },
+      { href: "/plans", label: "Plans", icon: "💳" },
+      ...(session.user?.isAdmin ? [{ href: "/admin", label: "Admin", icon: "⚙️" }] : []),
+    ]
     : [
-        { href: "/", label: "Home", icon: "🏠" },
-        { href: "/#pricing", label: "Pricing", icon: "💰" },
-      ];
+      { href: "/", label: "Home", icon: "🏠" },
+      { href: "/#pricing", label: "Pricing", icon: "💰" },
+    ];
 
   return (
     <nav className="bg-white shadow-sm border-b sticky top-0 z-50">
@@ -51,11 +50,10 @@ export default function Navigation() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
-                  isActive(link.href)
-                    ? "bg-indigo-100 text-indigo-700"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                }`}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${isActive(link.href)
+                  ? "bg-indigo-100 text-indigo-700"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  }`}
               >
                 <span className="mr-2">{link.icon}</span>
                 {link.label}
@@ -131,11 +129,10 @@ export default function Navigation() {
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`block px-4 py-2 text-sm font-medium transition-colors ${
-                  isActive(link.href)
-                    ? "bg-indigo-100 text-indigo-700"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                }`}
+                className={`block px-4 py-2 text-sm font-medium transition-colors ${isActive(link.href)
+                  ? "bg-indigo-100 text-indigo-700"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  }`}
               >
                 <span className="mr-2">{link.icon}</span>
                 {link.label}

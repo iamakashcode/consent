@@ -27,7 +27,7 @@ export async function GET(req) {
 
     // With Paddle, payment callbacks are handled via webhooks
     // This route is kept for compatibility but redirects to dashboard
-    let redirectUrl = "/dashboard/usage?payment=success";
+    let redirectUrl = "/dashboard/domains?payment=success";
 
     // Try to find subscription by Paddle subscription/transaction ID
     if (subscriptionId) {
@@ -46,7 +46,7 @@ export async function GET(req) {
         });
 
         if (subscription && subscription.site) {
-          redirectUrl = `/dashboard/usage?payment=success&siteId=${subscription.site.siteId}`;
+          redirectUrl = `/dashboard/domains?payment=success&siteId=${subscription.site.siteId}`;
         }
       } catch (error) {
         console.error("[Payment Callback] Error finding subscription:", error);
@@ -58,6 +58,6 @@ export async function GET(req) {
   } catch (error) {
     console.error("[Payment Callback] Error:", error);
     // On error, still redirect to profile
-    return Response.redirect(new URL("/profile?payment=success", req.url));
+    return Response.redirect(new URL("/dashboard/domains?payment=success", req.url));
   }
 }

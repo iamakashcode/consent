@@ -283,7 +283,7 @@ export async function POST(req) {
         );
       }
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || req.headers.get("origin") || `http://${req.headers.get("host")}`;
-      const redirectTarget = `/dashboard/usage?payment=success&siteId=${pendingDomain.siteId}`;
+      const redirectTarget = `/dashboard/domains?payment=success&siteId=${pendingDomain.siteId}`;
       const returnUrl = `${baseUrl}/payment/return?transaction_id=${paddleTransaction.id}&siteId=${pendingDomain.siteId}&redirect=${encodeURIComponent(redirectTarget)}`;
       return Response.json({
         success: true,
@@ -407,7 +407,7 @@ export async function POST(req) {
       req.headers.get("origin") ||
       `http://${req.headers.get("host")}`;
 
-    const redirectTarget = `/dashboard/usage?payment=success&siteId=${site.siteId}`;
+    const redirectTarget = `/dashboard/domains?payment=success&siteId=${site.siteId}`;
     const returnUrl = `${baseUrl}/payment/return?transaction_id=${transactionId}&siteId=${site.siteId}&redirect=${encodeURIComponent(redirectTarget)}`;
 
     console.log(`[Payment] Created transaction ${transactionId} for ${site.domain}`);

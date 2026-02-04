@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -31,6 +31,7 @@ import { Globe, CheckCircle2, Clock, XCircle, Pencil, Trash2, Plus, Copy } from 
 export default function DomainsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [sites, setSites] = useState([]);
   const [pendingDomains, setPendingDomains] = useState([]);
@@ -57,6 +58,19 @@ export default function DomainsPage() {
   useEffect(() => {
     if (session) fetchData();
   }, [session]);
+
+  useEffect(() => {
+    if (!session || searchParams?.get("payment") !== "success") return;
+    toast.success("Payment successful", {
+      description: "Your domain and subscription are now active.",
+    });
+    if (typeof window !== "undefined" && window.history?.replaceState) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("payment");
+      url.searchParams.delete("siteId");
+      window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    }
+  }, [session, searchParams]);
 
   const fetchData = async () => {
     try {

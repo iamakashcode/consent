@@ -480,7 +480,7 @@ function BannerContent() {
       {/* Page header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Banner Customization</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Manage</h1>
           <p className="text-gray-500 mt-1">Customize your consent banner appearance</p>
         </div>
         <div className="flex items-center gap-3">

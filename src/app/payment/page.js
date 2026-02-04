@@ -138,7 +138,7 @@ function PaymentContent() {
           }
           if (data.siteId) {
             sessionStorage.setItem('paddle_site_id', data.siteId);
-            sessionStorage.setItem('paddle_redirect_url', `/dashboard/usage?payment=success&siteId=${data.siteId}`);
+            sessionStorage.setItem('paddle_redirect_url', `/dashboard/domains?payment=success&siteId=${data.siteId}`);
           }
           if (data.returnUrl) {
             sessionStorage.setItem('paddle_return_url', data.returnUrl);
@@ -572,7 +572,7 @@ function PaymentContent() {
                           sessionStorage.setItem('paddle_subscription_id', orderData.subscriptionId || '');
                           sessionStorage.setItem('paddle_transaction_id', orderData.transactionId || '');
                           sessionStorage.setItem('paddle_site_id', siteId || '');
-                          sessionStorage.setItem('paddle_redirect_url', `/dashboard/usage?payment=success&siteId=${siteId}`);
+                          sessionStorage.setItem('paddle_redirect_url', `/dashboard/domains?payment=success&siteId=${siteId}`);
                         }
                         alert("Paddle checkout opened. After payment, return to dashboard.");
                       }

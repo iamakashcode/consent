@@ -27,7 +27,7 @@ function PaymentReturnContent() {
     const urlSubscriptionId = subscriptionId || transactionId;
     const storedSubscriptionId = typeof window !== 'undefined' ? (sessionStorage.getItem('paddle_subscription_id') || sessionStorage.getItem('paddle_transaction_id')) : null;
     const finalSubscriptionId = urlSubscriptionId || storedSubscriptionId;
-    const fallbackRedirect = redirectParam || "/dashboard?payment=success";
+    const fallbackRedirect = redirectParam || "/dashboard/domains?payment=success";
     const siteIdFromUrl = searchParams.get("siteId");
     const siteIdFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('paddle_site_id') : null;
     const transactionIdFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('paddle_transaction_id') : null;
@@ -125,7 +125,7 @@ function PaymentReturnContent() {
                 sessionStorage.removeItem("paddle_return_url");
               }
               // Redirect to main dashboard so "Your Domains" table shows the new domain
-              const target = `/dashboard?payment=success&siteId=${confirmData.site.siteId}`;
+              const target = `/dashboard/domains?payment=success&siteId=${confirmData.site.siteId}`;
               setTimeout(() => {
                 if (window.opener && !window.opener.closed) {
                   try {
@@ -187,7 +187,7 @@ function PaymentReturnContent() {
               // Redirect and close Paddle tab if possible
               setTimeout(() => {
                 const siteId = syncData.site?.siteId || siteIdFromUrl;
-                const target = siteId ? `/dashboard?payment=success&siteId=${siteId}` : fallbackRedirect;
+                const target = siteId ? `/dashboard/domains?payment=success&siteId=${siteId}` : fallbackRedirect;
                 if (typeof window !== "undefined") {
                   if (window.opener && !window.opener.closed) {
                     try {
@@ -240,7 +240,7 @@ function PaymentReturnContent() {
             // Redirect and close Paddle tab if possible
             setTimeout(() => {
               const siteId = subscription.siteId || data.siteId || siteIdFromUrl;
-              const target = siteId ? `/dashboard?payment=success&siteId=${siteId}` : fallbackRedirect;
+              const target = siteId ? `/dashboard/domains?payment=success&siteId=${siteId}` : fallbackRedirect;
               if (typeof window !== "undefined") {
                 if (window.opener && !window.opener.closed) {
                   try {
@@ -295,7 +295,7 @@ function PaymentReturnContent() {
 
                     setTimeout(() => {
                       const siteId = syncData.site?.siteId || siteIdFromUrl;
-                      const target = siteId ? `/dashboard?payment=success&siteId=${siteId}` : fallbackRedirect;
+                      const target = siteId ? `/dashboard/domains?payment=success&siteId=${siteId}` : fallbackRedirect;
                       if (typeof window !== "undefined") {
                         if (window.opener && !window.opener.closed) {
                           try {
@@ -345,7 +345,7 @@ function PaymentReturnContent() {
 
                     setTimeout(() => {
                       const siteId = pollSubscription.siteId || pollData.siteId || siteIdFromUrl;
-                      const target = siteId ? `/dashboard?payment=success&siteId=${siteId}` : fallbackRedirect;
+                      const target = siteId ? `/dashboard/domains?payment=success&siteId=${siteId}` : fallbackRedirect;
                       if (typeof window !== "undefined") {
                         if (window.opener && !window.opener.closed) {
                           try {
@@ -393,7 +393,7 @@ function PaymentReturnContent() {
                 console.error("Error polling subscription:", error);
                 if (attempts >= maxAttempts) {
                   clearInterval(pollInterval);
-                  setStatusMessage("Payment received! Redirecting to profile...");
+                  setStatusMessage("Payment received! Redirecting to domains...");
                   setRedirecting(true);
 
                   // Clear sessionStorage
@@ -426,7 +426,7 @@ function PaymentReturnContent() {
             setTimeout(() => {
               clearInterval(pollInterval);
               if (!redirecting) {
-                setStatusMessage("Payment received! Redirecting to profile...");
+                setStatusMessage("Payment received! Redirecting to domains...");
                 setRedirecting(true);
 
                 // Clear sessionStorage
@@ -442,8 +442,8 @@ function PaymentReturnContent() {
             }, 30000);
           }
         } else {
-          // API error, still redirect to profile
-          setStatusMessage("Payment completed! Redirecting to usage...");
+          // API error, still redirect to domains
+          setStatusMessage("Payment completed! Redirecting to domains...");
           setRedirecting(true);
           await update();
 
@@ -472,7 +472,7 @@ function PaymentReturnContent() {
         }
       } catch (error) {
         console.error("Error checking subscription:", error);
-        setStatusMessage("Payment completed! Redirecting to usage...");
+        setStatusMessage("Payment completed! Redirecting to domains...");
         setRedirecting(true);
 
         // Clear sessionStorage
@@ -531,7 +531,7 @@ function PaymentReturnContent() {
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
             <p className="text-gray-600 mb-6">{statusMessage}</p>
-            <p className="text-sm text-gray-500">Redirecting to usage...</p>
+            <p className="text-sm text-gray-500">Redirecting to domains...</p>
           </>
         ) : (
           <>

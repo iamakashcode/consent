@@ -110,7 +110,7 @@ function StartTrialContent() {
         if (typeof sessionStorage !== "undefined") {
           if (data.transactionId) sessionStorage.setItem("paddle_transaction_id", data.transactionId);
           if (siteId) sessionStorage.setItem("paddle_site_id", siteId);
-          sessionStorage.setItem("paddle_redirect_url", "/dashboard?payment=success");
+          sessionStorage.setItem("paddle_redirect_url", "/dashboard/domains?payment=success");
         }
         if (checkoutUrl.includes(window.location.origin)) {
           const txn = data.transactionId || checkoutUrl.match(/_ptxn=([^&]+)/)?.[1];

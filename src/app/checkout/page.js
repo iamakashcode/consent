@@ -16,11 +16,11 @@ function CheckoutContent() {
       try {
         const response = await fetch("/api/paddle/client-token");
         const data = await response.json();
-        
+
         if (!response.ok) {
           throw new Error(data.error || "Failed to get client token");
         }
-        
+
         setClientToken(data.token);
         console.log("[Checkout] Client token fetched, environment:", data.environment);
       } catch (error) {
@@ -69,7 +69,7 @@ function CheckoutContent() {
         window.Paddle.Checkout.open({
           transactionId: transactionId,
           settings: {
-            successUrl: `${window.location.origin}/dashboard/usage?payment=success`,
+            successUrl: `${window.location.origin}/dashboard/domains?payment=success`,
             displayMode: "overlay",
           },
         });
