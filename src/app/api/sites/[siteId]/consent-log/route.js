@@ -20,6 +20,26 @@ function getClientIp(req) {
   return null;
 }
 
+/** Anonymize IP for GDPR: IPv4 last octet → .000; IPv6 last 80 bits → zeros. */
+function anonymizeIp(ip) {
+  if (!ip || typeof ip !== "string") return null;
+  const trimmed = ip.trim();
+  // IPv4: replace last octet with 000 (e.g. 192.168.1.123 → 192.168.1.000)
+  const v4Parts = trimmed.split(".");
+  if (v4Parts.length === 4 && v4Parts.every((p) => /^\d+$/.test(p))) {
+    return `${v4Parts[0]}.${v4Parts[1]}.${v4Parts[2]}.000`;
+  }
+  // IPv6: keep first 48 bits (first 3 groups), zero the rest for anonymity
+  if (trimmed.includes(":")) {
+    const parts = trimmed.split(":");
+    if (parts.length >= 4) {
+      const keep = parts.slice(0, 3).join(":");
+      return keep + "::";
+    }
+  }
+  return trimmed;
+}
+
 /**
  * POST: Record a consent event (accept/reject) - called by the consent script.
  * No auth; CORS allowed.
@@ -62,7 +82,8 @@ export async function POST(req, { params }) {
     }
 
     const pageUrl = typeof body.pageUrl === "string" ? body.pageUrl.slice(0, 2048) : null;
-    const visitorIp = getClientIp(req);
+    const rawIp = getClientIp(req);
+    const visitorIp = anonymizeIp(rawIp);
 
     const log = await prisma.consentLog.create({
       data: {
