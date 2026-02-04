@@ -245,7 +245,7 @@ export async function getOrCreatePaddleAddonPrice(productId, amountCents, billin
       name: withTrial ? `Monthly (${trialDays}-day trial)` : (billingInterval === "yearly" ? "Yearly" : "Monthly"),
       unit_price: { amount: String(finalAmount), currency_code: PLAN_CURRENCY },
       billing_cycle: { interval: interval, frequency: frequency },
-      tax_mode: "external", // Show exact EUR (e.g. 3) — no Paddle tax so amount = what customer pays
+      tax_mode: "external", // Price is final; no Paddle-added tax.
     };
     if (withTrial) {
       priceData.trial_period = { interval: "day", frequency: trialDays };
@@ -309,7 +309,7 @@ export async function getOrCreatePaddlePrice(productId, planName, amount, billin
         interval: interval,
         frequency: frequency,
       },
-      tax_mode: "external", // Show exact EUR (e.g. 20) — no Paddle tax so amount = what customer pays
+      tax_mode: "external", // Price is final; no Paddle-added tax. If checkout still shows extra, set Paddle Dashboard → Tax to inclusive/off.
     };
 
     if (withTrial) {

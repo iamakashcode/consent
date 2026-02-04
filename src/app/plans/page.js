@@ -310,9 +310,10 @@ function PlansContent() {
       )}
 
       {siteId && (
-        <p className="text-sm text-gray-500 mb-4">
-          Prices are final (no extra tax at checkout). e.g. {PLAN_CURRENCY} 15 + {PLAN_CURRENCY} 3 addon = {PLAN_CURRENCY} 18/month.
-        </p>
+        <div className="text-sm text-gray-500 mb-4 space-y-1">
+          <p>Prices are final: e.g. {PLAN_CURRENCY} 15 + {PLAN_CURRENCY} 3 addon = {PLAN_CURRENCY} 18/month (no extra tax).</p>
+          <p>If checkout shows a higher total, set Paddle Dashboard → Catalog/Tax so prices are tax-inclusive or tax is off.</p>
+        </div>
       )}
 
       {/* Plans Grid */}

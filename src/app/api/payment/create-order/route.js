@@ -30,9 +30,14 @@ export async function POST(req) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { plan, siteId, billingInterval = "monthly", upgrade = false, addons = {} } = await req.json();
-    // Only add 3 EUR addon when user explicitly checked the box — never add by default
-    const requestedAddonRemoveBranding = addons?.removeBranding === true;
+    const body = await req.json();
+    const plan = body.plan;
+    const siteId = body.siteId;
+    const billingInterval = body.billingInterval ?? "monthly";
+    const upgrade = Boolean(body.upgrade);
+    const addons = body.addons != null && typeof body.addons === "object" ? body.addons : {};
+    // Only add 3 EUR addon when user explicitly checked the box — never add by default (strict)
+    const requestedAddonRemoveBranding = addons.removeBranding === true;
 
     // Validate plan
     if (!plan || !["basic", "starter", "pro"].includes(plan)) {
@@ -248,6 +253,9 @@ export async function POST(req) {
       }
       let paddleTransaction;
       try {
+        const addonOptions = requestedAddonRemoveBranding && addonPrice?.id
+          ? { addonPriceId: addonPrice.id, addonRemoveBranding: true }
+          : {};
         paddleTransaction = await createPaddleTransactionForPendingDomain(
           paddlePrice.id,
           paddleCustomer.id,
@@ -256,7 +264,7 @@ export async function POST(req) {
           pendingDomain.domain,
           plan,
           billingInterval,
-          addonPrice?.id ? { addonPriceId: addonPrice.id, addonRemoveBranding: true } : {}
+          addonOptions
         );
         await prisma.pendingDomain.update({
           where: { id: pendingDomain.id },
@@ -303,6 +311,9 @@ export async function POST(req) {
     // Pass plan/billingInterval in custom_data so webhook updates subscription only after payment success
     let paddleTransaction;
     try {
+      const addonOpts = requestedAddonRemoveBranding && addonPrice?.id
+        ? { addonPriceId: addonPrice.id, addonRemoveBranding: true }
+        : {};
       paddleTransaction = await createPaddleTransaction(
         paddlePrice.id,
         paddleCustomer.id,
@@ -311,7 +322,7 @@ export async function POST(req) {
         plan,
         billingInterval,
         isUpgradeFlow,
-        addonPrice?.id ? { addonPriceId: addonPrice.id, addonRemoveBranding: true } : {}
+        addonOpts
       );
     } catch (error) {
       console.error("[Payment] Failed to create Paddle transaction:", error);
