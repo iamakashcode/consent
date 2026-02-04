@@ -26,7 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Globe, CheckCircle2, Clock, XCircle, Pencil, Trash2, Plus, Copy, Upload } from "lucide-react";
+import { Globe, CheckCircle2, Clock, XCircle, Pencil, Trash2, Plus, Copy } from "lucide-react";
 
 export default function DomainsPage() {
   const { data: session, status } = useSession();
