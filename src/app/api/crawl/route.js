@@ -44,15 +44,15 @@ export async function POST(req) {
       );
     }
 
-    // Check if site already exists for this user - case-insensitive (DIV.com = div.com)
-    let existingSite = await prisma.site.findFirst({
-      where: {
-        userId: userId,
-        domain: { equals: cleanDomain, mode: "insensitive" },
-      },
-      include: { subscription: true },
+    // Duplicate check: only within this user. Same user cannot add same full domain twice (desire.com 2x = no).
+    // Different TLDs allowed (desire.com + desire.in = yes). Case-insensitive compare in JS so it works in any DB.
+    const userSites = await prisma.site.findMany({
+      where: { userId },
+      select: { domain: true },
     });
-
+    const existingSite = userSites.find(
+      (s) => s.domain && s.domain.trim().toLowerCase() === cleanDomain
+    );
     if (existingSite) {
       return Response.json(
         { error: "This domain is already in your account. You cannot add the same domain again." },
@@ -60,10 +60,9 @@ export async function POST(req) {
       );
     }
 
-    // Check if user already has this exact domain as PendingDomain (same domain = block; different domain = allow)
     const userPendingList = await prisma.pendingDomain.findMany({
-      where: { userId: userId },
-      select: { domain: true },
+      where: { userId },
+      select: { domain: true, siteId: true, trackers: true, verificationToken: true },
     });
     const existingPending = userPendingList.find(
       (p) => p.domain && p.domain.trim().toLowerCase() === cleanDomain
@@ -188,34 +187,35 @@ export async function POST(req) {
           subscription: null,
         };
       } catch (createError) {
-        // Handle race: same domain added by another request - check Site or PendingDomain
+        // Handle race: same domain added by same user in another request - resolve from DB
         if (createError.code === "P2002") {
-          existingSite = await prisma.site.findFirst({
-            where: { userId: userId, domain: { equals: cleanDomain, mode: "insensitive" } },
+          const againSites = await prisma.site.findMany({
+            where: { userId },
             include: { subscription: true },
           });
-          if (existingSite) {
-            site = existingSite;
-            siteId = existingSite.siteId;
+          const againSite = againSites.find((s) => s.domain && s.domain.trim().toLowerCase() === cleanDomain);
+          if (againSite) {
+            site = againSite;
+            siteId = againSite.siteId;
           } else {
             const pendingList = await prisma.pendingDomain.findMany({
-              where: { userId: userId },
+              where: { userId },
               select: { domain: true, siteId: true, trackers: true, verificationToken: true },
             });
-            const existingPending = pendingList.find(
+            const againPending = pendingList.find(
               (p) => p.domain && p.domain.trim().toLowerCase() === cleanDomain
             );
-            if (existingPending) {
+            if (againPending) {
               site = {
                 id: null,
-                domain: existingPending.domain,
-                siteId: existingPending.siteId,
-                trackers: existingPending.trackers,
+                domain: againPending.domain,
+                siteId: againPending.siteId,
+                trackers: againPending.trackers,
                 isVerified: false,
-                verificationToken: existingPending.verificationToken,
+                verificationToken: againPending.verificationToken,
                 subscription: null,
               };
-              siteId = existingPending.siteId;
+              siteId = againPending.siteId;
               isNewSite = false;
             } else {
               throw createError;
