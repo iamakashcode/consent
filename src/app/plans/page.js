@@ -56,7 +56,22 @@ function PlansContent() {
         if (cancelled) return;
         if (res.ok) {
           const data = await res.json();
-          setCurrentSubscription(data.subscription ? { plan: data.subscription.plan, status: data.subscription.status?.toLowerCase(), isActive: data.isActive } : null);
+          const sub = data.subscription;
+          if (!sub) {
+            setCurrentSubscription(null);
+          } else {
+            setCurrentSubscription({
+              plan: sub.plan,
+              status: sub.status?.toLowerCase(),
+              isActive: data.isActive,
+              billingInterval: sub.billingInterval || "monthly",
+              removeBrandingAddon: !!sub.removeBrandingAddon,
+              trialEndAt: data.trialEndAt,
+              trialDaysLeft: data.trialDaysLeft,
+              userTrialActive: !!data.userTrialActive,
+            });
+            if (sub.billingInterval === "yearly") setTab("yearly");
+          }
         } else {
           setCurrentSubscription(null);
         }
@@ -219,10 +234,31 @@ function PlansContent() {
             {subscriptionLoading ? (
               <span className="text-sm text-gray-500">Loading current plan…</span>
             ) : currentSubscription?.plan ? (
-              <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium">
-                Current plan: <span className="capitalize ml-1">{currentSubscription.plan}</span>
-                {currentSubscription.status === "trial" && <span className="ml-1 text-gray-500">(Trial)</span>}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium">
+                  Current plan: <span className="capitalize ml-1">{currentSubscription.plan}</span>
+                  {currentSubscription.billingInterval === "yearly" && <span className="ml-1 text-gray-500">(Yearly)</span>}
+                </span>
+                {currentSubscription.userTrialActive && (
+                  <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-green-100 text-green-800 text-sm font-medium">
+                    Free trial
+                    {currentSubscription.trialDaysLeft != null && (
+                      <span className="ml-1">— {currentSubscription.trialDaysLeft} days left</span>
+                    )}
+                  </span>
+                )}
+                {currentSubscription.removeBrandingAddon && (
+                  <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-amber-100 text-amber-800 text-sm font-medium">
+                    Remove branding ({PLAN_CURRENCY} 3)
+                  </span>
+                )}
+                <Link
+                  href="/billing"
+                  className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                >
+                  Cancel / manage →
+                </Link>
+              </div>
             ) : null}
           </div>
         )}
