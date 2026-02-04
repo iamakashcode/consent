@@ -71,3 +71,50 @@ export async function activatePendingDomain(pending, transaction) {
   console.log(`[activate-pending-domain] PendingDomain → Site: ${createdSite.siteId} for ${pending.domain}`);
   return { site: createdSite, subscription: createdSubscription };
 }
+
+/**
+ * Activate a PendingDomain as first-domain free trial without Paddle (no payment).
+ * Creates Site + Subscription (trial), deletes PendingDomain. Use when user chooses "Start 14-day free trial" with 0 payment.
+ */
+export async function activatePendingDomainForFreeTrial(pending, options = {}) {
+  const plan = options.plan ?? pending.plan ?? "basic";
+  const billingInterval = options.billingInterval ?? pending.billingInterval ?? "monthly";
+
+  const existingSitesCount = await prisma.site.count({ where: { userId: pending.userId } });
+  if (existingSitesCount > 0) {
+    throw new Error("Free trial without payment is only for your first domain. You already have a site.");
+  }
+
+  const trial = await startUserTrial(pending.userId);
+
+  const createdSite = await prisma.site.create({
+    data: {
+      domain: pending.domain,
+      siteId: pending.siteId,
+      userId: pending.userId,
+      trackers: pending.trackers ?? [],
+      verificationToken: pending.verificationToken,
+      isVerified: false,
+    },
+  });
+
+  const createdSubscription = await prisma.subscription.create({
+    data: {
+      siteId: createdSite.id,
+      plan,
+      billingInterval,
+      status: "trial",
+      currentPeriodStart: trial.trialStartedAt,
+      currentPeriodEnd: trial.trialEndAt,
+    },
+  });
+
+  await prisma.pendingDomain.delete({ where: { id: pending.id } });
+
+  import("@/lib/script-generator")
+    .then(({ syncSiteScriptWithSubscription }) => syncSiteScriptWithSubscription(createdSite.siteId))
+    .catch((err) => console.error("[activate-pending-domain] CDN sync failed:", err));
+
+  console.log(`[activate-pending-domain] Free trial (no Paddle): PendingDomain → Site: ${createdSite.siteId} for ${pending.domain}`);
+  return { site: createdSite, subscription: createdSubscription };
+}

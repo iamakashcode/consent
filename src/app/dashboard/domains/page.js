@@ -64,6 +64,7 @@ function DomainsContent() {
     toast.success("Payment successful", {
       description: "Your domain and subscription are now active.",
     });
+    fetchData(); // Refetch so new site/trial appears and pending list updates
     if (typeof window !== "undefined" && window.history?.replaceState) {
       const url = new URL(window.location.href);
       url.searchParams.delete("payment");
@@ -394,7 +395,13 @@ function DomainsContent() {
                   const planLabel = subscription?.plan
                     ? subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1) + (isTrial ? " (Trial)" : "")
                     : "No plan";
-                  const statusText = isActive ? "Active" : isPending ? "Payment required" : trialNotStarted ? "No plan" : "Inactive";
+                  const statusText = isActive
+                    ? (isTrial ? "Free trial" : "Active")
+                    : isPending
+                      ? "Payment required"
+                      : trialNotStarted
+                        ? "No plan"
+                        : "Inactive";
 
                   return (
                     <TableRow key={site.id}>

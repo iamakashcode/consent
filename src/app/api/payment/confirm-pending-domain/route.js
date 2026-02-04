@@ -89,7 +89,9 @@ export async function POST(req) {
     }
     const txnStatus = (transaction.status || "").toLowerCase();
     console.log("[confirm-pending-domain] Paddle transaction status:", transaction.status);
-    if (txnStatus !== "paid" && txnStatus !== "completed") {
+    // paid, completed = success; ready = trial/checkout completed, charge later
+    const successStatuses = ["paid", "completed", "ready"];
+    if (!successStatuses.includes(txnStatus)) {
       return Response.json(
         { error: `Payment not completed yet. Status: ${transaction.status}` },
         { status: 400 }

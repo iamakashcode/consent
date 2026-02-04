@@ -63,13 +63,16 @@ function CheckoutContent() {
           token: clientToken,
         });
 
-        console.log("[Checkout] Paddle.js initialized with client token");
 
-        // Open checkout using transaction ID
+        // Redirect to our return page after payment so we can confirm pending domain (activate Site + Subscription)
+        const siteId = typeof window !== "undefined" ? window.sessionStorage?.getItem("paddle_site_id") : null;
+        const redirectTarget = `/dashboard/domains?payment=success${siteId ? `&siteId=${encodeURIComponent(siteId)}` : ""}`;
+        const successUrl = `${window.location.origin}/payment/return?transaction_id=${encodeURIComponent(transactionId)}${siteId ? `&siteId=${encodeURIComponent(siteId)}` : ""}&redirect=${encodeURIComponent(redirectTarget)}`;
+
         window.Paddle.Checkout.open({
           transactionId: transactionId,
           settings: {
-            successUrl: `${window.location.origin}/dashboard/domains?payment=success`,
+            successUrl,
             displayMode: "overlay",
           },
         });
