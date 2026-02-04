@@ -84,22 +84,21 @@ export async function POST(req) {
       addonType
     );
 
-    const checkoutUrl = transaction.checkout?.url;
-    if (!checkoutUrl) {
-      return Response.json(
-        { error: "Checkout URL not available. Please try again or contact support." },
-        { status: 500 }
-      );
-    }
-
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || req.headers.get("origin") || `http://${req.headers.get("host")}`;
     const redirectTarget = `/banner?siteId=${site.siteId}&addon=success`;
+    // Use our checkout page so Paddle overlay opens and we control success redirect (payment/return?addon=remove_branding)
+    const checkoutUrl =
+      transaction.checkout?.url && !transaction.checkout.url.includes(baseUrl)
+        ? transaction.checkout.url
+        : `${baseUrl}/checkout?_ptxn=${transaction.id}&siteId=${encodeURIComponent(site.siteId)}&addon=remove_branding&redirect=${encodeURIComponent(redirectTarget)}`;
+
     const returnUrl = `${baseUrl}/payment/return?transaction_id=${transaction.id}&siteId=${site.siteId}&addon=remove_branding&redirect=${encodeURIComponent(redirectTarget)}`;
 
     return Response.json({
       success: true,
       checkoutUrl,
       returnUrl,
+      transactionId: transaction.id,
       siteId: site.siteId,
       message: "Complete payment to hide branding on your consent banner.",
     });

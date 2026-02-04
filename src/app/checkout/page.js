@@ -7,6 +7,9 @@ import Script from "next/script";
 function CheckoutContent() {
   const searchParams = useSearchParams();
   const transactionId = searchParams?.get("_ptxn");
+  const addonParam = searchParams?.get("addon");
+  const redirectParam = searchParams?.get("redirect");
+  const siteIdParam = searchParams?.get("siteId");
   const [clientToken, setClientToken] = useState(null);
   const [tokenError, setTokenError] = useState(null);
 
@@ -64,10 +67,13 @@ function CheckoutContent() {
         });
 
 
-        // Redirect to our return page after payment so we can confirm pending domain (activate Site + Subscription)
-        const siteId = typeof window !== "undefined" ? window.sessionStorage?.getItem("paddle_site_id") : null;
-        const redirectTarget = `/dashboard/domains?payment=success${siteId ? `&siteId=${encodeURIComponent(siteId)}` : ""}`;
-        const successUrl = `${window.location.origin}/payment/return?transaction_id=${encodeURIComponent(transactionId)}${siteId ? `&siteId=${encodeURIComponent(siteId)}` : ""}&redirect=${encodeURIComponent(redirectTarget)}`;
+        // Build success URL: addon flow -> payment/return?addon=remove_branding; plan flow -> payment/return?transaction_id&siteId for confirm-pending-domain
+        const siteId = siteIdParam || (typeof window !== "undefined" ? window.sessionStorage?.getItem("paddle_site_id") : null);
+        const isAddon = addonParam === "remove_branding";
+        const redirectTarget = isAddon && redirectParam
+          ? redirectParam
+          : `/dashboard/domains?payment=success${siteId ? `&siteId=${encodeURIComponent(siteId)}` : ""}`;
+        const successUrl = `${window.location.origin}/payment/return?transaction_id=${encodeURIComponent(transactionId)}${siteId ? `&siteId=${encodeURIComponent(siteId)}` : ""}${isAddon ? "&addon=remove_branding" : ""}&redirect=${encodeURIComponent(redirectTarget)}`;
 
         window.Paddle.Checkout.open({
           transactionId: transactionId,
@@ -104,7 +110,7 @@ function CheckoutContent() {
         }
       }, 10000);
     }
-  }, [transactionId, clientToken]);
+  }, [transactionId, clientToken, addonParam, redirectParam, siteIdParam]);
 
   if (!transactionId) {
     return (

@@ -438,11 +438,11 @@ function BannerContent() {
         body: JSON.stringify({ siteId: selectedSite.siteId, addonType: "remove_branding" }),
       });
       const data = await res.json();
-      if (data.success && data.checkoutUrl) {
+      if (res.ok && data.success && data.checkoutUrl) {
         window.location.href = data.checkoutUrl;
         return;
       }
-      alert(data.error || "Failed to start checkout");
+      alert(data.error || "Failed to start checkout. Subscribe to a plan first if you haven’t.");
     } catch (err) {
       alert("Something went wrong. Please try again.");
     } finally {
