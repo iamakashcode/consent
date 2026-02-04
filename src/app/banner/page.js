@@ -561,7 +561,7 @@ function BannerContent() {
               </div>
             )}
 
-            {/* Branding: Powered by Cookie Access - hide with add-on ($3/mo) */}
+            {/* Branding: Powered by Cookie Access - hide with add-on (EUR 3/mo) */}
             {selectedSite && (
               <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <h3 className="text-sm font-semibold text-gray-900 mb-2">Banner branding</h3>
@@ -578,7 +578,7 @@ function BannerContent() {
                       disabled={addonCheckoutLoading}
                       className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                     >
-                      {addonCheckoutLoading ? "Loading…" : "Hide branding — $3/month"}
+                      {addonCheckoutLoading ? "Loading…" : "Hide branding — EUR 3/month"}
                     </button>
                   </>
                 )}

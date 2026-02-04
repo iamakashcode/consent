@@ -3,8 +3,8 @@
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
-import Script from "next/script";
 import Link from "next/link";
+import { ADDON_BRANDING_PRICE_EUR, PLAN_DETAILS, PLAN_CURRENCY } from "@/lib/paddle";
 
 function PaymentContent() {
   const { data: session, status, update } = useSession();
@@ -16,6 +16,7 @@ function PaymentContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [orderData, setOrderData] = useState(null);
+  const [includeBrandingAddon, setIncludeBrandingAddon] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -27,7 +28,7 @@ function PaymentContent() {
     if (status === "authenticated" && typeof window !== 'undefined') {
       const storedSubscriptionId = sessionStorage.getItem('paddle_subscription_id');
       const storedRedirectUrl = sessionStorage.getItem('paddle_redirect_url');
-      
+
       // If user has payment info in sessionStorage, redirect to profile page
       if (storedSubscriptionId && storedRedirectUrl) {
         // Clear sessionStorage
@@ -36,7 +37,7 @@ function PaymentContent() {
         sessionStorage.removeItem('paddle_site_id');
         sessionStorage.removeItem('paddle_redirect_url');
         sessionStorage.removeItem('paddle_return_url');
-        
+
         // Redirect to profile page for auto-sync
         router.push(storedRedirectUrl);
         return;
@@ -61,11 +62,11 @@ function PaymentContent() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ plan, siteId }), // Include siteId for domain-based plans
+        body: JSON.stringify({ plan, siteId, addons: { removeBranding: includeBrandingAddon } }), // Include siteId for domain-based plans
       });
 
       const data = await response.json();
-      
+
       console.log("[Payment] API Response:", data);
 
       if (!response.ok) {
@@ -90,10 +91,10 @@ function PaymentContent() {
       if (data.requiresPaymentSetup || data.subscriptionId || data.subscriptionAuthUrl || data.checkoutUrl) {
         // Update session first
         await update();
-        
+
         // Get checkout URL from response (prefer checkoutUrl, then subscriptionAuthUrl)
         let checkoutUrl = data.checkoutUrl || data.subscriptionAuthUrl;
-        
+
         // If checkout URL points to our domain (embedded checkout), redirect to our checkout page
         // Format: https://ourdomain.com?_ptxn=txn_xxx
         if (checkoutUrl && checkoutUrl.includes(window.location.origin)) {
@@ -107,7 +108,7 @@ function PaymentContent() {
           // Full Paddle hosted URL - use as-is
           console.log("[Payment] Using Paddle hosted checkout URL:", checkoutUrl);
         }
-        
+
         // If no checkout URL but we have subscriptionId, try to fetch it
         if (!checkoutUrl && data.subscriptionId) {
           try {
@@ -123,11 +124,11 @@ function PaymentContent() {
             console.error("[Payment] Error fetching auth URL:", err);
           }
         }
-        
+
         // If we have a checkout URL, redirect to it (same tab for better UX)
         if (checkoutUrl) {
           console.log("[Payment] Redirecting to Paddle checkout:", checkoutUrl);
-          
+
           // Store transaction/subscription info for return handling
           if (data.transactionId) {
             sessionStorage.setItem('paddle_transaction_id', data.transactionId);
@@ -142,12 +143,12 @@ function PaymentContent() {
           if (data.returnUrl) {
             sessionStorage.setItem('paddle_return_url', data.returnUrl);
           }
-          
+
           // Redirect to Paddle checkout (same tab - better UX)
           window.location.href = checkoutUrl;
           return;
         }
-        
+
         // If we reach here, couldn't get auth URL - show subscription setup UI instead
         console.log("[Payment] No auth URL available, showing subscription setup UI");
         setOrderData({
@@ -163,22 +164,22 @@ function PaymentContent() {
         setLoading(false);
         return;
       }
-      
+
       // If basic plan with trial, handle subscription setup
       if (data.trial && data.success) {
         // Update session to reflect new plan
         await update();
-        
+
         // If we reach here, payment setup wasn't required or failed
         setOrderData({ trial: true, ...data });
         return;
       }
-      
+
       // If subscription (Starter/Pro), handle subscription setup
       if (data.subscription && data.success) {
         // Update session to reflect new plan
         await update();
-        
+
         // Try to get auth URL if we have subscription ID
         if (data.subscriptionId) {
           try {
@@ -196,7 +197,7 @@ function PaymentContent() {
             console.error("[Payment] Error fetching auth URL:", err);
           }
         }
-        
+
         // If we reach here, redirect failed - show subscription setup UI
         setOrderData({
           subscription: true,
@@ -228,7 +229,7 @@ function PaymentContent() {
         } catch (err) {
           console.error("[Payment] Error fetching auth URL:", err);
         }
-        
+
         // Show subscription setup UI
         setOrderData({
           subscription: true,
@@ -290,17 +291,12 @@ function PaymentContent() {
     );
   }
 
-  const planNames = {
-    basic: "Basic",
-    starter: "Starter",
-    pro: "Pro",
-  };
-
-  const planPrices = {
-    basic: "$5",
-    starter: "$9",
-    pro: "$20",
-  };
+  const planNames = Object.fromEntries(
+    Object.entries(PLAN_DETAILS).map(([k, v]) => [k, v.name])
+  );
+  const planPrices = Object.fromEntries(
+    Object.entries(PLAN_DETAILS).map(([k, v]) => [k, `${PLAN_CURRENCY} ${v.price}`])
+  );
 
   return (
     <>
@@ -315,6 +311,26 @@ function PaymentContent() {
               <p className="text-gray-600">
                 Complete your payment to upgrade your subscription
               </p>
+            </div>
+
+            <div className="mb-6 bg-gray-50 rounded-lg border border-gray-200 p-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                  checked={includeBrandingAddon}
+                  onChange={(e) => setIncludeBrandingAddon(e.target.checked)}
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Remove branding</p>
+                  <p className="text-sm text-gray-600">
+                    Hide &quot;Powered by Cookie Access&quot; on your banner.{" "}
+                    <span className="font-medium text-gray-900">
+                      + {PLAN_CURRENCY} {ADDON_BRANDING_PRICE_EUR}/month
+                    </span>
+                  </p>
+                </div>
+              </label>
             </div>
 
             {error && (
@@ -411,7 +427,7 @@ function PaymentContent() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="bg-gray-50 rounded-lg p-6">
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-gray-600">Plan</span>
@@ -468,7 +484,7 @@ function PaymentContent() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="bg-gray-50 rounded-lg p-6">
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-gray-600">Plan</span>

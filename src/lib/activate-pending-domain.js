@@ -22,6 +22,7 @@ export async function activatePendingDomain(pending, transaction) {
       end.setMonth(end.getMonth() + 1);
       return end;
     })();
+  const addonRemoveBranding = transaction.custom_data?.addonRemoveBranding === true || transaction.custom_data?.addonRemoveBranding === "true";
 
   // Only start user trial for first domain (user has no sites yet)
   const existingSitesCount = await prisma.site.count({ where: { userId: pending.userId } });
@@ -55,6 +56,8 @@ export async function activatePendingDomain(pending, transaction) {
       status: newStatus,
       paddleSubscriptionId: subscriptionId,
       paddleTransactionId: transaction.id,
+      removeBrandingAddon: addonRemoveBranding,
+      paddleAddonSubscriptionId: addonRemoveBranding ? (subscriptionId || undefined) : undefined,
       currentPeriodStart: transaction.billing_period?.starts_at
         ? new Date(transaction.billing_period.starts_at)
         : new Date(),

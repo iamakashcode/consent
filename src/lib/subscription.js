@@ -505,7 +505,6 @@ export async function getUserSubscriptions(userId) {
     });
 
     const now = new Date();
-    const userTrialActive = user?.trialEndAt && now < new Date(user.trialEndAt);
     // First domain = oldest by createdAt (only that one gets user trial benefit)
     const firstSite = await prisma.site.findFirst({
       where: { userId },
@@ -513,6 +512,7 @@ export async function getUserSubscriptions(userId) {
       select: { id: true },
     });
     const firstSiteId = firstSite?.id ?? null;
+    const userTrialInFuture = user?.trialEndAt && now < new Date(user.trialEndAt);
 
     const subscriptions = sites
       .filter(site => site.subscription)
@@ -523,7 +523,7 @@ export async function getUserSubscriptions(userId) {
 
         let isActive = false;
         // User trial counts as active only for the first domain
-        if (userTrialActive && isFirstDomain) {
+        if (userTrialInFuture && isFirstDomain) {
           isActive = true;
         } else if (status === "active") {
           if (subscription.currentPeriodEnd && now < new Date(subscription.currentPeriodEnd)) {
@@ -546,18 +546,29 @@ export async function getUserSubscriptions(userId) {
         };
       });
 
+    // Only show user trial on billing when first domain has an active subscription – no plan = no trial banner
+    const firstDomainHasActiveTrial =
+      firstSiteId &&
+      user?.trialEndAt &&
+      now < new Date(user.trialEndAt) &&
+      subscriptions.some(s => s.siteDbId === firstSiteId && s.isActive);
+    const userTrialActive = Boolean(firstDomainHasActiveTrial);
+    const userTrialEndAt = userTrialActive ? user.trialEndAt : null;
+    const userTrialDaysLeft =
+      userTrialActive && user?.trialEndAt
+        ? Math.max(0, Math.ceil((new Date(user.trialEndAt) - now) / (1000 * 60 * 60 * 24)))
+        : null;
+
     return {
       subscriptions,
       count: subscriptions.length,
       activeCount: subscriptions.filter(s => s.isActive).length,
       userTrialActive,
-      userTrialEndAt: user?.trialEndAt || null,
-      userTrialDaysLeft: user?.trialEndAt
-        ? Math.max(0, Math.ceil((new Date(user.trialEndAt) - now) / (1000 * 60 * 60 * 24)))
-        : null,
+      userTrialEndAt,
+      userTrialDaysLeft,
     };
   } catch (error) {
     console.error("Error getting user subscriptions:", error);
-    return { subscriptions: [], count: 0, activeCount: 0, userTrialActive: false };
+    return { subscriptions: [], count: 0, activeCount: 0, userTrialActive: false, userTrialEndAt: null, userTrialDaysLeft: null };
   }
 }

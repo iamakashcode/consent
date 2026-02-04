@@ -11,7 +11,7 @@ import {
 import { prisma } from "@/lib/prisma";
 
 /**
- * Create checkout for add-on (e.g. Remove branding - $3/mo)
+ * Create checkout for add-on (e.g. Remove branding - EUR 3/mo)
  * Body: { siteId, addonType: 'remove_branding' }
  */
 export async function POST(req) {
@@ -46,6 +46,14 @@ export async function POST(req) {
     if (!site.subscription) {
       return Response.json(
         { error: "Subscribe to a plan first, then you can add the branding removal add-on." },
+        { status: 400 }
+      );
+    }
+
+    const subStatus = (site.subscription.status || "").toLowerCase();
+    if (subStatus !== "active" && subStatus !== "trial") {
+      return Response.json(
+        { error: "Your plan subscription must be active (or in trial) to add the branding removal add-on." },
         { status: 400 }
       );
     }

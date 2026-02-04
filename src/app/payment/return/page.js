@@ -34,12 +34,42 @@ function PaymentReturnContent() {
     const effectiveTransactionId = transactionId || transactionIdFromStorage;
     const effectiveSiteId = siteIdFromUrl || siteIdFromStorage;
 
-    // Add-on purchase return: redirect to banner with success
+    // Add-on purchase return: verify payment with Paddle first; only on verify success show success and redirect
     if (addonParam === "remove_branding" && redirectParam) {
-      setStatusMessage("✅ Add-on purchased! Branding will be hidden on your banner.");
-      setChecking(false);
-      setRedirecting(true);
-      setTimeout(() => router.push(redirectParam), 1500);
+      const verifyAddon = async () => {
+        const txnId = transactionId || searchParams.get("transaction_id");
+        const sid = searchParams.get("siteId") || (typeof window !== "undefined" ? sessionStorage.getItem("paddle_site_id") : null);
+        if (!txnId) {
+          setStatusMessage("Missing transaction ID. If you completed payment, the add-on will activate shortly.");
+          setChecking(false);
+          return;
+        }
+        setStatusMessage("Verifying payment...");
+        try {
+          const res = await fetch("/api/payment/verify-addon", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transactionId: txnId, siteId: sid }),
+          });
+          const data = await res.json();
+          if (data.success && data.paid) {
+            setStatusMessage("✅ Add-on purchased! Branding will be hidden on your banner.");
+            setRedirecting(true);
+            await update();
+            setTimeout(() => router.push(redirectParam), 1500);
+          } else {
+            setStatusMessage("Payment not completed yet. If you just paid, we'll activate the add-on shortly. Redirecting...");
+            setRedirecting(true);
+            setTimeout(() => router.push(redirectParam), 3000);
+          }
+        } catch (e) {
+          setStatusMessage("Could not verify payment. If you completed payment, the add-on will activate shortly.");
+          setRedirecting(true);
+          setTimeout(() => router.push(redirectParam), 3000);
+        }
+        setChecking(false);
+      };
+      verifyAddon();
       return;
     }
 

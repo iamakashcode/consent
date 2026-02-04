@@ -5,63 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
+import { ADDON_BRANDING_PRICE_EUR, PLAN_DETAILS, PLAN_CURRENCY } from "@/lib/paddle";
 
 const CheckIcon = () => (
   <svg className="w-5 h-5 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
   </svg>
 );
-
-const PLAN_DETAILS = {
-  basic: {
-    name: "Basic",
-    monthly: 5,
-    yearly: 50,
-    description: "Perfect for getting started",
-    features: [
-      "1 domain",
-      "100,000 page views/month",
-      "Basic tracker detection",
-      "Cookie consent banner",
-      "Community support",
-      "14-day free trial",
-    ],
-    popular: false,
-  },
-  starter: {
-    name: "Starter",
-    monthly: 9,
-    yearly: 90,
-    description: "For growing businesses",
-    features: [
-      "1 domain",
-      "300,000 page views/month",
-      "Advanced tracker detection",
-      "Customizable banner",
-      "Email support",
-      "Analytics dashboard",
-      "14-day free trial",
-    ],
-    popular: true,
-  },
-  pro: {
-    name: "Pro",
-    monthly: 20,
-    yearly: 200,
-    description: "For agencies and enterprises",
-    features: [
-      "1 domain",
-      "Unlimited page views",
-      "All tracker types",
-      "White-label banner",
-      "Priority support",
-      "Advanced analytics",
-      "API access",
-      "14-day free trial",
-    ],
-    popular: false,
-  },
-};
 
 function PlansContent() {
   const { data: session, status } = useSession();
@@ -70,6 +20,7 @@ function PlansContent() {
   const [loading, setLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [tab, setTab] = useState("monthly");
+  const [addonChoiceByPlan, setAddonChoiceByPlan] = useState({});
 
   const siteId = searchParams?.get("siteId") || null;
   const domain = searchParams?.get("domain") || null;
@@ -159,6 +110,7 @@ function PlansContent() {
           siteId,
           billingInterval: tab,
           upgrade: isUpgrade,
+          addons: { removeBranding: addonChoiceByPlan?.[planKey] === true },
         }),
       });
 
@@ -323,6 +275,7 @@ function PlansContent() {
         {Object.entries(PLAN_DETAILS).map(([planKey, plan]) => {
           const price = tab === "monthly" ? plan.monthly : plan.yearly;
           const period = tab === "monthly" ? "/month" : "/year";
+          const addonSelected = addonChoiceByPlan?.[planKey] === true;
           const isCurrentPlan = currentSubscription?.plan === planKey;
           const canUpgrade = currentSubscription?.isActive && ["active", "trial"].includes(currentSubscription?.status) && !isCurrentPlan;
           const isNewSubscription = !currentSubscription?.plan || !currentSubscription?.isActive;
@@ -336,7 +289,7 @@ function PlansContent() {
                   ? `Upgrade to ${plan.name}`
                   : isFirstDomain
                     ? "Start 14-day free trial"
-                    : `Subscribe — $${price}${period}`;
+                    : `Subscribe — ${PLAN_CURRENCY} ${price}${period}`;
           const disabled = !siteId || loading || isCurrentPlan;
           return (
             <div
@@ -364,11 +317,11 @@ function PlansContent() {
 
               <div className="mb-6">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-gray-900">${price}</span>
+                  <span className="text-4xl font-bold text-gray-900">{PLAN_CURRENCY} {price}</span>
                   <span className="text-gray-500">{period}</span>
                 </div>
                 <p className="text-xs text-green-600 font-medium mt-1">
-                  {isFirstDomain && (isNewSubscription || canUpgrade) ? "14-day free trial • $0 now" : !isFirstDomain && isNewSubscription ? `$${price}${period} — no trial for extra domains` : "—"}
+                  {isFirstDomain && (isNewSubscription || canUpgrade) ? `14-day free trial • ${PLAN_CURRENCY} 0 now` : !isFirstDomain && isNewSubscription ? `${PLAN_CURRENCY} ${price}${period} — no trial for extra domains` : "—"}
                 </p>
               </div>
 
@@ -380,6 +333,30 @@ function PlansContent() {
                   </li>
                 ))}
               </ul>
+
+              <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                    checked={addonSelected}
+                    onChange={(e) =>
+                      setAddonChoiceByPlan((prev) => ({ ...(prev || {}), [planKey]: e.target.checked }))
+                    }
+                    disabled={disabled}
+                  />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Remove branding (optional)</p>
+                    <p className="text-sm text-gray-700">
+                      Checkout me add hoga. Isse banner se &quot;Powered by Cookie Access&quot; remove ho jayega.{" "}
+                      <span className="font-semibold text-gray-900">
+                        + {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}
+                        {tab === "monthly" ? "/month" : "/year"}
+                      </span>
+                    </p>
+                  </div>
+                </label>
+              </div>
 
               <button
                 onClick={() => !disabled && handlePlanSelect(planKey)}

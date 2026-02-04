@@ -24,67 +24,83 @@ if (typeof console !== "undefined") {
 }
 
 // Trial: only first domain gets 14-day trial (see create-order: trialDays = 0 for upgrade + second domain)
-// Plan pricing (in USD cents)
+// Single source for all plans – used by plans page, billing, create-order, start-trial, Paddle, views API
+
+export const PLAN_CURRENCY = "EUR";
+
+// Plan pricing in cents (for Paddle API): Basic EUR 7, Starter EUR 15, Pro EUR 20
 export const PLAN_PRICING = {
-  basic: 500,   // $5 = 500 cents
-  starter: 900, // $9 = 900 cents
-  pro: 2000,    // $20 = 2000 cents
+  basic: 700,    // EUR 7
+  starter: 1500, // EUR 15
+  pro: 2000,     // EUR 20
 };
 
-// Trial period in days - ALL plans get 14-day user-based free trial
 export const PLAN_TRIAL_DAYS = {
   basic: 14,
   starter: 14,
   pro: 14,
 };
 
-// Add-on: Remove branding from banner ($3/month)
-export const ADDON_BRANDING_PRICE_CENTS = 300; // $3
+// Add-on: Remove branding – EUR 3/month, available with any plan
+export const ADDON_BRANDING_PRICE_CENTS = 300; // EUR 3
+export const ADDON_BRANDING_PRICE_EUR = 3;
 export const ADDON_BRANDING_PRODUCT_NAME = "remove_branding";
 
-// Plan page view limits (per domain per month)
+// Plan page view limits (per domain per month) – used by views API and can-customize
 export const PLAN_PAGE_VIEW_LIMITS = {
-  basic: 10,    // 100,000 page views per month
-  starter: 300000,  // 300,000 page views per month
-  pro: Infinity,    // Unlimited page views
+  basic: 300000,   // 300,000 page views per month
+  starter: 700000, // 700,000 page views per month
+  pro: Infinity,   // Unlimited
 };
 
-// Plan details for display
+// Single PLAN_DETAILS for display everywhere (plans, billing, start-trial, landing, pricing)
 export const PLAN_DETAILS = {
   basic: {
     name: "Basic",
-    price: 5,
-    pageViews: 10,
+    price: 7,
+    monthly: 7,
+    yearly: 70, // 10 months price
+    pageViews: 300000,
     trialDays: 14,
+    description: "Perfect for getting started",
+    popular: false,
     features: [
       "1 domain",
-      "100,000 page views/month",
+      "300,000 page views/month",
       "Basic tracker detection",
       "Cookie consent banner",
       "Community support",
-      "14-day free trial",
+      "14-day free trial (first domain only)",
     ],
   },
   starter: {
     name: "Starter",
-    price: 9,
-    pageViews: 300000,
+    price: 15,
+    monthly: 15,
+    yearly: 150,
+    pageViews: 700000,
     trialDays: 14,
+    description: "For growing businesses",
+    popular: true,
     features: [
       "1 domain",
-      "300,000 page views/month",
+      "700,000 page views/month",
       "Advanced tracker detection",
       "Customizable banner",
       "Email support",
       "Analytics dashboard",
-      "14-day free trial",
+      "14-day free trial (first domain only)",
     ],
   },
   pro: {
     name: "Pro",
     price: 20,
+    monthly: 20,
+    yearly: 200,
     pageViews: Infinity,
     trialDays: 14,
+    description: "For agencies and enterprises",
+    popular: false,
     features: [
       "1 domain",
       "Unlimited page views",
@@ -93,7 +109,7 @@ export const PLAN_DETAILS = {
       "Priority support",
       "Advanced analytics",
       "API access",
-      "14-day free trial",
+      "14-day free trial (first domain only)",
     ],
   },
 };
@@ -198,21 +214,31 @@ export async function getOrCreatePaddleAddonProduct(addonName) {
 }
 
 /**
- * Get or create Paddle price for add-on (monthly, no trial)
+ * Get or create Paddle price for add-on (no trial)
  */
-export async function getOrCreatePaddleAddonPrice(productId, amountCents) {
+export async function getOrCreatePaddleAddonPrice(productId, amountCents, billingInterval = "monthly") {
   try {
+    const interval = billingInterval === "yearly" ? "year" : "month";
+    const frequency = 1;
+    const finalAmount = billingInterval === "yearly"
+      ? Math.round(amountCents * 10)
+      : amountCents;
+
     const prices = await paddleRequest("GET", `/prices?product_id=${productId}`);
     const existing = prices.data?.find(
-      (p) => p.billing_cycle?.interval === "month" && p.unit_price?.amount === String(amountCents)
+      (p) =>
+        p.billing_cycle?.interval === interval &&
+        p.billing_cycle?.frequency === frequency &&
+        p.unit_price?.amount === String(finalAmount) &&
+        (!p.trial_period || !p.trial_period.frequency)
     );
     if (existing) return existing;
     const price = await paddleRequest("POST", "/prices", {
       product_id: productId,
-      description: "Monthly",
-      name: "Monthly",
-      unit_price: { amount: String(amountCents), currency_code: "USD" },
-      billing_cycle: { interval: "month", frequency: 1 },
+      description: billingInterval === "yearly" ? "Yearly" : "Monthly",
+      name: billingInterval === "yearly" ? "Yearly" : "Monthly",
+      unit_price: { amount: String(finalAmount), currency_code: PLAN_CURRENCY },
+      billing_cycle: { interval: interval, frequency: frequency },
       tax_mode: "account_setting",
     });
     return price.data;
@@ -266,7 +292,7 @@ export async function getOrCreatePaddlePrice(productId, planName, amount, billin
       name: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan - ${periodLabel}${trialLabel}`,
       unit_price: {
         amount: amountInCents,
-        currency_code: "USD",
+        currency_code: PLAN_CURRENCY,
       },
       billing_cycle: {
         interval: interval,
@@ -320,24 +346,25 @@ export async function getOrCreatePaddleCustomer(email, name) {
  * Pass plan and billingInterval so webhook can update subscription only after payment success.
  * Docs: https://developer.paddle.com/api-reference/overview
  */
-export async function createPaddleTransaction(priceId, customerId, siteId, domain, plan = null, billingInterval = null, isUpgrade = false) {
+export async function createPaddleTransaction(priceId, customerId, siteId, domain, plan = null, billingInterval = null, isUpgrade = false, options = {}) {
   try {
     const customData = { siteId, domain };
     if (plan) customData.plan = plan;
     if (billingInterval) customData.billingInterval = billingInterval;
     if (isUpgrade) customData.upgrade = true;
+    if (options.addonRemoveBranding) customData.addonRemoveBranding = true;
+
+    const items = [{ price_id: priceId, quantity: 1 }];
+    if (options.addonPriceId) {
+      items.push({ price_id: options.addonPriceId, quantity: 1 });
+    }
 
     // Create transaction with recurring price - Paddle will create subscription on payment
     const transaction = await paddleRequest("POST", "/transactions", {
-      items: [
-        {
-          price_id: priceId,
-          quantity: 1,
-        },
-      ],
+      items,
       customer_id: customerId,
       collection_mode: "automatic",
-      currency_code: "USD",
+      currency_code: PLAN_CURRENCY,
       custom_data: customData,
       // Optionally set checkout URL - if null, Paddle uses default
       // If we want hosted checkout, we can pass null or omit this
@@ -377,13 +404,17 @@ export async function createPaddleTransaction(priceId, customerId, siteId, domai
  * Create Paddle transaction for pending domain (Site created only when payment succeeds)
  * custom_data: { pendingDomain: true, pendingDomainId, siteId, domain, plan, billingInterval }
  */
-export async function createPaddleTransactionForPendingDomain(priceId, customerId, pendingDomainId, siteId, domain, plan, billingInterval) {
+export async function createPaddleTransactionForPendingDomain(priceId, customerId, pendingDomainId, siteId, domain, plan, billingInterval, options = {}) {
   try {
+    const items = [{ price_id: priceId, quantity: 1 }];
+    if (options.addonPriceId) {
+      items.push({ price_id: options.addonPriceId, quantity: 1 });
+    }
     const transaction = await paddleRequest("POST", "/transactions", {
-      items: [{ price_id: priceId, quantity: 1 }],
+      items,
       customer_id: customerId,
       collection_mode: "automatic",
-      currency_code: "USD",
+      currency_code: PLAN_CURRENCY,
       custom_data: {
         pendingDomain: true,
         pendingDomainId: String(pendingDomainId),
@@ -391,6 +422,7 @@ export async function createPaddleTransactionForPendingDomain(priceId, customerI
         domain,
         plan,
         billingInterval,
+        ...(options.addonRemoveBranding ? { addonRemoveBranding: true } : {}),
       },
       checkout: { url: null },
     });
@@ -410,7 +442,7 @@ export async function createPaddleAddonTransaction(priceId, customerId, siteId, 
       items: [{ price_id: priceId, quantity: 1 }],
       customer_id: customerId,
       collection_mode: "automatic",
-      currency_code: "USD",
+      currency_code: PLAN_CURRENCY,
       custom_data: { siteId, addonType },
       checkout: { url: null },
     });

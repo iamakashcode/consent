@@ -284,6 +284,33 @@ async function handleTransactionCompleted(event) {
   const handled = await processPendingDomainPayment(event);
   if (handled) return;
 
+  // Bundled add-on with plan checkout (remove branding) – apply only after payment success
+  if ((customData.addonRemoveBranding === true || customData.addonRemoveBranding === "true") && customData.siteId) {
+    try {
+      await prisma.subscription.updateMany({
+        where: { siteId: customData.siteId },
+        data: {
+          removeBrandingAddon: true,
+          paddleAddonSubscriptionId: subscriptionId || undefined,
+          updatedAt: new Date(),
+        },
+      });
+      const site = await prisma.site.findUnique({
+        where: { id: customData.siteId },
+        select: { siteId: true },
+      });
+      if (site?.siteId) {
+        import("@/lib/script-generator")
+          .then(({ syncSiteScriptWithSubscription }) => syncSiteScriptWithSubscription(site.siteId))
+          .catch((err) => console.error("[Webhook] CDN sync after bundled add-on:", err));
+      }
+      console.log(`[Webhook] Bundled add-on remove_branding activated for siteId: ${customData.siteId}`);
+    } catch (err) {
+      console.error("[Webhook] Failed to activate bundled add-on:", err);
+    }
+    // continue – the same transaction also activates/updates the main subscription
+  }
+
   // Add-on purchase (e.g. remove branding) - custom_data has siteId and addonType
   if (customData.addonType === "remove_branding" && customData.siteId) {
     try {

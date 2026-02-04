@@ -5,18 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
+import { ADDON_BRANDING_PRICE_EUR, PLAN_DETAILS, PLAN_CURRENCY } from "@/lib/paddle";
 
 const CheckIcon = () => (
   <svg className="w-5 h-5 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
   </svg>
 );
-
-const PLANS = {
-  basic: { name: "Basic", monthly: 5, yearly: 50, features: ["1 domain", "100,000 page views/month", "Basic tracker detection", "Cookie consent banner", "14-day free trial"] },
-  starter: { name: "Starter", monthly: 9, yearly: 90, features: ["1 domain", "300,000 page views/month", "Advanced tracker detection", "Customizable banner", "Email support", "14-day free trial"], popular: true },
-  pro: { name: "Pro", monthly: 20, yearly: 200, features: ["1 domain", "Unlimited page views", "All tracker types", "White-label banner", "Priority support", "14-day free trial"] },
-};
 
 function StartTrialContent() {
   const { data: session, status } = useSession();
@@ -34,6 +29,7 @@ function StartTrialContent() {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [error, setError] = useState("");
   const [isFirstDomain, setIsFirstDomain] = useState(true);
+  const [addonChoiceByPlan, setAddonChoiceByPlan] = useState({});
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -99,7 +95,7 @@ function StartTrialContent() {
       const res = await fetch("/api/payment/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: planKey, siteId, billingInterval: tab }),
+        body: JSON.stringify({ plan: planKey, siteId, billingInterval: tab, addons: { removeBranding: addonChoiceByPlan?.[planKey] === true } }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -151,7 +147,7 @@ function StartTrialContent() {
       <div className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Choose your plan</h1>
         <p className="text-gray-500 mb-6">
-          Select one plan to start your 14-day free trial on your first domain. You will be taken to checkout (payment $0 during trial).
+          Select one plan to start your 14-day free trial on your first domain. You will be taken to checkout ({`payment ${PLAN_CURRENCY} 0 during trial for first domain`}).
         </p>
 
         {profile?.websiteUrl && (
@@ -205,9 +201,10 @@ function StartTrialContent() {
             </div>
 
             <div className="grid md:grid-cols-3 gap-6">
-              {Object.entries(PLANS).map(([planKey, plan]) => {
+              {Object.entries(PLAN_DETAILS).map(([planKey, plan]) => {
                 const price = tab === "monthly" ? plan.monthly : plan.yearly;
                 const period = tab === "monthly" ? "/month" : "/year";
+                const addonSelected = addonChoiceByPlan?.[planKey] === true;
                 return (
                   <div
                     key={planKey}
@@ -221,10 +218,10 @@ function StartTrialContent() {
                     )}
                     <h3 className="text-xl font-semibold text-gray-900 mb-1">{plan.name}</h3>
                     <div className="mb-4">
-                      <span className="text-3xl font-bold text-gray-900">${price}</span>
+                      <span className="text-3xl font-bold text-gray-900">{PLAN_CURRENCY} {price}</span>
                       <span className="text-gray-500">{period}</span>
                     </div>
-                    <p className="text-xs text-green-600 font-medium mb-4">{isFirstDomain ? "14-day free trial • $0 now" : `$${price}${period} — no trial for extra domains`}</p>
+                    <p className="text-xs text-green-600 font-medium mb-4">{isFirstDomain ? `14-day free trial • ${PLAN_CURRENCY} 0 now` : `${PLAN_CURRENCY} ${price}${period} — no trial for extra domains`}</p>
                     <ul className="space-y-2 mb-6">
                       {plan.features.map((f, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
@@ -233,6 +230,31 @@ function StartTrialContent() {
                         </li>
                       ))}
                     </ul>
+
+                    <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          checked={addonSelected}
+                          onChange={(e) =>
+                            setAddonChoiceByPlan((prev) => ({ ...(prev || {}), [planKey]: e.target.checked }))
+                          }
+                          disabled={starting}
+                        />
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">Remove branding (optional)</p>
+                          <p className="text-sm text-gray-700">
+                            Checkout me add hoga. Isse banner se &quot;Powered by Cookie Access&quot; remove ho jayega.{" "}
+                            <span className="font-semibold text-gray-900">
+                              + {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}
+                              {tab === "monthly" ? "/month" : "/year"}
+                            </span>
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
                     <button
                       onClick={() => handlePlanSelect(planKey)}
                       disabled={starting}
@@ -241,7 +263,7 @@ function StartTrialContent() {
                         : "bg-gray-100 text-gray-900 hover:bg-gray-200"
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
-                      {starting && selectedPlan === planKey ? "Opening checkout…" : isFirstDomain ? "Start 14-day free trial" : `Subscribe — $${price}${period}`}
+                      {starting && selectedPlan === planKey ? "Opening checkout…" : isFirstDomain ? "Start 14-day free trial" : `Subscribe — ${PLAN_CURRENCY} ${price}${period}`}
                     </button>
                   </div>
                 );

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { PLAN_DETAILS, PLAN_CURRENCY } from "@/lib/paddle";
 
 // Icons as inline SVGs for simplicity
 const CheckIcon = () => (
@@ -338,100 +339,52 @@ export default function HomePage() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {[
-              {
-                name: "Basic",
-                price: billingCycle === "monthly" ? "$5" : "$48",
-                period: billingCycle === "monthly" ? "/month" : "/year",
-                description: "Perfect for getting started",
-                features: [
-                  "1 domain",
-                  "100,000 page views/month",
-                  "Basic tracker detection",
-                  "Cookie consent banner",
-                  "Community support",
-                  "14-day free trial",
-                ],
-                cta: "Start Free Trial",
-                popular: false,
-              },
-              {
-                name: "Starter",
-                price: billingCycle === "monthly" ? "$9" : "$86",
-                period: billingCycle === "monthly" ? "/month" : "/year",
-                description: "For growing businesses",
-                features: [
-                  "1 domain",
-                  "300,000 page views/month",
-                  "Advanced tracker detection",
-                  "Customizable banner",
-                  "Email support",
-                  "Analytics dashboard",
-                  "14-day free trial",
-                ],
-                cta: "Start Free Trial",
-                popular: true,
-              },
-              {
-                name: "Pro",
-                price: billingCycle === "monthly" ? "$20" : "$192",
-                period: billingCycle === "monthly" ? "/month" : "/year",
-                description: "For agencies and enterprises",
-                features: [
-                  "1 domain",
-                  "Unlimited page views",
-                  "All tracker types",
-                  "White-label banner",
-                  "Priority support",
-                  "Advanced analytics",
-                  "API access",
-                  "7-day free trial",
-                ],
-                cta: "Start Free Trial",
-                popular: false,
-              },
-            ].map((plan, index) => (
-              <div
-                key={index}
-                className={`relative bg-white rounded-xl p-8 border-2 transition-all ${plan.popular ? "border-indigo-500 shadow-xl scale-105" : "border-gray-200 hover:border-gray-300"
-                  }`}
-              >
-                {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                    <span className="bg-indigo-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
-                      Most Popular
-                    </span>
-                  </div>
-                )}
-
-                <h3 className="text-xl font-semibold text-gray-900 mb-1">{plan.name}</h3>
-                <p className="text-sm text-gray-500 mb-4">{plan.description}</p>
-
-                <div className="mb-6">
-                  <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
-                  <span className="text-gray-500">{plan.period}</span>
-                </div>
-
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((feature, idx) => (
-                    <li key={idx} className="flex items-start gap-3 text-sm">
-                      <CheckIcon />
-                      <span className="text-gray-600">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <Link
-                  href="/signup"
-                  className={`block w-full py-3 text-center font-medium rounded-lg transition-colors ${plan.popular
-                      ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            {Object.entries(PLAN_DETAILS).map(([planKey, plan], index) => {
+              const price = billingCycle === "monthly" ? plan.monthly : plan.yearly;
+              const period = billingCycle === "monthly" ? "/month" : "/year";
+              return (
+                <div
+                  key={index}
+                  className={`relative bg-white rounded-xl p-8 border-2 transition-all ${plan.popular ? "border-indigo-500 shadow-xl scale-105" : "border-gray-200 hover:border-gray-300"
                     }`}
                 >
-                  {plan.cta}
-                </Link>
-              </div>
-            ))}
+                  {plan.popular && (
+                    <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                      <span className="bg-indigo-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
+                        Most Popular
+                      </span>
+                    </div>
+                  )}
+
+                  <h3 className="text-xl font-semibold text-gray-900 mb-1">{plan.name}</h3>
+                  <p className="text-sm text-gray-500 mb-4">{plan.description}</p>
+
+                  <div className="mb-6">
+                    <span className="text-4xl font-bold text-gray-900">{PLAN_CURRENCY} {price}</span>
+                    <span className="text-gray-500">{period}</span>
+                  </div>
+
+                  <ul className="space-y-3 mb-8">
+                    {plan.features.map((feature, idx) => (
+                      <li key={idx} className="flex items-start gap-3 text-sm">
+                        <CheckIcon />
+                        <span className="text-gray-600">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Link
+                    href="/signup"
+                    className={`block w-full py-3 text-center font-medium rounded-lg transition-colors ${plan.popular
+                      ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                  >
+                    Start Free Trial
+                  </Link>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>

@@ -17,12 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AlertTriangle, CreditCard, Clock, CheckCircle2, XCircle } from "lucide-react";
-
-const PLAN_DETAILS = {
-  basic: { name: "Basic", price: 5, pageViews: 100000 },
-  starter: { name: "Starter", price: 9, pageViews: 300000 },
-  pro: { name: "Pro", price: 20, pageViews: Infinity },
-};
+import { PLAN_DETAILS, PLAN_CURRENCY } from "@/lib/paddle";
 
 function BillingContent() {
   const { data: session, status } = useSession();
@@ -164,7 +159,7 @@ function BillingContent() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold tracking-tight">Billing & Subscriptions</h1>
         <p className="text-muted-foreground mt-1">
-          Manage your domain subscriptions and billing. All plans include a <strong>14-day free trial</strong>.
+          Manage your domain subscriptions and billing. All plans include a <strong>14-day free trial</strong> (first domain only).
         </p>
       </div>
 
@@ -208,7 +203,7 @@ function BillingContent() {
             <CardDescription>Monthly Total</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">${totalMonthly}</p>
+            <p className="text-3xl font-bold">{PLAN_CURRENCY} {totalMonthly}</p>
             <p className="text-xs text-muted-foreground mt-1">billed monthly</p>
           </CardContent>
         </Card>
@@ -266,7 +261,7 @@ function BillingContent() {
                         </div>
                         <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                           <span><strong className="text-foreground">{planDetails?.name}</strong> Plan</span>
-                          <span>${planDetails?.price}/{sub.subscription?.billingInterval === "yearly" ? "year" : "month"}</span>
+                          <span>{PLAN_CURRENCY} {planDetails?.price}/{sub.subscription?.billingInterval === "yearly" ? "year" : "month"}</span>
                           <span>
                             {planDetails?.pageViews === Infinity ? "Unlimited" : planDetails?.pageViews?.toLocaleString()} page views
                           </span>

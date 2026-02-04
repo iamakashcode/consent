@@ -2,6 +2,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
 import {
   PLAN_PRICING,
+  ADDON_BRANDING_PRICE_CENTS,
+  ADDON_BRANDING_PRODUCT_NAME,
   getOrCreatePaddleProduct,
   getOrCreatePaddlePrice,
   getOrCreatePaddleCustomer,
@@ -10,6 +12,8 @@ import {
   fetchPaddleSubscription,
   getSubscriptionCheckoutUrl,
   cancelPaddleSubscription,
+  getOrCreatePaddleAddonProduct,
+  getOrCreatePaddleAddonPrice,
 } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
 
@@ -26,7 +30,8 @@ export async function POST(req) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { plan, siteId, billingInterval = "monthly", upgrade = false } = await req.json();
+    const { plan, siteId, billingInterval = "monthly", upgrade = false, addons = {} } = await req.json();
+    const addonRemoveBranding = Boolean(addons?.removeBranding);
 
     // Validate plan
     if (!plan || !["basic", "starter", "pro"].includes(plan)) {
@@ -197,6 +202,21 @@ export async function POST(req) {
       );
     }
 
+    // Optional add-on (remove branding) – can be purchased together with plan checkout
+    let addonPrice = null;
+    if (addonRemoveBranding) {
+      try {
+        const addonProduct = await getOrCreatePaddleAddonProduct(ADDON_BRANDING_PRODUCT_NAME);
+        addonPrice = await getOrCreatePaddleAddonPrice(addonProduct.id, ADDON_BRANDING_PRICE_CENTS, billingInterval);
+      } catch (error) {
+        console.error("[Payment] Failed to get/create add-on price:", error);
+        return Response.json(
+          { error: "Failed to set up add-on price. Please try again." },
+          { status: 500 }
+        );
+      }
+    }
+
     // Get or create Paddle customer
     let paddleCustomer;
     try {
@@ -231,7 +251,8 @@ export async function POST(req) {
           pendingDomain.siteId,
           pendingDomain.domain,
           plan,
-          billingInterval
+          billingInterval,
+          addonPrice?.id ? { addonPriceId: addonPrice.id, addonRemoveBranding: true } : {}
         );
         await prisma.pendingDomain.update({
           where: { id: pendingDomain.id },
@@ -285,7 +306,8 @@ export async function POST(req) {
         site.domain,
         plan,
         billingInterval,
-        isUpgradeFlow
+        isUpgradeFlow,
+        addonPrice?.id ? { addonPriceId: addonPrice.id, addonRemoveBranding: true } : {}
       );
     } catch (error) {
       console.error("[Payment] Failed to create Paddle transaction:", error);
