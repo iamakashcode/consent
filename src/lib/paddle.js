@@ -229,6 +229,7 @@ export async function getOrCreatePaddleAddonPrice(productId, amountCents, billin
 
     const prices = await paddleRequest("GET", `/prices?product_id=${productId}`);
     const existing = prices.data?.find((p) => {
+      if (p.tax_mode !== "external") return false;
       if (p.billing_cycle?.interval !== interval || p.billing_cycle?.frequency !== frequency) return false;
       if (p.unit_price?.amount !== String(finalAmount)) return false;
       if (withTrial) {
@@ -244,7 +245,7 @@ export async function getOrCreatePaddleAddonPrice(productId, amountCents, billin
       name: withTrial ? `Monthly (${trialDays}-day trial)` : (billingInterval === "yearly" ? "Yearly" : "Monthly"),
       unit_price: { amount: String(finalAmount), currency_code: PLAN_CURRENCY },
       billing_cycle: { interval: interval, frequency: frequency },
-      tax_mode: "account_setting",
+      tax_mode: "external", // Show exact EUR (e.g. 3) — no Paddle tax so amount = what customer pays
     };
     if (withTrial) {
       priceData.trial_period = { interval: "day", frequency: trialDays };
@@ -279,6 +280,7 @@ export async function getOrCreatePaddlePrice(productId, planName, amount, billin
 
     const prices = await paddleRequest("GET", `/prices?product_id=${productId}`);
     const existingPrice = prices.data?.find((p) => {
+      if (p.tax_mode !== "external") return false; // only reuse prices that show exact EUR (no Paddle tax)
       if (p.billing_cycle?.interval !== interval || p.billing_cycle?.frequency !== frequency) return false;
       if (p.unit_price?.amount !== String(finalAmount)) return false;
       if (withTrial) {
@@ -307,7 +309,7 @@ export async function getOrCreatePaddlePrice(productId, planName, amount, billin
         interval: interval,
         frequency: frequency,
       },
-      tax_mode: "account_setting",
+      tax_mode: "external", // Show exact EUR (e.g. 20) — no Paddle tax so amount = what customer pays
     };
 
     if (withTrial) {
