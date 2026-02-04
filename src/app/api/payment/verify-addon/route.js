@@ -36,7 +36,8 @@ export async function POST(req) {
     }
 
     const txnStatus = (transaction.status || "").toLowerCase();
-    if (txnStatus !== "paid" && txnStatus !== "completed") {
+    const successStatuses = ["paid", "completed", "ready"];
+    if (!successStatuses.includes(txnStatus)) {
       return Response.json({
         success: false,
         paid: false,

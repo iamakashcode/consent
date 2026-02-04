@@ -120,26 +120,32 @@ export async function POST(req) {
       );
     }
 
+    // First domain = only one site for this user (trial eligible); second+ = active only
+    const userSitesCount = await prisma.site.count({ where: { userId: site.userId } });
+    const isFirstDomain = userSitesCount === 1;
+
     switch (paddleStatus) {
       case "active":
-        // If subscription is active in Paddle, check if user trial is active
-        // If user trial is active, keep as trial; otherwise set to active
-        if (site.user?.trialEndAt && new Date() < new Date(site.user.trialEndAt)) {
-          // User trial is active
+        // If subscription is active in Paddle, check if user trial is active (first domain only)
+        if (site.user?.trialEndAt && new Date() < new Date(site.user.trialEndAt) && isFirstDomain) {
           newStatus = "trial";
-          shouldStartTrial = false; // Already active
+          shouldStartTrial = false;
         } else if (dbSubscription.status === "pending") {
-          // Payment just completed, start user trial
-          newStatus = "trial";
-          shouldStartTrial = true;
+          // Payment just completed: first domain -> trial; second+ domain -> active
+          if (isFirstDomain) {
+            newStatus = "trial";
+            shouldStartTrial = true;
+          } else {
+            newStatus = "active";
+            shouldStartTrial = false;
+          }
         } else {
-          // User trial ended, subscription is active
           newStatus = "active";
         }
         break;
       case "trialing":
-        newStatus = "trial";
-        shouldStartTrial = true;
+        newStatus = isFirstDomain ? "trial" : "active";
+        shouldStartTrial = isFirstDomain;
         break;
       case "past_due":
       case "paused":

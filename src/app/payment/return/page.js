@@ -149,17 +149,20 @@ function PaymentReturnContent() {
 
         setStatusMessage("Syncing subscription status from Paddle...");
 
-        // Use the final subscription ID (from URL or sessionStorage)
+        // Use the final subscription ID (from URL or sessionStorage); pass siteId so non-pending (existing site) flow finds subscription
         const subIdToCheck = finalSubscriptionId;
 
-        // First, sync subscription status directly from Paddle
+        // First, sync subscription status directly from Paddle (siteId helps for paid existing-site flow)
         try {
           const syncResponse = await fetch("/api/payment/sync-subscription", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ subscriptionId: subIdToCheck }),
+            body: JSON.stringify({
+              subscriptionId: subIdToCheck,
+              ...(effectiveSiteId ? { siteId: effectiveSiteId } : {}),
+            }),
           });
 
           if (syncResponse.ok) {
@@ -271,7 +274,10 @@ function PaymentReturnContent() {
                   headers: {
                     "Content-Type": "application/json",
                   },
-                  body: JSON.stringify({ subscriptionId: subIdToCheck }),
+                  body: JSON.stringify({
+                    subscriptionId: subIdToCheck,
+                    ...(effectiveSiteId ? { siteId: effectiveSiteId } : {}),
+                  }),
                 });
 
                 if (syncResponse.ok) {
