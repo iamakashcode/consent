@@ -1307,7 +1307,8 @@ function showPreferencesModal(bannerEl){
     '<button id="cf-prefs-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept All'}</button>'+
     (${showReject} ? '<button id="cf-prefs-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject All'}</button>' : '')+
     '<button id="cf-prefs-save" style="background:#3b82f6;color:#fff;border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;">Save preferences</button>'+
-    '</div><p style="text-align:center;font-size:14px;color:#212121;line-height:1.5;padding-top:12px;padding-bottom:12px;">Powered by <span style="font-weight:600;">Cookie Access</span></p></div>';
+    '</div>'+
+    ${showBranding ? `'<p style="text-align:center;font-size:16px;color:#212121;line-height:1.5;padding-top:16px;margin:0px">Powered by <span style="font-weight:600;">Cookie Access</span></p>'+` : ''}
   modal.onclick=function(e){ if(e.target===modal){ modal.style.display='none'; } };
   document.body.appendChild(modal);
   updatePrefsToggles(modal);
