@@ -85,10 +85,21 @@ export async function POST(req, { params }) {
     const rawIp = getClientIp(req);
     const visitorIp = anonymizeIp(rawIp);
 
+    // Categories: { analytics: boolean, marketing: boolean } for granular consent
+    let categories = null;
+    if (body.categories && typeof body.categories === "object" && status === "accepted") {
+      const cat = body.categories;
+      categories = {
+        analytics: !!cat.analytics,
+        marketing: !!cat.marketing,
+      };
+    }
+
     const log = await prisma.consentLog.create({
       data: {
         siteId: site.id,
         status,
+        categories: categories,
         visitorIp: visitorIp || null,
         pageUrl: pageUrl || null,
       },
@@ -149,6 +160,7 @@ export async function GET(req, { params }) {
         select: {
           id: true,
           status: true,
+          categories: true,
           visitorIp: true,
           pageUrl: true,
           createdAt: true,

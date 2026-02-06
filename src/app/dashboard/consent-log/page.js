@@ -192,6 +192,7 @@ function ConsentLogContent() {
                   <TableRow>
                     <TableHead>Consent ID</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Categories</TableHead>
                     <TableHead>Date &amp; Time</TableHead>
                     <TableHead>Visitor IP</TableHead>
                     <TableHead>Page URL</TableHead>
@@ -210,6 +211,18 @@ function ConsentLogContent() {
                         >
                           {log.status === "accepted" ? "Accepted" : "Rejected"}
                         </span>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {log.categories ? (
+                          <span className="text-muted-foreground">
+                            {[
+                              log.categories.analytics && "Analytics",
+                              log.categories.marketing && "Marketing",
+                            ].filter(Boolean).join(", ") || "None"}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">All</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">{formatDate(log.createdAt)}</TableCell>
                       <TableCell className="font-mono text-sm text-muted-foreground">{log.visitorIp || "—"}</TableCell>

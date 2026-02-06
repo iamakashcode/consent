@@ -120,13 +120,14 @@ model SitePathViewCount {
 }
 
 model ConsentLog {
-  id        String   @id @default(cuid())
-  siteId    String
-  status    String // "accepted" | "rejected"
-  visitorIp String?
-  pageUrl   String?  @db.Text
-  createdAt DateTime @default(now())
-  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  siteId     String
+  status     String   // "accepted" | "rejected"
+  categories Json?    // { analytics: boolean, marketing: boolean } when granular consent
+  visitorIp  String?
+  pageUrl    String?  @db.Text
+  createdAt  DateTime @default(now())
+  site       Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId])
   @@index([siteId, createdAt])

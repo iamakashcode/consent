@@ -62,23 +62,76 @@ var TRACKER_CODE_PATTERNS=[
   '_linkedin','linkedininsight','_linkedin_data_partner_ids'
 ];
 
+var ANALYTICS_PATTERNS=['google-analytics','googletagmanager','gtag/js','gtag','analytics.js','ga.js','/gtm.js','clarity.ms','hotjar','static.hotjar','mixpanel','amplitude','segment','segment.io','heapanalytics','fullstory','mouseflow','crazyegg','lucky-orange','inspectlet','logrocket','omniture','adobe.com/analytics'];
+var MARKETING_PATTERNS=['facebook.net','facebook.com/tr','fbevents.js','connect.facebook','facebook.com','fbcdn.net','fbstatic','facebook','google.com/pagead','googleadservices','googlesyndication','doubleclick','analytics.twitter','static.ads-twitter','t.co/i/adsct','snap.licdn','linkedin.com/px','ads.linkedin','analytics.tiktok','tiktok.com/i18n','pintrk','ct.pinterest','sc-static.net','tr.snapchat','bing.com/bat'];
+var ANALYTICS_CODE=['gtag(','gtag.push','ga(','ga.push','_gaq.push','datalayer.push','analytics.track','analytics.page','analytics.identify','mixpanel.track','mixpanel.identify','amplitude.','amplitude.getinstance','hj(','hj.track','clarity(','clarity.identify'];
+var MARKETING_CODE=['fbq(','fbq.push','_fbq','fbq.init','fbq.track','fbq.trackcustom','fbevents','facebook pixel','meta pixel','pintrk(','pintrk.track','twq(','twq.track','snaptr(','snaptr.track','ttq.','ttq.track','_linkedin','linkedininsight','_linkedin_data_partner_ids'];
+
 /* ======================================================
    HELPERS
 ====================================================== */
 function log(msg){if(DEBUG)console.log('[ConsentBlock]',msg);}
 
+function getTrackerCategoryFromUrl(url){
+  if(!url)return null;
+  var u=url.toLowerCase();
+  for(var i=0;i<ANALYTICS_PATTERNS.length;i++){ if(u.indexOf(ANALYTICS_PATTERNS[i])!==-1)return 'analytics'; }
+  for(var i=0;i<MARKETING_PATTERNS.length;i++){ if(u.indexOf(MARKETING_PATTERNS[i])!==-1)return 'marketing'; }
+  return 'marketing';
+}
+function getTrackerCategoryFromCode(code){
+  if(!code)return null;
+  var c=code.toLowerCase();
+  for(var i=0;i<ANALYTICS_CODE.length;i++){ if(c.indexOf(ANALYTICS_CODE[i])!==-1)return 'analytics'; }
+  for(var i=0;i<MARKETING_CODE.length;i++){ if(c.indexOf(MARKETING_CODE[i])!==-1)return 'marketing'; }
+  return 'marketing';
+}
+function getTrackerCategory(url,code){
+  var fromUrl=getTrackerCategoryFromUrl(url);
+  var fromCode=getTrackerCategoryFromCode(code);
+  return fromUrl||fromCode||'marketing';
+}
+
+function getConsentData(){
+  try{
+    var raw=localStorage.getItem(CONSENT_KEY);
+    if(raw==='rejected')return {rejected:true,categories:{analytics:false,marketing:false}};
+    if(raw==='accepted')return {accepted:true,categories:{analytics:true,marketing:true}};
+    if(raw&&raw.charAt(0)==='{'){
+      try{
+        var obj=JSON.parse(raw);
+        if(obj&&typeof obj==='object'){
+          return {
+            accepted:false,
+            rejected:false,
+            categories:{
+              analytics:!!obj.analytics,
+              marketing:!!obj.marketing
+            }
+          };
+        }
+      }catch(e){}
+    }
+  }catch(e){}
+  return {rejected:false,accepted:false,categories:{analytics:false,marketing:false}};
+}
+function hasConsentForCategory(cat){
+  if(window.__consentGiven===true)return true;
+  var d=getConsentData();
+  if(d.rejected)return false;
+  if(d.accepted)return true;
+  return !!d.categories[cat];
+}
 function hasConsent(){
   if(window.__consentGiven===true)return true;
-  try{
-    var consent=localStorage.getItem(CONSENT_KEY)==='accepted';
-    if(consent&&!window.__consentGiven){
-      window.__consentGiven=true;
-      log('Consent detected in localStorage - flag set');
-    }
-    return consent;
-  }catch(e){
-    return false;
-  }
+  var d=getConsentData();
+  if(d.rejected)return false;
+  if(d.accepted)return true;
+  return d.categories.analytics||d.categories.marketing;
+}
+function hasConsentForTracker(url,code){
+  var cat=getTrackerCategory(url,code);
+  return hasConsentForCategory(cat);
 }
 
 function isTrackerUrl(url){
@@ -355,7 +408,7 @@ if(B._currentScriptDesc&&B._currentScriptDesc.get){
       if(script&&!hasConsent()){
         var src=script.src||script.getAttribute('src')||'';
         var code=script.textContent||script.text||script.innerHTML||'';
-        if(isTracker(src,code)){
+        if(isTracker(src,code)&&!hasConsentForTracker(src,code)){
           log('BLOCKED currentScript access');
           return null;
         }
@@ -373,7 +426,7 @@ if(B._scriptSrcDesc){
       return this.getAttribute('src')||'';
     },
     set:function(url){
-      if(!hasConsent()&&isTrackerUrl(url)&&!isEssential(this)){
+      if(!hasConsentForTracker(url,'')&&isTrackerUrl(url)&&!isEssential(this)){
         log('BLOCKED script src (prototype): '+url);
         this.setAttribute('data-blocked-src',url);
         this.setAttribute('data-consent-blocked','true');
@@ -389,7 +442,7 @@ if(B._scriptSrcDesc){
 }
 
 Element.prototype.setAttribute=function(name,value){
-  if(!hasConsent()&&this.tagName==='SCRIPT'&&name==='src'&&isTrackerUrl(value)&&!isEssential(this)){
+  if(!hasConsentForTracker(value,'')&&this.tagName==='SCRIPT'&&name==='src'&&isTrackerUrl(value)&&!isEssential(this)){
     log('BLOCKED setAttribute src: '+value);
     this.type='javascript/blocked';
     this.dataset.blockedSrc=value;
@@ -408,7 +461,7 @@ document.createElement=function(tag,opts){
     var srcDesc=Object.getOwnPropertyDescriptor(el,'src')||{};
     Object.defineProperty(el,'src',{
       set:function(url){
-        if(!hasConsent()&&isTrackerUrl(url)&&!isEssential(el)){
+        if(!hasConsentForTracker(url,'')&&isTrackerUrl(url)&&!isEssential(el)){
           log('BLOCKED createElement script src: '+url);
           el.type='javascript/blocked';
           el.dataset.blockedSrc=url;
@@ -426,7 +479,7 @@ document.createElement=function(tag,opts){
     if(origTextContent){
       Object.defineProperty(el,'textContent',{
         set:function(code){
-          if(!hasConsent()&&isTrackerCode(code)&&!isEssential(el)){
+          if(!hasConsentForTracker('',code)&&isTrackerCode(code)&&!isEssential(el)){
             log('BLOCKED inline script code');
             el.type='javascript/blocked';
             el.dataset.consentBlocked='true';
@@ -451,7 +504,7 @@ Node.prototype.appendChild=function(child){
       var src=child.getAttribute('src')||child.src||child.dataset.blockedSrc||'';
       var code=tag==='script'?(child.textContent||child.text||child.innerHTML||''):'';
       
-      if(isTracker(src,code)){
+      if(isTracker(src,code)&&!hasConsentForTracker(src,code)){
         log('BLOCKED appendChild: '+(src||'inline '+tag));
         B.blocked.push({tag:tag,src:src,code:code,parent:this,next:null});
         child.dataset.consentBlocked='true';
@@ -477,7 +530,7 @@ Node.prototype.insertBefore=function(newNode,refNode){
       var src=newNode.getAttribute('src')||newNode.src||newNode.dataset.blockedSrc||'';
       var code=tag==='script'?(newNode.textContent||newNode.text||newNode.innerHTML||''):'';
       
-      if(isTracker(src,code)){
+      if(isTracker(src,code)&&!hasConsentForTracker(src,code)){
         log('BLOCKED insertBefore: '+(src||'inline '+tag));
         B.blocked.push({tag:tag,src:src,code:code,parent:this,next:refNode});
         newNode.dataset.consentBlocked='true';
@@ -508,7 +561,7 @@ if(Element.prototype.append){
         if((tag==='script'||tag==='iframe'||tag==='img')&&!isEssential(node)){
           var src=node.getAttribute('src')||node.src||'';
           var code=tag==='script'?(node.textContent||node.text||''):'';
-          if(isTracker(src,code)){
+          if(isTracker(src,code)&&!hasConsentForTracker(src,code)){
             log('BLOCKED append: '+(src||'inline'));
             node.setAttribute('data-consent-blocked','true');
             if(src)node.setAttribute('data-blocked-src',src);
@@ -534,7 +587,7 @@ if(Element.prototype.prepend){
         if((tag==='script'||tag==='iframe'||tag==='img')&&!isEssential(node)){
           var src=node.getAttribute('src')||node.src||'';
           var code=tag==='script'?(node.textContent||node.text||''):'';
-          if(isTracker(src,code)){
+          if(isTracker(src,code)&&!hasConsentForTracker(src,code)){
             log('BLOCKED prepend: '+(src||'inline'));
             node.setAttribute('data-consent-blocked','true');
             if(src)node.setAttribute('data-blocked-src',src);
@@ -571,7 +624,7 @@ function blockExistingTrackers(){
     var src=s.getAttribute('src')||s.src||'';
     var code=s.textContent||s.text||s.innerHTML||'';
     
-    if(isTracker(src,code)){
+    if(isTracker(src,code)&&!hasConsentForTracker(src,code)){
       log('BLOCKED existing script: '+(src||'inline'));
       
       // IMPROVED: Store complete script information including attributes
@@ -649,7 +702,7 @@ if(typeof MutationObserver!=='undefined'&&!hasConsent()){
           var src=node.getAttribute('src')||node.src||'';
           var code=tag==='script'?(node.textContent||node.text||node.innerHTML||''):'';
           
-          if(isTracker(src,code)){
+          if(isTracker(src,code)&&!hasConsentForTracker(src,code)){
             log('MutationObserver caught: '+(src||'inline '+tag));
             node.dataset.consentBlocked='true';
             
@@ -693,7 +746,7 @@ if(!hasConsent()){
   window.fetch=function(input,init){
     if(hasConsent())return _fetch.apply(window,arguments);
     var url=typeof input==='string'?input:(input&&input.url?input.url:'');
-    if(url&&isTrackerUrl(url)&&!isFirstParty(url)){
+    if(url&&isTrackerUrl(url)&&!isFirstParty(url)&&!hasConsentForTracker(url,'')){
       log('BLOCKED fetch: '+url);
       return Promise.reject(new Error('Blocked by consent'));
     }
@@ -702,7 +755,7 @@ if(!hasConsent()){
   
   XMLHttpRequest.prototype.open=function(method,url){
     this._blockedUrl=null;
-    if(!hasConsent()&&url&&isTrackerUrl(url)&&!isFirstParty(url)){
+    if(!hasConsentForTracker(url,'')&&url&&isTrackerUrl(url)&&!isFirstParty(url)){
       log('BLOCKED XHR: '+url);
       this._blockedUrl=url;
       return;
@@ -720,7 +773,7 @@ if(!hasConsent()){
   
   navigator.sendBeacon=function(url,data){
     if(hasConsent())return _sendBeacon.apply(navigator,arguments);
-    if(url&&isTrackerUrl(url)&&!isFirstParty(url)){
+    if(url&&isTrackerUrl(url)&&!isFirstParty(url)&&!hasConsentForTracker(url,'')){
       log('BLOCKED sendBeacon: '+url);
       return false;
     }
@@ -732,7 +785,7 @@ if(!hasConsent()){
     var origSrcDesc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
     Object.defineProperty(img,'src',{
       set:function(url){
-        if(!hasConsent()&&isTrackerUrl(url)&&!isFirstParty(url)){
+        if(!hasConsentForTracker(url,'')&&isTrackerUrl(url)&&!isFirstParty(url)){
           log('BLOCKED Image pixel: '+url);
           return;
         }
@@ -881,13 +934,13 @@ window.__enableConsentTrackers=function(){
     }
     log('✓ Removed '+existingBlocked.length+' blocked script tags from DOM');
     
-    // IMPROVEMENT: Prepare scripts to restore (both external and inline)
+    // IMPROVEMENT: Prepare scripts to restore (both external and inline) - filter by consent category
     var toRestore=[];
     var seenUrls={};
     
     for(var j=0;j<B.blocked.length;j++){
       var b=B.blocked[j];
-      if(b.tag==='script'){
+      if(b.tag==='script'&&hasConsentForTracker(b.src||'',b.code||'')){
         if(b.src&&!seenUrls[b.src]){
           toRestore.push({
             type:'external',
@@ -1174,38 +1227,116 @@ if(!isPreview&&allowedHost&&currentHost!==allowedHost&&!currentHost.endsWith('.'
   return;
 }
 
+function getConsentPrefs(){
+  try{
+    var c=localStorage.getItem(CONSENT_KEY);
+    if(c==='accepted')return {accepted:true,analytics:true,marketing:true};
+    if(c==='rejected')return {rejected:true,analytics:false,marketing:false};
+    if(c&&c.charAt(0)==='{'){ try{ var o=JSON.parse(c); if(o&&typeof o==='object')return {analytics:!!o.analytics,marketing:!!o.marketing}; }catch(e){} }
+  }catch(e){}
+  return {analytics:false,marketing:false};
+}
+
 function hasConsent(){
   try{
-    return localStorage.getItem(CONSENT_KEY)==='accepted';
-  }catch(e){
-    return false;
-  }
+    var c=localStorage.getItem(CONSENT_KEY);
+    if(c==='accepted')return true;
+    if(c==='rejected')return false;
+    if(c&&c.charAt(0)==='{'){ try{ var o=JSON.parse(c); if(o&&typeof o==='object')return !!(o.analytics||o.marketing); }catch(e){} }
+  }catch(e){}
+  return false;
 }
 
 function setConsent(value){
   try{
-    window.__consentGiven=(value==='accepted');
-    localStorage.setItem(CONSENT_KEY,value);
+    if(value==='accepted'){ window.__consentGiven=true; localStorage.setItem(CONSENT_KEY,'accepted'); }
+    else if(value==='rejected'){ window.__consentGiven=false; localStorage.setItem(CONSENT_KEY,'rejected'); }
+    else if(value&&typeof value==='object'){ window.__consentGiven=!!(value.analytics||value.marketing); localStorage.setItem(CONSENT_KEY,JSON.stringify({analytics:!!value.analytics,marketing:!!value.marketing})); }
     console.log('[ConsentFlow] Consent set to:',value);
-  }catch(e){
-    console.error('[ConsentFlow] Failed to set consent:',e);
-  }
+  }catch(e){ console.error('[ConsentFlow] Failed to set consent:',e); }
 }
 
 function hasConsentChoice(){
   try{
     var c=localStorage.getItem(CONSENT_KEY);
-    return c==='accepted'||c==='rejected';
-  }catch(e){ return false; }
+    if(c==='accepted'||c==='rejected')return true;
+    if(c&&c.charAt(0)==='{'){ try{ JSON.parse(c); return true; }catch(e){} }
+  }catch(e){}
+  return false;
 }
 
 var consentLogUrl='${(consentLogUrl || "").replace(/'/g, "\\'")}';
-function sendConsentLog(status){
+function sendConsentLog(status,categories){
   if(consentLogUrl){
     try{
-      fetch(consentLogUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:status,pageUrl:location.href})}).catch(function(){});
+      var body={status:status,pageUrl:location.href};
+      if(categories&&typeof categories==='object')body.categories=categories;
+      fetch(consentLogUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(function(){});
     }catch(e){}
   }
+}
+
+function showPreferencesModal(bannerEl){
+  function updatePrefsToggles(el){
+    var prefs=getConsentPrefs();
+    var a=el.querySelector('#cf-pref-analytics'); var m_=el.querySelector('#cf-pref-marketing');
+    if(a)a.checked=prefs.analytics; if(m_)m_.checked=prefs.marketing;
+  }
+  var m=document.getElementById('consentflow-prefs-modal');
+  if(m){ m.style.display='flex'; updatePrefsToggles(m); return; }
+  var prefs=getConsentPrefs();
+  var templateStyleObj=${JSON.stringify(templateStyle || {})};
+  var acceptBtnStyle='background:'+(templateStyleObj.buttonColor||'#22c55e')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;';
+  var rejectBtnStyle='background:#ff0202;color:#374151;border:2px solid #374151;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;';
+  var modal=document.createElement('div');
+  modal.id='consentflow-prefs-modal';
+  modal.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2147483647;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;';
+  modal.innerHTML=
+    '<div style="background:#fff;border-radius:12px;padding:24px;max-width:440px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">'+
+    '<h3 style="margin:0 0 8px 0;font-size:18px;color:#111;">Cookie preferences</h3>'+
+    '<p style="margin:0 0 16px 0;font-size:13px;color:#555;line-height:1.5;">We use cookies to improve your experience. Choose which categories you allow. Essential cookies are always enabled.</p>'+
+    '<div style="margin:16px 0;">'+
+    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:14px;">Analytics</span><input type="checkbox" id="cf-pref-analytics" style="width:18px;height:18px;cursor:pointer;"></label>'+
+    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:14px;">Marketing</span><input type="checkbox" id="cf-pref-marketing" style="width:18px;height:18px;cursor:pointer;"></label>'+
+    '</div>'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
+    '<button id="cf-prefs-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept All'}</button>'+
+    (${showReject} ? '<button id="cf-prefs-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject All'}</button>' : '')+
+    '<button id="cf-prefs-save" style="background:#3b82f6;color:#fff;border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;">Save preferences</button>'+
+    '<button id="cf-prefs-cancel" style="background:#e5e7eb;color:#374151;border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;">Cancel</button>'+
+    '</div></div>';
+  modal.onclick=function(e){ if(e.target===modal){ modal.style.display='none'; } };
+  document.body.appendChild(modal);
+  updatePrefsToggles(modal);
+  document.getElementById('cf-prefs-accept').onclick=function(){
+    setConsent('accepted');
+    sendConsentLog('accepted');
+    modal.style.display='none';
+    if(bannerEl&&bannerEl.parentNode)bannerEl.remove();
+    try{ if(typeof showFloatingButton==='function')showFloatingButton(); }catch(e){}
+    if(window.__enableConsentTrackers){ try{ window.__enableConsentTrackers(); }catch(e){} }
+  };
+  if(${showReject}){
+    var rb=document.getElementById('cf-prefs-reject');
+    if(rb)rb.onclick=function(){
+      setConsent('rejected');
+      sendConsentLog('rejected');
+      modal.style.display='none';
+      if(bannerEl&&bannerEl.parentNode)bannerEl.remove();
+      try{ if(typeof showFloatingButton==='function')showFloatingButton(); }catch(e){}
+    };
+  }
+  document.getElementById('cf-prefs-save').onclick=function(){
+    var analytics=!!(document.getElementById('cf-pref-analytics')&&document.getElementById('cf-pref-analytics').checked);
+    var marketing=!!(document.getElementById('cf-pref-marketing')&&document.getElementById('cf-pref-marketing').checked);
+    setConsent({analytics:analytics,marketing:marketing});
+    sendConsentLog('accepted',{analytics:analytics,marketing:marketing});
+    modal.style.display='none';
+    if(bannerEl&&bannerEl.parentNode)bannerEl.remove();
+    try{ if(typeof showFloatingButton==='function')showFloatingButton(); }catch(e){}
+    if((analytics||marketing)&&window.__enableConsentTrackers){ try{ window.__enableConsentTrackers(); }catch(e){} }
+  };
+  document.getElementById('cf-prefs-cancel').onclick=function(){ modal.style.display='none'; };
 }
 
 var verificationAttempts=0;
@@ -1346,6 +1477,7 @@ var maxVerificationAttempts=5;
     '<div style="flex:1;max-width:700px;">'+
     '<strong style="font-size:16px;display:block;margin-bottom:6px;">${safeTitle || 'We value your privacy'}</strong>'+
     '<p style="margin:0;font-size:14px;opacity:0.9;line-height:1.5;">${safeMessage || 'This site uses tracking cookies to enhance your browsing experience and analyze site traffic.'}</p>'+
+    '<p style="margin:8px 0 0 0;font-size:13px;"><a href="#" id="consentflow-manage-prefs" style="color:rgba(255,255,255,0.9);text-decoration:underline;">Manage preferences</a></p>'+
     ${showBranding ? `'<p style="margin:8px 0 0 0;font-size:11px;opacity:0.7;">${safeBranding}</p>'+` : ''}
     '</div>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
@@ -1354,6 +1486,9 @@ var maxVerificationAttempts=5;
     '</div>';
   
   document.body.appendChild(banner);
+  
+  var managePrefs=document.getElementById('consentflow-manage-prefs');
+  if(managePrefs){ managePrefs.onclick=function(e){ e.preventDefault(); if(typeof showPreferencesModal==='function')showPreferencesModal(banner); }; }
   
   function maybeShowFloatingButton(){ try{ if(typeof showFloatingButton==='function')showFloatingButton(); }catch(e){} }
   document.getElementById('consentflow-accept').onclick=function(){
@@ -1391,8 +1526,6 @@ function showFloatingButton(){
   var templateStyleObj=${JSON.stringify(templateStyle || {})};
   var btnBg=templateStyleObj.backgroundColor||'#1f2937';
   var btnColor=templateStyleObj.textColor||'#ffffff';
-  var acceptBtnStyle='background:'+(templateStyleObj.buttonColor||'#22c55e')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;';
-  var rejectBtnStyle='background:#ff0202;color:'+(btnColor||'#1f2937')+';border:2px solid '+(btnColor||'#1f2937')+';padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;';
   
   var floatBtn=document.createElement('button');
   floatBtn.id='consentflow-float-btn';
@@ -1401,41 +1534,9 @@ function showFloatingButton(){
   floatBtn.innerHTML='🍪';
   floatBtn.onmouseover=function(){ this.style.transform='scale(1.05)'; };
   floatBtn.onmouseout=function(){ this.style.transform='scale(1)'; };
-  
-  var modal=document.createElement('div');
-  modal.id='consentflow-modal';
-  modal.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2147483647;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;';
-  modal.innerHTML=
-    '<div style="background:#fff;border-radius:12px;padding:24px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">'+
-    '<h3 style="margin:0 0 12px 0;font-size:18px;color:#111;">Change cookie preferences</h3>'+
-    '<p style="margin:0 0 20px 0;font-size:14px;color:#555;line-height:1.5;">You can update your choice at any time.</p>'+
-    '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
-    '<button id="consentflow-modal-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept All'}</button>'+
-    (${showReject} ? '<button id="consentflow-modal-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject All'}</button>' : '')+
-    '<button id="consentflow-modal-close" style="background:#e5e7eb;color:#374151;border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;">Cancel</button>'+
-    '</div></div>';
-  
-  modal.onclick=function(e){ if(e.target===modal)modal.style.display='none'; };
-  floatBtn.onclick=function(){ modal.style.display='flex'; };
+  floatBtn.onclick=function(){ if(typeof showPreferencesModal==='function')showPreferencesModal(); };
   
   document.body.appendChild(floatBtn);
-  document.body.appendChild(modal);
-  
-  document.getElementById('consentflow-modal-close').onclick=function(){
-    modal.style.display='none';
-  };
-  document.getElementById('consentflow-modal-accept').onclick=function(){
-    setConsent('accepted');
-    sendConsentLog('accepted');
-    modal.style.display='none';
-    if(window.__enableConsentTrackers){ try{ window.__enableConsentTrackers(); }catch(e){} }
-  };
-  ${showReject ? `var mRej=document.getElementById('consentflow-modal-reject');
-  if(mRej)mRej.onclick=function(){
-    setConsent('rejected');
-    sendConsentLog('rejected');
-    modal.style.display='none';
-  };` : ''}
 }
 showFloatingButton();
 })();
