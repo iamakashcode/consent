@@ -1471,7 +1471,7 @@ var maxVerificationAttempts=5;
   
   var templateStyleObj=${JSON.stringify(templateStyle || {})};
   var acceptBtnStyle='background:'+(templateStyleObj.buttonColor||'#22c55e')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
-  var rejectBtnStyle='background:#ff0202;color:'+(templateStyleObj.textColor||'#fff')+';border:2px solid '+(templateStyleObj.textColor||'#fff')+';padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
+  var rejectBtnStyle='background:'+(templateStyleObj.buttonColor||'#ff0202')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:2px solid '+(templateStyleObj.textColor||'#fff')+';padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
   
   banner.innerHTML=
     '<div style="flex:1;max-width:700px;">'+
