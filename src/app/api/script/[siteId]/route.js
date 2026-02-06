@@ -1292,22 +1292,22 @@ function showPreferencesModal(bannerEl){
   modal.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2147483647;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;';
   modal.innerHTML=
     '<div style="background:#fff;border-radius:12px;padding:24px;max-width:640px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;"><h3 style="margin:0 0 8px 0;font-size:18px;color:#111;">Cookie preferences</h3><button id="cf-prefs-cancel" style="background:#e5e7eb;color:#374151;border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;">X</button></div>'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #000;padding-bottom:16px; margin-bottom:12px;"><h3 style="margin:0 0 8px 0;font-size:20px;color:#111;">Cookie preferences</h3><button id="cf-prefs-cancel" style="background:#e5e7eb;color:#374151;border:none;padding:5px 10px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;">X</button></div>'+
     '<p style="margin:0 0 16px 0;font-size:13px;color:#555;line-height:1.5;">We use cookies to enhance your experience, analyze traffic, and deliver relevant marketing. You can choose which categories you allow. Essential cookies are always enabled as they are required for the website to function properly.</p>'+
     '<p style="margin:0 0 16px 0;font-size:13px;color:#555;line-height:1.5;">We also use third-party cookies that help us analyse how you use this website, store your preferences, and provide the content and advertisements that are relevant to you. These cookies will only be stored in your browser with your prior consent.</p>'+
     '<div style="margin:16px 0;">'+
-    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;cursor:pointer;"><span style="font-size:14px;">Necessary</span> <p style="font-size:12px;color:#008000;">Always Active</p></label>'+
-    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><small style="font-size:12px;color:#555;">Necessary cookies are required to enable the basic features of this site, such as providing secure log-in or adjusting your consent preferences. These cookies do not store any personally identifiable data.</small></label>'+
-    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;cursor:pointer;"><span style="font-size:14px;">Analytics</span><input type="checkbox" id="cf-pref-analytics" style="width:18px;height:18px;cursor:pointer;"></label>'+
-    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><small style="font-size:12px;color:#555;">Helps us understand how visitors interact with our website so we can improve performance and user experience.</small></label>'+
-    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;cursor:pointer;"><span style="font-size:14px;">Marketing</span><input type="checkbox" id="cf-pref-marketing" style="width:18px;height:18px;cursor:pointer;"></label>'+
-    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><small style="font-size:12px;color:#555;">Used to deliver relevant ads and measure advertising effectiveness across platforms.</small></label>'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:16px;">Necessary</span> <p style="font-size:14px;color:#008000;font-weight:600;">Always Active</p></div>'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><small style="font-size:12px;color:#555;">Necessary cookies are required to enable the basic features of this site, such as providing secure log-in or adjusting your consent preferences. These cookies do not store any personally identifiable data.</small></div>'+
+    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:16px;">Analytics</span><input type="checkbox" id="cf-pref-analytics" style="width:18px;height:18px;cursor:pointer;"></label>'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><small style="font-size:12px;color:#555;">Helps us understand how visitors interact with our website so we can improve performance and user experience.</small></div>'+
+    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:16px;">Marketing</span><input type="checkbox" id="cf-pref-marketing" style="width:18px;height:18px;cursor:pointer;"></label>'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><small style="font-size:12px;color:#555;">Used to deliver relevant ads and measure advertising effectiveness across platforms.</small></div>'+
     '</div>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;">'+
     '<button id="cf-prefs-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept All'}</button>'+
     (${showReject} ? '<button id="cf-prefs-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject All'}</button>' : '')+
     '<button id="cf-prefs-save" style="background:#3b82f6;color:#fff;border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;">Save preferences</button>'+
-    '</div></div>';
+    '</div><p style="text-align:center;font-size:14px;color:#212121;line-height:1.5;padding-top:12px;padding-bottom:12px;">Powered by <span style="font-weight:600;">Cookie Access</span></p></div>';
   modal.onclick=function(e){ if(e.target===modal){ modal.style.display='none'; } };
   document.body.appendChild(modal);
   updatePrefsToggles(modal);
