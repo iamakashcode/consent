@@ -1295,9 +1295,8 @@ function showPreferencesModal(bannerEl){
     '<h3 style="margin:0 0 8px 0;font-size:18px;color:#111;">Cookie preferences</h3>'+
     '<p style="margin:0 0 16px 0;font-size:13px;color:#555;line-height:1.5;">We use cookies to enhance your experience, analyze traffic, and deliver relevant marketing. You can choose which categories you allow. Essential cookies are always enabled as they are required for the website to function properly.</p>'+
     '<div style="margin:16px 0;">'+
-    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:14px;">Analytics </br><span style="font-size:12px;color:#555;">Helps us understand how visitors interact with our website so we can improve performance and user experience.
-</span></span><input type="checkbox" id="cf-pref-analytics" style="width:18px;height:18px;cursor:pointer;"></label>'+
-    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:14px;">Marketing </br><span style="font-size:12px;color:#555;">Used to deliver relevant ads and measure advertising effectiveness across platforms.</span></span><input type="checkbox" id="cf-pref-marketing" style="width:18px;height:18px;cursor:pointer;"></label>'+
+    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:14px;">Analytics <small style="font-size:12px;color:#555;">test description</small></span><input type="checkbox" id="cf-pref-analytics" style="width:18px;height:18px;cursor:pointer;"></label>'+
+    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:14px;">Marketing <small style="font-size:12px;color:#555;">test description</small></span><input type="checkbox" id="cf-pref-marketing" style="width:18px;height:18px;cursor:pointer;"></label>'+
     '</div>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
     '<button id="cf-prefs-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept All'}</button>'+
