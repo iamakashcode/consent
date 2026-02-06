@@ -1293,10 +1293,11 @@ function showPreferencesModal(bannerEl){
   modal.innerHTML=
     '<div style="background:#fff;border-radius:12px;padding:24px;max-width:440px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">'+
     '<h3 style="margin:0 0 8px 0;font-size:18px;color:#111;">Cookie preferences</h3>'+
-    '<p style="margin:0 0 16px 0;font-size:13px;color:#555;line-height:1.5;">We use cookies to improve your experience. Choose which categories you allow. Essential cookies are always enabled.</p>'+
+    '<p style="margin:0 0 16px 0;font-size:13px;color:#555;line-height:1.5;">We use cookies to enhance your experience, analyze traffic, and deliver relevant marketing. You can choose which categories you allow. Essential cookies are always enabled as they are required for the website to function properly.</p>'+
     '<div style="margin:16px 0;">'+
-    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:14px;">Analytics</span><input type="checkbox" id="cf-pref-analytics" style="width:18px;height:18px;cursor:pointer;"></label>'+
-    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:14px;">Marketing</span><input type="checkbox" id="cf-pref-marketing" style="width:18px;height:18px;cursor:pointer;"></label>'+
+    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:14px;">Analytics </br><span style="font-size:12px;color:#555;">Helps us understand how visitors interact with our website so we can improve performance and user experience.
+</span></span><input type="checkbox" id="cf-pref-analytics" style="width:18px;height:18px;cursor:pointer;"></label>'+
+    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:14px;">Marketing </br><span style="font-size:12px;color:#555;">Used to deliver relevant ads and measure advertising effectiveness across platforms.</span></span><input type="checkbox" id="cf-pref-marketing" style="width:18px;height:18px;cursor:pointer;"></label>'+
     '</div>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
     '<button id="cf-prefs-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept All'}</button>'+
@@ -1529,7 +1530,7 @@ function showFloatingButton(){
   var floatBtn=document.createElement('button');
   floatBtn.id='consentflow-float-btn';
   floatBtn.setAttribute('aria-label','Manage cookie preferences');
-  floatBtn.style.cssText='position:fixed;bottom:20px;right:20px;width:48px;height:48px;border-radius:50%;background:'+btnBg+';color:'+btnColor+';border:2px solid '+(btnColor||'rgba(255,255,255,0.5)')+';cursor:pointer;z-index:2147483646;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-size:22px;transition:transform 0.2s;';
+  floatBtn.style.cssText='position:fixed;bottom:20px;left:20px;width:48px;height:48px;border-radius:50%;background:'+btnBg+';color:'+btnColor+';border:2px solid '+(btnColor||'rgba(255,255,255,0.5)')+';cursor:pointer;z-index:2147483646;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-size:22px;transition:transform 0.2s;';
   floatBtn.innerHTML='🍪';
   floatBtn.onmouseover=function(){ this.style.transform='scale(1.05)'; };
   floatBtn.onmouseout=function(){ this.style.transform='scale(1)'; };
