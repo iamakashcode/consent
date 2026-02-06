@@ -1291,18 +1291,19 @@ function showPreferencesModal(bannerEl){
   modal.id='consentflow-prefs-modal';
   modal.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2147483647;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;';
   modal.innerHTML=
-    '<div style="background:#fff;border-radius:12px;padding:24px;max-width:440px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">'+
-    '<h3 style="margin:0 0 8px 0;font-size:18px;color:#111;">Cookie preferences</h3>'+
+    '<div style="background:#fff;border-radius:12px;padding:24px;max-width:640px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;"><h3 style="margin:0 0 8px 0;font-size:18px;color:#111;">Cookie preferences</h3><button id="cf-prefs-cancel" style="background:#e5e7eb;color:#374151;border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;">X</button></div>'+
     '<p style="margin:0 0 16px 0;font-size:13px;color:#555;line-height:1.5;">We use cookies to enhance your experience, analyze traffic, and deliver relevant marketing. You can choose which categories you allow. Essential cookies are always enabled as they are required for the website to function properly.</p>'+
     '<div style="margin:16px 0;">'+
-    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:14px;">Analytics <small style="font-size:12px;color:#555;">test description</small></span><input type="checkbox" id="cf-pref-analytics" style="width:18px;height:18px;cursor:pointer;"></label>'+
-    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;"><span style="font-size:14px;">Marketing <small style="font-size:12px;color:#555;">test description</small></span><input type="checkbox" id="cf-pref-marketing" style="width:18px;height:18px;cursor:pointer;"></label>'+
+    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;cursor:pointer;"><span style="font-size:14px;">Analytics <small style="font-size:12px;color:#555;">test description</small></span><input type="checkbox" id="cf-pref-analytics" style="width:18px;height:18px;cursor:pointer;"></label>'+
+    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><small style="font-size:12px;color:#555;">Helps us understand how visitors interact with our website so we can improve performance and user experience.</small></label>'+
+    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;cursor:pointer;"><span style="font-size:14px;">Marketing <small style="font-size:12px;color:#555;">test description</small></span><input type="checkbox" id="cf-pref-marketing" style="width:18px;height:18px;cursor:pointer;"></label>'+
+    '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><small style="font-size:12px;color:#555;">Used to deliver relevant ads and measure advertising effectiveness across platforms.</small></label>'+
     '</div>'+
-    '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;">'+
     '<button id="cf-prefs-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept All'}</button>'+
     (${showReject} ? '<button id="cf-prefs-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject All'}</button>' : '')+
     '<button id="cf-prefs-save" style="background:#3b82f6;color:#fff;border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;">Save preferences</button>'+
-    '<button id="cf-prefs-cancel" style="background:#e5e7eb;color:#374151;border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;">Cancel</button>'+
     '</div></div>';
   modal.onclick=function(e){ if(e.target===modal){ modal.style.display='none'; } };
   document.body.appendChild(modal);
