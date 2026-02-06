@@ -1286,7 +1286,7 @@ function showPreferencesModal(bannerEl){
   var prefs=getConsentPrefs();
   var templateStyleObj=${JSON.stringify(templateStyle || {})};
   var acceptBtnStyle='background:'+(templateStyleObj.buttonColor||'#22c55e')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;';
-  var rejectBtnStyle='background:#ff0202;color:#374151;border:2px solid #374151;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;';
+  var rejectBtnStyle='background:'+(templateStyleObj.buttonColor||'#ff0202')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:14px;';
   var modal=document.createElement('div');
   modal.id='consentflow-prefs-modal';
   modal.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2147483647;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;';
@@ -1471,7 +1471,8 @@ var maxVerificationAttempts=5;
   
   var templateStyleObj=${JSON.stringify(templateStyle || {})};
   var acceptBtnStyle='background:'+(templateStyleObj.buttonColor||'#22c55e')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
-  var rejectBtnStyle='background:'+(templateStyleObj.buttonColor||'#ff0202')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:2px solid '+(templateStyleObj.textColor||'#fff')+';padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
+  var rejectBtnStyle='background:'+(templateStyleObj.buttonColor||'#ff0202')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
+  var customizeBtnStyle='background:'+(templateStyleObj.backgroundColor||'#000')+';color:'+(templateStyleObj.buttonColor||'#fff')+';border:2px solid '+(templateStyleObj.buttonColor||'#fff')+';padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
   
   banner.innerHTML=
     '<div style="flex:1;max-width:700px;">'+
@@ -1481,6 +1482,7 @@ var maxVerificationAttempts=5;
     ${showBranding ? `'<p style="margin:8px 0 0 0;font-size:11px;opacity:0.7;">${safeBranding}</p>'+` : ''}
     '</div>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
+    '<a href="#" id="consentflow-manage-prefs" style="'+customizeBtnStyle+'">Customize</a>'+
     '<button id="consentflow-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept All'}</button>'+
     ${showReject ? `'<button id="consentflow-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject All'}</button>'+` : ''}
     '</div>';
