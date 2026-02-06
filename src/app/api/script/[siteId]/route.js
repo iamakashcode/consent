@@ -116,7 +116,6 @@ function getConsentData(){
   return {rejected:false,accepted:false,categories:{analytics:false,marketing:false}};
 }
 function hasConsentForCategory(cat){
-  if(window.__consentGiven===true)return true;
   var d=getConsentData();
   if(d.rejected)return false;
   if(d.accepted)return true;
@@ -127,7 +126,7 @@ function hasConsent(){
   var d=getConsentData();
   if(d.rejected)return false;
   if(d.accepted)return true;
-  return d.categories.analytics||d.categories.marketing;
+  return false;
 }
 function hasConsentForTracker(url,code){
   var cat=getTrackerCategory(url,code);
