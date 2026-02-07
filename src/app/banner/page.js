@@ -459,13 +459,9 @@ function BannerContent() {
       ? `${r2Base}/${getScriptPath(selectedSite.siteId, false)}`
       : `${baseUrl}/cdn/sites/${selectedSite.siteId}/script.js`;
     return [
-      "<!-- CRITICAL: Place this script FIRST in <head>, BEFORE any Meta Pixel, Google Analytics, or other tracker scripts -->",
-      "<!-- Start ConsentFlow banner -->",
+      "<!-- Start Cookie Access banner -->",
       `<script id="consentflow" src="${scriptSrc}"></script>`,
-      "<!-- End ConsentFlow banner -->",
-      "<!-- Example: Place ConsentFlow script BEFORE Meta Pixel -->",
-      "<!-- <script id=\"consentflow\" src=\"...\"></script> -->",
-      "<!-- <script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){...} }(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');</script> -->",
+      "<!-- End Cookie Access banner -->",
     ].join("\n");
   };
 
