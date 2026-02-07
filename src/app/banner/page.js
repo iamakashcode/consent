@@ -929,7 +929,7 @@ function BannerContent() {
                                 className="bg-white disabled:opacity-60"
                               />
                             </div>
-                            <label className="flex items-center gap-2 cursor-pointer pt-7">
+                            {/* <label className="flex items-center gap-2 cursor-pointer pt-7">
                               <input
                                 type="checkbox"
                                 checked={config.showRejectButton}
@@ -937,9 +937,9 @@ function BannerContent() {
                                 className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                               />
                               <span className="text-sm text-gray-600">Show reject</span>
-                            </label>
+                            </label> */}
                           </div>
-                          <div className="flex flex-wrap items-start gap-4">
+                          {/* <div className="flex flex-wrap items-start gap-4">
                             <div className="flex-1 min-w-[200px]">
                               <label className="block text-xs font-medium text-gray-500 mb-1.5">Customize button text</label>
                               <Input
@@ -959,7 +959,7 @@ function BannerContent() {
                               />
                               <span className="text-sm text-gray-600">Show customize</span>
                             </label>
-                          </div>
+                          </div> */}
                         </div>
                       </div>
                     </CardContent>
