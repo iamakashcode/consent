@@ -6,7 +6,6 @@ import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -17,6 +16,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { BarChart3, Globe, Activity } from "lucide-react";
+
+// Shared components
+import { PageHeader } from "@/components/shared/PageHeader";
+import { StatsCard } from "@/components/shared/StatsCard";
+import { SectionCard, SectionCardHeader } from "@/components/shared/SectionCard";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { cn } from "@/lib/utils";
 
 function UsageContent() {
   const { data: session, status } = useSession();
@@ -118,8 +124,8 @@ function UsageContent() {
   if (status === "loading" || loading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
         </div>
       </DashboardLayout>
     );
@@ -140,93 +146,101 @@ function UsageContent() {
 
   return (
     <DashboardLayout>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight">Usage</h1>
-        <p className="text-muted-foreground mt-1">Traffic and plan usage by domain — all data from your account</p>
-      </div>
+      <PageHeader
+        title="Usage Metrics"
+        description="Monitor billable page views and traffic distribution across your infrastructure."
+      />
 
       {success && (
-        <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          Subscription activated successfully. Your usage data is now live.
+        <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50/80 px-5 py-4 text-[14px] font-medium text-emerald-800 shadow-sm animate-in fade-in slide-in-from-top-4">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Subscription activated successfully! Traffic computation is now active.
+          </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Total page views</CardDescription>
-            <BarChart3 className="h-5 w-5 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{totalPageViews.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground mt-1">All domains</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Active domains</CardDescription>
-            <Activity className="h-5 w-5 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{activeCount}</p>
-            <p className="text-xs text-muted-foreground mt-1">With active plan or trial</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Tracked domains</CardDescription>
-            <Globe className="h-5 w-5 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{sites.length}</p>
-            <p className="text-xs text-muted-foreground mt-1">Connected</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8">
+        <StatsCard
+          title="Total Page Views"
+          value={totalPageViews.toLocaleString()}
+          subtitle="All connected domains"
+          icon={BarChart3}
+          color="indigo"
+        />
+        <StatsCard
+          title="Active Domains"
+          value={activeCount}
+          subtitle="Subscribed or in trial"
+          icon={Activity}
+          color="emerald"
+        />
+        <StatsCard
+          title="Tracked Assets"
+          value={sites.length}
+          subtitle="Projects configured"
+          icon={Globe}
+          color="violet"
+        />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Views by domain</CardTitle>
-            <CardDescription>From API</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <SectionCard hoverLift>
+          <SectionCardHeader
+            title="Traffic Density"
+            description="Normalized view volumes broken down by project origin."
+            icon={BarChart3}
+          />
+          <div className="pt-2">
             {viewsPerDomain.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-8 text-center">No domains yet. Add a domain to see traffic.</p>
+              <div className="py-8 text-center bg-slate-50/50 rounded-xl border border-slate-100 border-dashed">
+                <p className="text-[14px] font-medium text-slate-500">No telemetry data. Install script to begin.</p>
+              </div>
             ) : (
-              <div className="h-48 flex items-end gap-2">
+              <div className="h-56 flex items-end gap-3 px-2 sm:px-6 mt-4">
                 {viewsPerDomain.map(({ domain, views }) => (
-                  <div key={domain} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                  <div key={domain} className="group relative flex-1 flex flex-col items-center justify-end h-full">
+                    {/* Tooltip */}
+                    <div className="opacity-0 group-hover:opacity-100 absolute -top-10 bg-slate-900 text-white text-[12px] font-semibold py-1.5 px-3 rounded-lg shadow-xl shadow-slate-900/20 whitespace-nowrap transition-opacity pointer-events-none z-10 hidden sm:block">
+                      {views.toLocaleString()} views
+                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                    </div>
+                    {/* Bar */}
                     <div
-                      className="w-full bg-primary/80 rounded-t transition-all"
-                      style={{ height: `${(views / maxViews) * 100}%`, minHeight: views > 0 ? "4px" : 0 }}
-                      title={`${domain}: ${views.toLocaleString()} views`}
-                    />
-                    <span className="text-xs text-muted-foreground truncate w-full text-center" title={domain}>
+                      className="w-full max-w-[48px] bg-indigo-500 group-hover:bg-indigo-400 rounded-t-lg transition-all duration-500 ease-out flex-shrink-0 relative overflow-hidden ring-1 ring-inset ring-black/5"
+                      style={{ height: `${(views / maxViews) * 100}%`, minHeight: views > 0 ? "8px" : 0 }}
+                    >
+                      <div className="absolute inset-x-0 top-0 h-1 bg-white/20" />
+                    </div>
+                    <span className="text-[11px] font-medium text-slate-500 mt-3 truncate w-full text-center group-hover:text-slate-900 transition-colors" title={domain}>
                       {domain.replace(/^www\./, "").split(".")[0]}
                     </span>
                   </div>
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </SectionCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Usage by domain</CardTitle>
-            <CardDescription>Plan and views per domain</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <SectionCard noPadding hoverLift className="flex flex-col">
+          <div className="p-5 sm:p-6 border-b border-slate-100">
+            <h2 className="text-[17px] font-semibold tracking-tight text-slate-900">Tier Consumptions</h2>
+            <p className="text-[13px] text-slate-500 mt-1">Review plan caps and real-time usage metrics.</p>
+          </div>
+          <div className="flex-1">
             {sites.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No domains found. Add a domain from Domains.</p>
+              <EmptyState
+                icon={Globe}
+                title="No environments found"
+                description="Your workspace is empty. Add a property to start measuring tier constraints."
+              />
             ) : (
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Domain</TableHead>
-                    <TableHead>Plan</TableHead>
-                    <TableHead className="text-right">Views</TableHead>
+                <TableHeader className="bg-slate-50/50">
+                  <TableRow className="hover:bg-transparent border-slate-100">
+                    <TableHead className="font-medium text-slate-600 px-6 h-10 text-[13px]">Entity</TableHead>
+                    <TableHead className="font-medium text-slate-600 h-10 text-[13px]">Assigned Tier</TableHead>
+                    <TableHead className="text-right font-medium text-slate-600 px-6 h-10 text-[13px]">Count</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -241,39 +255,46 @@ function UsageContent() {
                     const stats = siteStats[site.siteId];
                     const recentViews = stats?.recentViews ?? null;
                     return (
-                      <TableRow key={site.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium truncate">{site.domain}</span>
-                            {isActive && (
-                              <span className="px-1.5 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded">Active</span>
-                            )}
-                            {!isActive && status === "pending" && (
-                              <span className="px-1.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded">Payment required</span>
-                            )}
-                            {!isActive && !status && (
-                              <span className="px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">No plan</span>
-                            )}
+                      <TableRow key={site.id} className="hover:bg-slate-50/30 transition-colors border-slate-100">
+                        <TableCell className="px-6 py-4">
+                          <div className="flex items-center justify-between xl:justify-start xl:gap-2 flex-wrap min-w-[140px]">
+                            <span className="font-semibold text-slate-900 text-[14px] truncate">{site.domain}</span>
+                            <div className="flex items-center mt-1 sm:mt-0 xl:mt-1">
+                              {isActive && <span className="px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 rounded-md">Online</span>}
+                              {!isActive && status === "pending" && <span className="px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 rounded-md">Billing Due</span>}
+                              {!isActive && !status && <span className="px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 rounded-md">Unassigned</span>}
+                            </div>
                           </div>
                           {recentViews != null && (
-                            <p className="text-xs text-muted-foreground mt-0.5">{recentViews.toLocaleString()} views (30d)</p>
+                            <p className="text-[12px] font-medium text-slate-400 mt-1">{recentViews.toLocaleString()} reqs/30d</p>
                           )}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{plan}</TableCell>
-                        <TableCell className="text-right font-medium">{views.toLocaleString()}</TableCell>
+                        <TableCell className="text-slate-600 text-[14px]">
+                          <span className={cn(
+                            "font-medium",
+                            plan === "No plan" ? "text-slate-400" : "text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md"
+                          )}>
+                            {plan}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right px-6">
+                          <span className="font-mono text-[15px] font-medium text-slate-800">{views.toLocaleString()}</span>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
                 </TableBody>
               </Table>
             )}
-            {sites.length > 0 && (
-              <Button variant="link" className="mt-4 px-0" asChild>
-                <Link href="/dashboard/domains">Manage domains →</Link>
+          </div>
+          {sites.length > 0 && (
+            <div className="p-4 bg-slate-50 border-t border-slate-100 rounded-b-2xl flex justify-center">
+              <Button variant="ghost" className="text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 w-full" asChild>
+                <Link href="/dashboard/domains">Manage Infrastructure →</Link>
               </Button>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          )}
+        </SectionCard>
       </div>
     </DashboardLayout>
   );
@@ -284,8 +305,8 @@ export default function UsagePage() {
     <Suspense
       fallback={
         <DashboardLayout>
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+          <div className="flex items-center justify-center h-[60vh]">
+            <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
           </div>
         </DashboardLayout>
       }

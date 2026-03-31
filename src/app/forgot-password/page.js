@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import AuthLayout from "@/components/auth/AuthLayout";
+import { Loader2 } from "lucide-react";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -11,9 +13,15 @@ export default function ForgotPasswordPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!email.trim() || !email.includes("@")) {
+      setError("Please enter a valid email address");
+      return;
+    }
+    
     setLoading(true);
     setError("");
     setSent(false);
+    
     try {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
@@ -34,55 +42,58 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-gray-50 items-center justify-center p-8">
-      <div className="w-full max-w-md">
-        <Link href="/" className="flex items-center gap-2 mb-8">
-          <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
-            <span className="text-white font-bold text-lg">C</span>
-          </div>
-          <span className="text-xl font-semibold text-gray-900">ConsentFlow</span>
-        </Link>
-
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Forgot password?</h1>
-        <p className="text-gray-500 mb-6">
-          Enter your email and we&apos;ll send you a link to reset your password.
-        </p>
-
+    <AuthLayout
+      title="Forgot password?"
+      subtitle="Enter your email to receive a reset link."
+    >
+      <div className="w-full">
         {sent ? (
-          <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800 mb-4">
-            If an account exists with this email, you will receive a password reset link shortly. Check your inbox and spam folder.
+          <div className="animate-in fade-in slide-in-from-top-2">
+            <div className="p-4 bg-emerald-50 border border-emerald-200/60 rounded-xl text-[13px] font-medium text-emerald-800 mb-6 leading-relaxed">
+              If an account exists with this email, you will receive a password reset link shortly. Check your inbox and spam folder.
+            </div>
+            <Link 
+              href="/login" 
+              className="flex items-center justify-center w-full py-2.5 px-4 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-white font-medium rounded-xl transition-all duration-200"
+            >
+              Return to login
+            </Link>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              <div className="p-4 bg-red-50 border border-red-200/60 rounded-xl text-[13px] font-medium text-red-700 animate-in fade-in slide-in-from-top-2">
                 {error}
               </div>
             )}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+            
+            <div className="space-y-1.5">
+              <label htmlFor="email" className="block text-sm font-medium text-slate-700">
                 Email address
               </label>
               <input
                 id="email"
                 type="email"
                 required
+                disabled={loading}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="you@example.com"
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-xl text-[15px] shadow-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all duration-200 disabled:opacity-50 disabled:bg-slate-50"
+                placeholder="name@company.com"
               />
             </div>
+            
             <button
               type="submit"
-              disabled={loading}
-              className="w-full py-3 px-4 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              disabled={loading || !email.trim()}
+              className="relative w-full py-2.5 px-4 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-white font-medium rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.05),0_1px_1px_rgba(255,255,255,0.05)_inset] disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 group overflow-hidden"
             >
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-[150%] group-hover:translate-x-[150%] transition-transform duration-700 ease-in-out" />
               {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                  Sending...
-                </span>
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Sending link...
+                </>
               ) : (
                 "Send reset link"
               )}
@@ -90,12 +101,17 @@ export default function ForgotPasswordPage() {
           </form>
         )}
 
-        <p className="mt-6 text-center text-sm text-gray-500">
-          <Link href="/login" className="text-indigo-600 hover:text-indigo-700 font-medium">
-            Back to sign in
+        {/* Footer link */}
+        <p className="mt-8 text-center text-[13px] text-slate-500 font-medium">
+          Remembered your password?{" "}
+          <Link 
+            href="/login" 
+            className="text-slate-900 font-bold hover:underline underline-offset-4 transition-all"
+          >
+            Sign in
           </Link>
         </p>
       </div>
-    </div>
+    </AuthLayout>
   );
 }

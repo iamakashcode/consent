@@ -6,9 +6,13 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Globe, CheckCircle2, Link2, Eye } from "lucide-react";
+import { Globe, CheckCircle2, Link2, Eye, ArrowRight } from "lucide-react";
+
+// Import our new shared components
+import { PageHeader } from "@/components/shared/PageHeader";
+import { StatsCard } from "@/components/shared/StatsCard";
+import { SectionCard, SectionCardHeader, SectionCardContent } from "@/components/shared/SectionCard";
 
 function DashboardContent() {
   const { data: session, status, update } = useSession();
@@ -105,7 +109,6 @@ function DashboardContent() {
       }
     })();
     return () => { cancelled = true; };
-  // Intentionally omit update from deps to prevent effect re-run (and cancelled=true) which kept pageLoading true
   }, [session]);
 
   useEffect(() => {
@@ -125,8 +128,8 @@ function DashboardContent() {
   if (status === "loading" || pageLoading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
         </div>
       </DashboardLayout>
     );
@@ -144,85 +147,68 @@ function DashboardContent() {
   return (
     <DashboardLayout>
       {paymentSuccess && (
-        <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-center gap-3 text-emerald-800">
-          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+        <div className="mb-8 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-5 py-4 flex items-center gap-4 text-emerald-800 shadow-sm animate-in fade-in slide-in-from-top-4">
+          <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-600" />
           <div>
-            <p className="font-medium">Subscription active</p>
+            <p className="font-semibold mb-0.5">Subscription active</p>
             <p className="text-sm text-emerald-700">Add the script on your site from Domains to start collecting consent.</p>
           </div>
         </div>
       )}
 
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
-        <p className="text-muted-foreground mt-1">Traffic, domains, and subscription status from your account</p>
+      <PageHeader 
+        title="Overview" 
+        description="Monitor your domains traffic and active subscription metrics across all your projects."
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+        <StatsCard 
+          title="Total Domains" 
+          value={sites.length} 
+          subtitle={`${activeCount} active`} 
+          icon={Globe} 
+          color="indigo" 
+        />
+        <StatsCard 
+          title="Subscriptions" 
+          value={activeCount} 
+          subtitle={`${trialCount} in trial`} 
+          icon={CheckCircle2} 
+          color="emerald" 
+        />
+        <StatsCard 
+          title="Verified" 
+          value={verifiedCount} 
+          subtitle="Domains" 
+          icon={Link2} 
+          color="violet" 
+        />
+        <StatsCard 
+          title="Page Views" 
+          value={totalPageViews.toLocaleString()} 
+          subtitle={`${totalUniquePages} unique pages`} 
+          icon={Eye} 
+          color="blue" 
+        />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Total Domains</CardDescription>
-            <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Globe className="h-5 w-5 text-primary" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{sites.length}</p>
-            <p className="text-xs text-muted-foreground mt-1">{activeCount} active</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Active Subscriptions</CardDescription>
-            <div className="h-9 w-9 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{activeCount}</p>
-            <p className="text-xs text-muted-foreground mt-1">{trialCount} in trial</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Connected</CardDescription>
-            <div className="h-9 w-9 rounded-lg bg-violet-500/10 flex items-center justify-center">
-              <Link2 className="h-5 w-5 text-violet-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{verifiedCount}</p>
-            <p className="text-xs text-muted-foreground mt-1">Verified domains</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Total Page Views</CardDescription>
-            <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
-              <Eye className="h-5 w-5 text-blue-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{totalPageViews.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground mt-1">{totalUniquePages} unique pages</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <CardTitle>Manage domains</CardTitle>
-            <CardDescription>Add domains, install script, and manage plans from one place.</CardDescription>
-          </div>
-          <Button asChild>
-            <Link href="/dashboard/domains">Go to Domains</Link>
-          </Button>
-        </CardHeader>
-      </Card>
+      <SectionCard hoverLift>
+        <SectionCardHeader 
+          title="Manage Domains" 
+          description="Add domains, install tracking scripts, and manage active plans."
+          icon={Globe}
+          action={
+            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm transition-all" asChild>
+              <Link href="/dashboard/domains">
+                Go to Domains <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
+            </Button>
+          }
+        />
+        <SectionCardContent>
+          Connect new websites securely to ConsentFlow to immediately achieve GDPR and CCPA compliance. You can track consent logs, manage banners, and view unique visitor metrics directly per domain.
+        </SectionCardContent>
+      </SectionCard>
     </DashboardLayout>
   );
 }
@@ -232,8 +218,8 @@ export default function DashboardPage() {
     <Suspense
       fallback={
         <DashboardLayout>
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+          <div className="flex items-center justify-center h-[60vh]">
+            <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full" />
           </div>
         </DashboardLayout>
       }

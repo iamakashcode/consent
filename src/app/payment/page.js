@@ -5,13 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { ADDON_BRANDING_PRICE_EUR, PLAN_DETAILS, PLAN_CURRENCY } from "@/lib/paddle";
+import { ShieldCheck, CheckCircle2, Search, Zap, Loader2, ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 function PaymentContent() {
   const { data: session, status, update } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const plan = searchParams.get("plan");
-  const siteId = searchParams.get("siteId"); // siteId for domain-based plans
+  const siteId = searchParams.get("siteId");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -24,21 +26,16 @@ function PaymentContent() {
       return;
     }
 
-    // Check if user returned from Paddle payment
     if (status === "authenticated" && typeof window !== 'undefined') {
       const storedSubscriptionId = sessionStorage.getItem('paddle_subscription_id');
       const storedRedirectUrl = sessionStorage.getItem('paddle_redirect_url');
 
-      // If user has payment info in sessionStorage, redirect to profile page
       if (storedSubscriptionId && storedRedirectUrl) {
-        // Clear sessionStorage
         sessionStorage.removeItem('paddle_subscription_id');
         sessionStorage.removeItem('paddle_transaction_id');
         sessionStorage.removeItem('paddle_site_id');
         sessionStorage.removeItem('paddle_redirect_url');
         sessionStorage.removeItem('paddle_return_url');
-
-        // Redirect to profile page for auto-sync
         router.push(storedRedirectUrl);
         return;
       }
@@ -49,7 +46,6 @@ function PaymentContent() {
     if (session && plan && ["basic", "starter", "pro"].includes(plan) && !orderData && !loading) {
       createOrder();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, plan, siteId]);
 
   const createOrder = async () => {
@@ -59,103 +55,60 @@ function PaymentContent() {
 
       const response = await fetch("/api/payment/create-order", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ plan, siteId, addons: { removeBranding: includeBrandingAddon } }), // Include siteId for domain-based plans
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan, siteId, addons: { removeBranding: includeBrandingAddon } }),
       });
 
       const data = await response.json();
 
-      console.log("[Payment] API Response:", data);
-
       if (!response.ok) {
-        // If session is out of sync, refresh the page
         if (data.needsRefresh) {
-          // Don't show alert, just refresh - the error message is confusing
-          console.log("Session out of sync, refreshing...", data);
-          // Update session first, then refresh
           await update();
-          setTimeout(() => {
-            window.location.reload();
-          }, 500);
+          setTimeout(() => window.location.reload(), 500);
           return;
         }
-        // For other errors, show them
-        setError(data.error || "Failed to create order");
+        setError(data.error || "Failed to initiate payment handshake");
         setLoading(false);
         return;
       }
 
-      // If subscription setup is required (Basic trial or Starter/Pro subscription), redirect to Paddle
       if (data.requiresPaymentSetup || data.subscriptionId || data.subscriptionAuthUrl || data.checkoutUrl) {
-        // Update session first
         await update();
 
-        // Get checkout URL from response (prefer checkoutUrl, then subscriptionAuthUrl)
         let checkoutUrl = data.checkoutUrl || data.subscriptionAuthUrl;
 
-        // If checkout URL points to our domain (embedded checkout), redirect to our checkout page
-        // Format: https://ourdomain.com?_ptxn=txn_xxx
         if (checkoutUrl && checkoutUrl.includes(window.location.origin)) {
-          // Extract transaction ID and redirect to our checkout page
           const transactionId = data.transactionId || checkoutUrl.match(/_ptxn=([^&]+)/)?.[1];
-          if (transactionId) {
-            checkoutUrl = `/checkout?_ptxn=${transactionId}`;
-            console.log("[Payment] Using embedded checkout page:", checkoutUrl);
-          }
-        } else {
-          // Full Paddle hosted URL - use as-is
-          console.log("[Payment] Using Paddle hosted checkout URL:", checkoutUrl);
+          if (transactionId) checkoutUrl = `/checkout?_ptxn=${transactionId}`;
         }
 
-        // If no checkout URL but we have subscriptionId, try to fetch it
         if (!checkoutUrl && data.subscriptionId) {
           try {
-            console.log("[Payment] Fetching auth URL for subscription:", data.subscriptionId);
             const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
             if (authResponse.ok) {
               const authData = await authResponse.json();
-              if (authData.authUrl) {
-                checkoutUrl = authData.authUrl;
-              }
+              if (authData.authUrl) checkoutUrl = authData.authUrl;
             }
-          } catch (err) {
-            console.error("[Payment] Error fetching auth URL:", err);
-          }
+          } catch (err) {}
         }
 
-        // If we have a checkout URL, redirect to it (same tab for better UX)
         if (checkoutUrl) {
-          console.log("[Payment] Redirecting to Paddle checkout:", checkoutUrl);
-
-          // Store transaction/subscription info for return handling
-          if (data.transactionId) {
-            sessionStorage.setItem('paddle_transaction_id', data.transactionId);
-          }
-          if (data.subscriptionId) {
-            sessionStorage.setItem('paddle_subscription_id', data.subscriptionId);
-          }
+          if (data.transactionId) sessionStorage.setItem('paddle_transaction_id', data.transactionId);
+          if (data.subscriptionId) sessionStorage.setItem('paddle_subscription_id', data.subscriptionId);
           if (data.siteId) {
             sessionStorage.setItem('paddle_site_id', data.siteId);
             sessionStorage.setItem('paddle_redirect_url', `/dashboard/domains?payment=success&siteId=${data.siteId}`);
           }
-          if (data.returnUrl) {
-            sessionStorage.setItem('paddle_return_url', data.returnUrl);
-          }
+          if (data.returnUrl) sessionStorage.setItem('paddle_return_url', data.returnUrl);
 
-          // Redirect to Paddle checkout (same tab - better UX)
           window.location.href = checkoutUrl;
           return;
         }
 
-        // If we reach here, couldn't get auth URL - show subscription setup UI instead
-        console.log("[Payment] No auth URL available, showing subscription setup UI");
         setOrderData({
           subscription: true,
           requiresPaymentSetup: true,
           subscriptionId: data.subscriptionId,
-          subscriptionAuthUrl: authUrl || null,
           plan: plan,
           domain: data.domain,
           siteId: data.siteId,
@@ -165,22 +118,8 @@ function PaymentContent() {
         return;
       }
 
-      // If basic plan with trial, handle subscription setup
-      if (data.trial && data.success) {
-        // Update session to reflect new plan
+      if ((data.trial && data.success) || (data.subscription && data.success)) {
         await update();
-
-        // If we reach here, payment setup wasn't required or failed
-        setOrderData({ trial: true, ...data });
-        return;
-      }
-
-      // If subscription (Starter/Pro), handle subscription setup
-      if (data.subscription && data.success) {
-        // Update session to reflect new plan
-        await update();
-
-        // Try to get auth URL if we have subscription ID
         if (data.subscriptionId) {
           try {
             const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
@@ -188,49 +127,29 @@ function PaymentContent() {
               const authData = await authResponse.json();
               if (authData.authUrl) {
                 window.open(authData.authUrl, '_blank');
-                setLoading(false); // Reset loading state
-                alert("Paddle payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
+                setLoading(false);
                 return;
               }
             }
-          } catch (err) {
-            console.error("[Payment] Error fetching auth URL:", err);
-          }
+          } catch (err) {}
         }
-
-        // If we reach here, redirect failed - show subscription setup UI
-        setOrderData({
-          subscription: true,
-          requiresPaymentSetup: true,
-          subscriptionId: data.subscriptionId,
-          plan: plan,
-          domain: data.domain,
-          siteId: data.siteId,
-          ...data
-        });
-        setLoading(false);
+        setOrderData({ trial: data.trial, subscription: data.subscription, ...data });
         return;
       }
 
-      // If we have success but no specific handling, check if it's a subscription
       if (data.success && data.subscriptionId && !data.amount) {
-        // This is a subscription, try to get auth URL
         try {
           const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
           if (authResponse.ok) {
             const authData = await authResponse.json();
             if (authData.authUrl) {
               window.open(authData.authUrl, '_blank');
-              setLoading(false); // Reset loading state
-              alert("Paddle payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
+              setLoading(false);
               return;
             }
           }
-        } catch (err) {
-          console.error("[Payment] Error fetching auth URL:", err);
-        }
+        } catch (err) {}
 
-        // Show subscription setup UI
         setOrderData({
           subscription: true,
           requiresPaymentSetup: true,
@@ -246,389 +165,179 @@ function PaymentContent() {
 
       setOrderData(data);
     } catch (err) {
-      setError(err.message || "An error occurred");
+      setError(err.message || "A secure connection could not be established");
     } finally {
       setLoading(false);
     }
   };
 
-  // Paddle uses checkout URLs, not inline SDK handlers
-  // Payment is handled via checkout URL redirect - no handlePayment function needed
-
   if (status === "loading" || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-lg">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 font-sans">
+        <div className="w-12 h-12 border-[3px] border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   if (!session || !plan || !["basic", "starter", "pro"].includes(plan)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Invalid Plan</h1>
-          <Link href="/plans" className="text-indigo-600 hover:text-indigo-700">
-            Go to Plans
-          </Link>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 font-sans p-4">
+        <Search className="w-12 h-12 text-slate-300 mb-4" />
+        <h1 className="text-xl font-bold tracking-tight text-slate-900 mb-2">Invalid Subscription Request</h1>
+        <Button variant="link" asChild className="text-indigo-600">
+          <Link href="/plans"><ArrowLeft className="w-4 h-4 mr-2" /> Return to Plans</Link>
+        </Button>
       </div>
     );
   }
 
-  // If siteId is required but not provided, redirect back to plans
   if (!siteId) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Domain Required</h1>
-          <p className="text-gray-600 mb-4">Please select a domain first to choose a plan.</p>
-          <Link href="/dashboard" className="text-indigo-600 hover:text-indigo-700">
-            Go to Dashboard
-          </Link>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 font-sans p-4">
+        <Globe className="w-12 h-12 text-slate-300 mb-4" />
+        <h1 className="text-xl font-bold tracking-tight text-slate-900 mb-2">Workspace Required</h1>
+        <p className="text-[14px] text-slate-500 mb-6 font-medium">Please select a domain to apply the subscription to.</p>
+        <Button asChild className="rounded-xl shadow-sm bg-slate-900 hover:bg-slate-800">
+          <Link href="/dashboard/domains">Go to Infrastructure</Link>
+        </Button>
       </div>
     );
   }
 
-  const planNames = Object.fromEntries(
-    Object.entries(PLAN_DETAILS).map(([k, v]) => [k, v.name])
-  );
-  const planPrices = Object.fromEntries(
-    Object.entries(PLAN_DETAILS).map(([k, v]) => [k, `${PLAN_CURRENCY} ${v.price}`])
-  );
+  const planNames = Object.fromEntries(Object.entries(PLAN_DETAILS).map(([k, v]) => [k, v.name]));
+  const planPrices = Object.fromEntries(Object.entries(PLAN_DETAILS).map(([k, v]) => [k, `${PLAN_CURRENCY}${v.price}`]));
 
   return (
-    <>
-      {/* Paddle uses checkout URLs, no SDK needed */}
-      <div className="min-h-screen bg-gray-50">
-        <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-12">
-          <div className="bg-white rounded-lg shadow-lg p-8">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Upgrade to {planNames[plan]} Plan
-              </h1>
-              <p className="text-gray-600">
-                Complete your payment to upgrade your subscription
-              </p>
+    <div className="min-h-screen bg-slate-50 font-sans py-12 px-4 sm:px-6">
+      <div className="max-w-xl mx-auto w-full">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white shadow-sm border border-slate-200 mb-6">
+            <ShieldCheck className="w-8 h-8 text-indigo-600" />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-2">Confirm Subscription</h1>
+          <p className="text-[15px] font-medium text-slate-500">
+            Secure checkout powered by Paddle
+          </p>
+        </div>
+
+        <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+          <div className="p-8 pb-0">
+            <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
+              <div>
+                <p className="text-[13px] font-bold tracking-widest uppercase text-indigo-600 mb-1">Selected Tier</p>
+                <h3 className="text-2xl font-bold text-slate-900">{planNames[plan]} Plan</h3>
+              </div>
+              <div className="text-right">
+                <span className="text-3xl font-extrabold tracking-tight text-slate-900">{planPrices[plan]}</span>
+                <span className="block text-[13px] font-medium text-slate-500 mt-1">/ month</span>
+              </div>
             </div>
 
-            <div className="mb-6 bg-gray-50 rounded-lg border border-gray-200 p-4">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
-                  checked={includeBrandingAddon}
-                  onChange={(e) => setIncludeBrandingAddon(e.target.checked)}
-                />
+            <div className="mb-8 p-5 bg-slate-50 border border-slate-200 rounded-2xl transition-colors hover:border-indigo-300 hover:bg-indigo-50/30">
+              <label className="flex items-start gap-4 cursor-pointer group">
+                <div className={cn(
+                  "mt-0.5 flex shrink-0 items-center justify-center rounded border h-5 w-5 transition-colors",
+                  includeBrandingAddon 
+                    ? "bg-indigo-600 border-indigo-600"
+                    : "border-slate-300 bg-white group-hover:border-slate-400"
+                )}>
+                  {includeBrandingAddon && <CheckCircle2 className="h-3 w-3 text-white" strokeWidth={3} />}
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={includeBrandingAddon}
+                    onChange={(e) => setIncludeBrandingAddon(e.target.checked)}
+                  />
+                </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Remove branding</p>
-                  <p className="text-sm text-gray-600">
-                    Hide &quot;Powered by Cookie Access&quot; on your banner.{" "}
-                    <span className="font-medium text-gray-900">
-                      + {PLAN_CURRENCY} {ADDON_BRANDING_PRICE_EUR}/month
-                    </span>
+                  <p className="text-[14px] font-bold text-slate-900">White-label UI Addon</p>
+                  <p className="text-[13px] font-medium text-slate-500 mt-1 leading-relaxed">
+                    Remove all ConsentFlow branding from your public banner. 
+                    <strong className="text-slate-900 block mt-1">+{PLAN_CURRENCY}{ADDON_BRANDING_PRICE_EUR}/mo</strong>
                   </p>
                 </div>
               </label>
             </div>
+          </div>
 
+          <div className="px-8 pb-8">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-                {error}
-              </div>
-            )}
-
-            {orderData && orderData.trial ? (
-              <div className="space-y-6">
-                {orderData.showPaymentLink ? (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
-                    <div className="mb-4">
-                      <svg className="mx-auto h-12 w-12 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                    </div>
-                    <h2 className="text-2xl font-bold text-yellow-900 mb-2">
-                      Payment Setup Required
-                    </h2>
-                    <p className="text-yellow-800 mb-4">
-                      To start your {orderData.trialDays}-day free trial, please add a payment method.
-                    </p>
-                    <p className="text-sm text-yellow-700 mb-4">
-                      Your card will not be charged until after the trial period ends.
-                    </p>
-                    <button
-                      onClick={() => {
-                        // Fetch subscription auth URL from API
-                        fetch(`/api/payment/get-subscription-auth?subscriptionId=${orderData.subscriptionId}`)
-                          .then(res => res.json())
-                          .then(data => {
-                            if (data.authUrl) {
-                              window.open(data.authUrl, '_blank');
-                              setLoading(false); // Reset loading state
-                              alert("Paddle payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
-                            } else {
-                              setError("Failed to get payment setup link. Please contact support.");
-                              setLoading(false);
-                            }
-                          })
-                          .catch(err => {
-                            console.error("Error fetching auth URL:", err);
-                            setError("Failed to set up payment. Please try again.");
-                          });
-                      }}
-                      className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
-                    >
-                      Add Payment Method
-                    </button>
-                  </div>
-                ) : (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-                    <div className="mb-4">
-                      <svg className="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <h2 className="text-2xl font-bold text-green-900 mb-2">
-                      Free Trial Started!
-                    </h2>
-                    <p className="text-green-800 mb-4">
-                      Your {orderData.trialDays}-day free trial for the {planNames[plan]} plan has started.
-                    </p>
-                    <p className="text-sm text-green-700 mb-4">
-                      Trial ends on: {new Date(orderData.trialEndAt).toLocaleDateString()}
-                    </p>
-                    <p className="text-sm text-green-600">
-                      Payment of {planPrices[plan]} will be automatically deducted after the trial period ends.
-                    </p>
-                  </div>
-                )}
-                <Link
-                  href="/profile"
-                  className="block w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors text-center"
-                >
-                  Go to Profile
-                </Link>
-              </div>
-            ) : orderData && orderData.subscription ? (
-              <div className="space-y-6">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                  <div className="flex items-start">
-                    <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div>
-                      <p className="text-sm font-semibold text-blue-900 mb-1">
-                        Recurring Subscription
-                      </p>
-                      <p className="text-xs text-blue-700">
-                        This is a monthly recurring subscription. You&apos;ll be charged {planPrices[plan]} every month automatically.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-gray-600">Plan</span>
-                    <span className="font-semibold text-gray-900">
-                      {planNames[plan]}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-gray-600">Monthly Amount</span>
-                    <span className="text-2xl font-bold text-indigo-600">
-                      {planPrices[plan]}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Billing Period</span>
-                    <span className="font-semibold text-gray-900">Monthly (Recurring)</span>
-                  </div>
-                </div>
-
-                <div className="text-center">
-                  <p className="text-sm text-gray-600 mb-4">
-                    Redirecting to Paddle to set up your subscription...
-                  </p>
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
-                  <p className="text-xs text-blue-800">
-                    <strong>Note:</strong> After completing payment on Paddle, if you&apos;re not automatically redirected, you can manually return to your profile page. Your subscription will be activated automatically.
-                  </p>
-                </div>
-
-                <p className="text-xs text-center text-gray-500">
-                  By proceeding, you agree to our terms and conditions. This is a recurring monthly subscription.
-                </p>
-              </div>
-            ) : orderData && (orderData.requiresPaymentSetup || (orderData.subscription && !orderData.amount)) ? (
-              <div className="space-y-6">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                  <div className="flex items-start">
-                    <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div>
-                      <p className="text-sm font-semibold text-blue-900 mb-1">
-                        Payment Setup Required
-                      </p>
-                      <p className="text-xs text-blue-700">
-                        Please add a payment method to activate your subscription. {plan === "basic" && "Your 14-day free trial will start after activation."}
-                      </p>
-                      <p className="text-xs text-blue-600 mt-2">
-                        💡 <strong>After completing payment on Paddle:</strong> Your subscription will be automatically synced when you return to your profile page. If you&apos;re not redirected automatically, simply navigate back to your profile page - the status will update automatically.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-gray-600">Plan</span>
-                    <span className="font-semibold text-gray-900">
-                      {planNames[plan]}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-gray-600">Monthly Amount</span>
-                    <span className="text-2xl font-bold text-indigo-600">
-                      {planPrices[plan]}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Billing Period</span>
-                    <span className="font-semibold text-gray-900">Monthly (Recurring)</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={async () => {
-                    try {
-                      if (orderData.subscriptionAuthUrl) {
-                        window.open(orderData.subscriptionAuthUrl, '_blank');
-                        setLoading(false); // Reset loading state
-                        alert("Paddle payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
-                      } else if (orderData.subscriptionId) {
-                        const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${orderData.subscriptionId}`);
-                        const authData = await authResponse.json();
-                        if (authData.authUrl) {
-                          window.open(authData.authUrl, '_blank');
-                          setLoading(false); // Reset loading state
-                          alert("Paddle payment page opened in a new tab. After completing payment, return to your profile page and your subscription will be automatically synced.");
-                        } else {
-                          setError("Failed to get payment setup link. Please try again.");
-                          setLoading(false);
-                        }
-                      } else {
-                        setError("Payment setup link not available. Please try selecting the plan again.");
-                      }
-                    } catch (err) {
-                      console.error("Error setting up payment:", err);
-                      setError("Failed to set up payment. Please try again.");
-                    }
-                  }}
-                  className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
-                >
-                  Add Payment Method & Activate
-                </button>
-
-                <p className="text-xs text-center text-gray-500">
-                  By proceeding, you agree to our terms and conditions. This is a recurring monthly subscription.
-                </p>
-              </div>
-            ) : orderData && orderData.amount ? (
-              <div className="space-y-6">
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-gray-600">Plan</span>
-                    <span className="font-semibold text-gray-900">
-                      {planNames[plan]}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-gray-600">Amount</span>
-                    <span className="text-2xl font-bold text-indigo-600">
-                      {planPrices[plan]}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500 text-center mb-4">
-                    (Amount in payment gateway: ${(orderData.amount / 100).toFixed(2)} = {orderData.amount} cents)
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Billing Period</span>
-                    <span className="font-semibold text-gray-900">Monthly</span>
-                  </div>
-                </div>
-
-                {orderData.subscriptionAuthUrl ? (
-                  <button
-                    onClick={() => {
-                      if (orderData.subscriptionAuthUrl) {
-                        window.open(orderData.subscriptionAuthUrl, '_blank');
-                        if (orderData.subscriptionId || orderData.transactionId) {
-                          sessionStorage.setItem('paddle_subscription_id', orderData.subscriptionId || '');
-                          sessionStorage.setItem('paddle_transaction_id', orderData.transactionId || '');
-                          sessionStorage.setItem('paddle_site_id', siteId || '');
-                          sessionStorage.setItem('paddle_redirect_url', `/dashboard/domains?payment=success&siteId=${siteId}`);
-                        }
-                        alert("Paddle checkout opened. After payment, return to dashboard.");
-                      }
-                    }}
-                    className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
-                  >
-                    Pay {planPrices[plan]} & Upgrade
-                  </button>
-                ) : (
-                  <button
-                    disabled
-                    className="w-full bg-gray-400 text-white py-3 rounded-lg font-semibold cursor-not-allowed"
-                  >
-                    Loading checkout...
-                  </button>
-                )}
-
-                <p className="text-xs text-center text-gray-500">
-                  By proceeding, you agree to our terms and conditions. This is a
-                  test payment using Paddle test keys.
-                </p>
-              </div>
-            ) : orderData && (
-              <div className="space-y-6">
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
-                  <p className="text-yellow-900 mb-4">
-                    Unable to process payment. Please try selecting the plan again.
-                  </p>
-                  <Link
-                    href={`/plans?siteId=${siteId}&domain=${encodeURIComponent(orderData.domain || "")}`}
-                    className="inline-block bg-indigo-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
-                  >
-                    Go Back to Plans
-                  </Link>
-                </div>
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl mb-6 flex items-start gap-3">
+                <ShieldAlert className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+                <p className="text-[13px] font-medium text-rose-700 leading-snug">{error}</p>
               </div>
             )}
 
             {!orderData && !error && (
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Preparing payment...</p>
+              <Button disabled className="w-full h-14 text-[16px] font-bold tracking-wide rounded-xl bg-slate-900 text-white shadow-md">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" /> Connecting to Gateway...
+              </Button>
+            )}
+
+            {orderData && (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {orderData.requiresPaymentSetup || (orderData.subscription && !orderData.amount) ? (
+                  <>
+                     <div className="mb-6 p-4 bg-amber-50 rounded-xl border border-amber-200">
+                        <p className="text-[13px] font-medium text-amber-800 leading-relaxed text-center">
+                           Please attach a secure payment method to authorize the subscription. You will be redirected to our Merchant of Record, Paddle.
+                        </p>
+                     </div>
+                     <Button 
+                       onClick={async () => {
+                         try {
+                           if (orderData.subscriptionAuthUrl) {
+                             window.open(orderData.subscriptionAuthUrl, '_blank');
+                           } else if (orderData.subscriptionId) {
+                             const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${orderData.subscriptionId}`);
+                             const authData = await authResponse.json();
+                             if (authData.authUrl) window.open(authData.authUrl, '_blank');
+                           }
+                         } catch (err) {
+                           setError("Gateway rejected the session. Please retry.");
+                         }
+                       }}
+                       className="w-full h-14 text-[16px] font-bold tracking-wide rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20"
+                     >
+                        Enter Billing Details
+                     </Button>
+                  </>
+                ) : orderData.trial ? (
+                   <div className="text-center p-6 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                      <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Zap className="w-6 h-6 text-emerald-600" />
+                      </div>
+                      <h2 className="text-xl font-bold text-slate-900 mb-2">Free Trial Activated</h2>
+                      <p className="text-[14px] font-medium text-slate-600 mb-6">Your 14-day trial has commenced instantly.</p>
+                      <Button asChild className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm font-bold tracking-wide">
+                        <Link href="/dashboard">Return to Dashboard</Link>
+                      </Button>
+                   </div>
+                ) : (
+                   <div className="text-center">
+                      <Button disabled className="w-full h-14 text-[16px] font-bold tracking-wide rounded-xl bg-slate-100 text-slate-500 shadow-none border border-slate-200">
+                        Please resolve gateway hold
+                      </Button>
+                   </div>
+                )}
               </div>
             )}
+            
+            <p className="text-[12px] font-medium text-slate-400 text-center mt-6 mx-auto max-w-sm flex items-center justify-center gap-1.5">
+               <ShieldCheck className="w-3.5 h-3.5" /> Data protected by 256-bit SSL encryption
+            </p>
           </div>
-        </main>
+        </div>
       </div>
-    </>
+    </div>
   );
 }
 
 export default function PaymentPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-lg">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-12 h-12 border-[3px] border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
       </div>
     }>
       <PaymentContent />

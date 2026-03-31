@@ -7,7 +7,6 @@ import Link from "next/link";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
 import { getScriptPath } from "@/lib/script-urls";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,7 +25,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Globe, CheckCircle2, Clock, XCircle, Pencil, Trash2, Plus, Copy } from "lucide-react";
+import { Globe, CheckCircle2, Clock, XCircle, Pencil, Trash2, Plus, Copy, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+// Shared components
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SectionCard, SectionCardHeader } from "@/components/shared/SectionCard";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { inputClasses } from "@/components/shared/FormField";
 
 function DomainsContent() {
   const { data: session, status } = useSession();
@@ -64,7 +70,7 @@ function DomainsContent() {
     toast.success("Payment successful", {
       description: "Your domain and subscription are now active.",
     });
-    fetchData(); // Refetch so new site/trial appears and pending list updates
+    fetchData();
     if (typeof window !== "undefined" && window.history?.replaceState) {
       const url = new URL(window.location.href);
       url.searchParams.delete("payment");
@@ -265,8 +271,8 @@ function DomainsContent() {
   if (status === "loading" || loading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
         </div>
       </DashboardLayout>
     );
@@ -276,252 +282,262 @@ function DomainsContent() {
 
   return (
     <DashboardLayout>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight">Domains</h1>
-        <p className="text-muted-foreground mt-1">Add domains, install script, and manage plans</p>
-      </div>
+      <PageHeader 
+        title="Domains" 
+        description="Add domains, monitor installation status, and manage specific consent plans per project."
+      />
 
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Add new domain</CardTitle>
-          <CardDescription>Scan your website to add it and get the consent script</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-3 flex-wrap">
-            <Input
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              placeholder="e.g. example.com"
-              className="flex-1 min-w-[200px]"
-              onKeyDown={(e) => e.key === "Enter" && handleAddDomain()}
-            />
-            <Button onClick={handleAddDomain} disabled={addLoading}>
+      <div className="grid lg:grid-cols-[1fr_2fr] gap-6 mb-8 items-start">
+        <SectionCard className="sticky top-20">
+          <SectionCardHeader 
+            title="Add a new domain" 
+            description="Scan your site to begin tracking." 
+            icon={Plus} 
+          />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Website URL</label>
+              <Input
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                placeholder="e.g. yourstartup.com"
+                className={inputClasses}
+                onKeyDown={(e) => e.key === "Enter" && handleAddDomain()}
+              />
+            </div>
+            
+            <Button 
+              onClick={handleAddDomain} 
+              disabled={addLoading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm h-11"
+            >
               {addLoading ? (
-                <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+                <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full mr-2" />
               ) : (
-                <Plus className="h-4 w-4" />
+                <Plus className="h-4 w-4 mr-2 text-indigo-200" />
               )}
-              Add domain
+              {addLoading ? "Scanning domain..." : "Scan & Add Domain"}
+            </Button>
+
+            {addError && <p className="text-sm text-rose-500 mt-2 font-medium">{addError}</p>}
+            
+            {addResult && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 mt-3 animate-in fade-in zoom-in-95">
+                <div className="flex items-center gap-2 text-emerald-800 font-medium mb-1">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Successfully added
+                </div>
+                <div className="text-[13px] text-emerald-700">
+                  <span className="font-semibold block">{addResult.domain}</span>
+                  {addResult.trackers?.length > 0 && (
+                    <span className="mt-1 block opacity-80">{addResult.trackers.length} tracker(s) detected automatically.</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+
+        <SectionCard noPadding>
+          <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h2 className="text-[17px] font-semibold tracking-tight text-slate-900">Your domains</h2>
+              <p className="text-[13px] text-slate-500 mt-0.5">Manage existing projects and their script integrations.</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={fetchData} className="rounded-lg h-9 text-slate-600 border-slate-200 hover:bg-slate-50">
+              <RefreshCw className="h-4 w-4 mr-2" /> Refresh
             </Button>
           </div>
-          {addError && <p className="text-sm text-destructive">{addError}</p>}
-          {addResult && (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-              <span className="font-medium">Added: {addResult.domain}</span>
-              {addResult.trackers?.length > 0 && (
-                <span className="ml-1">· {addResult.trackers.length} tracker(s) detected</span>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>All domains</CardTitle>
-            <CardDescription>Manage script, plan, and actions per domain</CardDescription>
-          </div>
-          <Button variant="outline" size="sm" onClick={fetchData}>Refresh</Button>
-        </CardHeader>
-        <CardContent>
-          {sites.length > 0 || pendingDomains.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Domain</TableHead>
-                  <TableHead>Script</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Next renewal</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingDomains.map((pending) => (
-                  <TableRow key={pending.id} className="bg-amber-50/50">
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
-                          <Clock className="h-5 w-5 text-amber-600" />
-                        </div>
-                        <span className="font-medium">{pending.domain}</span>
-                        <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded">Pending</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">—</TableCell>
-                    <TableCell className="text-muted-foreground">No plan yet</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-amber-500" />
-                        <span className="text-sm">Select plan or remove</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">—</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2 flex-wrap">
-                        <Button size="sm" asChild>
-                          <Link href={`/plans?siteId=${pending.siteId}&domain=${encodeURIComponent(pending.domain)}`}>Select plan</Link>
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => confirmDeletePending(pending)}
-                          disabled={deletingPendingId === pending.siteId}
-                        >
-                          {deletingPendingId === pending.siteId ? (
-                            <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full inline-block" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                          Delete
-                        </Button>
-                      </div>
-                    </TableCell>
+          
+          <div className="overflow-x-auto">
+            {sites.length > 0 || pendingDomains.length > 0 ? (
+              <Table>
+                <TableHeader className="bg-slate-50/80 border-b border-slate-200/80">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="font-medium text-slate-600 h-11 px-6">Domain details</TableHead>
+                    <TableHead className="font-medium text-slate-600 h-11">Installation</TableHead>
+                    <TableHead className="font-medium text-slate-600 h-11">Plan status</TableHead>
+                    <TableHead className="text-right font-medium text-slate-600 h-11 px-6">Actions</TableHead>
                   </TableRow>
-                ))}
-                {sites.map((site) => {
-                  const sub = subscriptions[site.siteId];
-                  const subscription = sub?.subscription;
-                  const statusLower = subscription?.status?.toLowerCase();
-                  const isActive = sub?.isActive;
-                  const isPending = statusLower === "pending";
-                  const isTrial = statusLower === "trial" || sub?.userTrialActive;
-                  const trialNotStarted = !sub?.subscription && !sub?.userTrialActive;
-                  const scriptInstalled = scriptStatus[site.siteId]?.scriptInstalled ?? false;
-                  const nextRenewal = subscription?.currentPeriodEnd && isActive
-                    ? new Date(subscription.currentPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                    : "—";
-                  const planLabel = subscription?.plan
-                    ? subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1) + (isTrial ? " (Trial)" : "")
-                    : "No plan";
-                  const statusText = isActive
-                    ? (isTrial ? "Free trial" : "Active")
-                    : isPending
-                      ? "Payment required"
-                      : trialNotStarted
-                        ? "No plan"
-                        : "Inactive";
-
-                  return (
-                    <TableRow key={site.id}>
-                      <TableCell>
+                </TableHeader>
+                <TableBody>
+                  {pendingDomains.map((pending) => (
+                    <TableRow key={pending.id} className="bg-amber-50/30 hover:bg-amber-50/50 transition-colors border-b border-slate-100">
+                      <TableCell className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                            <Globe className="h-5 w-5 text-muted-foreground" />
+                          <div className="h-9 w-9 rounded-xl bg-amber-100/80 border border-amber-200/50 flex items-center justify-center shrink-0 shadow-sm">
+                            <Clock className="h-[18px] w-[18px] text-amber-600" />
                           </div>
-                          <span className="font-medium">{site.domain}</span>
+                          <div>
+                            <span className="font-semibold text-[14px] text-slate-900 block">{pending.domain}</span>
+                            <span className="text-[12px] font-medium text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-md mt-1 inline-block border border-amber-200/60">Awaiting plan</span>
+                          </div>
                         </div>
                       </TableCell>
+                      <TableCell className="text-slate-400 text-sm">—</TableCell>
                       <TableCell>
-                        {scriptInstalled ? (
-                          <span className="inline-flex items-center gap-1.5 text-sm text-emerald-600">
-                            <CheckCircle2 className="h-4 w-4" /> Installed
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 text-sm text-amber-600">
-                            <Clock className="h-4 w-4" /> Not detected
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{planLabel}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {isActive ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : isPending ? <Clock className="h-4 w-4 text-amber-500" /> : <XCircle className="h-4 w-4 text-red-500" />}
-                          <span className="text-sm">{statusText}</span>
+                        <div className="flex items-center gap-1.5 text-slate-600">
+                          <Clock className="h-4 w-4 text-amber-500" />
+                          <span className="text-[13px] font-medium">Pending setup</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{nextRenewal}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right px-6">
                         <div className="flex items-center justify-end gap-2 flex-wrap">
-                          {uploadMsg[site.siteId] && (
-                            <span className={`text-xs ${uploadMsg[site.siteId] === "Uploaded" ? "text-emerald-600" : "text-destructive"}`}>
-                              {uploadMsg[site.siteId]}
-                            </span>
-                          )}
-                          {isActive && (
-                            <>
-                              <Button variant="secondary" size="sm" onClick={() => copyScript(site)}>
-                                <Copy className="h-4 w-4" />
-                                {copiedId === site.id ? "Copied" : "Copy script"}
-                              </Button>
-                              {/* <Button variant="secondary" size="sm" onClick={() => uploadToCdn(site)} disabled={uploadingId === site.id}>
-                                {uploadingId === site.id ? "Uploading…" : <><Upload className="h-4 w-4" /> Upload CDN</>}
-                              </Button> */}
-                              <Button variant="secondary" size="sm" asChild>
-                                <Link href={`/banner?siteId=${site.siteId}`}><Pencil className="h-4 w-4" /> Manage</Link>
-                              </Button>
-                              <Button variant="secondary" size="sm" asChild>
-                                <Link href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}>Change plan</Link>
-                              </Button>
-                            </>
-                          )}
-                          {!isActive && (
-                            <Button size="sm" asChild>
-                              <Link href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}>Select plan</Link>
-                            </Button>
-                          )}
+                          <Button size="sm" asChild className="rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-all h-8 px-3">
+                            <Link href={`/plans?siteId=${pending.siteId}&domain=${encodeURIComponent(pending.domain)}`}>Select plan</Link>
+                          </Button>
                           <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => confirmDelete(site)}
-                            disabled={deletingId === site.id}
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                            onClick={() => confirmDeletePending(pending)}
+                            disabled={deletingPendingId === pending.siteId}
                           >
-                            {deletingId === site.id ? (
-                              <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+                            {deletingPendingId === pending.siteId ? (
+                              <span className="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full inline-block" />
                             ) : (
                               <Trash2 className="h-4 w-4" />
                             )}
-                            Delete
                           </Button>
                         </div>
                       </TableCell>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="py-16 text-center">
-              <div className="h-14 w-14 rounded-xl bg-muted flex items-center justify-center mx-auto mb-4">
-                <Globe className="h-7 w-7 text-muted-foreground" />
-              </div>
-              <h3 className="text-lg font-medium mb-1">No domains yet</h3>
-              <p className="text-muted-foreground text-sm mb-4">Add your first domain using the form above.</p>
-            </div>
-          )}
+                  ))}
+                  {sites.map((site) => {
+                    const sub = subscriptions[site.siteId];
+                    const subscription = sub?.subscription;
+                    const statusLower = subscription?.status?.toLowerCase();
+                    const isActive = sub?.isActive;
+                    const isPending = statusLower === "pending";
+                    const isTrial = statusLower === "trial" || sub?.userTrialActive;
+                    const trialNotStarted = !sub?.subscription && !sub?.userTrialActive;
+                    const scriptInstalled = scriptStatus[site.siteId]?.scriptInstalled ?? false;
+                    const planLabel = subscription?.plan
+                      ? subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)
+                      : "No active plan";
+                    const statusText = isActive
+                      ? (isTrial ? "Trial active" : "Active plan")
+                      : isPending
+                        ? "Payment required"
+                        : trialNotStarted
+                          ? "No plan chosen"
+                          : "Inactive access";
 
-          <Dialog open={pendingDeleteOpen} onOpenChange={setPendingDeleteOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Remove pending domain</DialogTitle>
-                <DialogDescription>
-                  Remove <strong>{pendingToDelete?.domain}</strong> from pending? You can add it again later and choose a plan.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setPendingDeleteOpen(false)}>Cancel</Button>
-                <Button variant="destructive" onClick={deletePendingDomain} disabled={deletingPendingId}>
-                  {deletingPendingId ? "Removing…" : "Remove"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </CardContent>
-      </Card>
+                    return (
+                      <TableRow key={site.id} className="hover:bg-slate-50/50 transition-colors border-b border-slate-100 group">
+                        <TableCell className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200/50 flex items-center justify-center shrink-0 shadow-sm group-hover:bg-white group-hover:border-slate-300 transition-colors">
+                              <Globe className="h-[18px] w-[18px] text-slate-500" />
+                            </div>
+                            <div>
+                              <span className="font-semibold text-[14px] text-slate-900 block">{site.domain}</span>
+                              <span className="text-[12px] text-slate-500 mt-0.5 block">{planLabel}</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {scriptInstalled ? (
+                            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-md">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-amber-700 bg-amber-50 border border-amber-100 px-2 py-1 rounded-md">
+                              <Clock className="h-3.5 w-3.5 text-amber-500" /> Pending
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {isActive ? (
+                               <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                            ) : isPending ? (
+                               <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                            ) : (
+                               <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                            )}
+                            <span className="text-[13px] font-medium text-slate-700">{statusText}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right px-6">
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                            {isActive && (
+                              <>
+                                <Button variant="outline" size="sm" onClick={() => copyScript(site)} className="h-8 text-xs font-medium rounded-lg text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-colors">
+                                  <Copy className="h-3.5 w-3.5 mr-1.5" />
+                                  {copiedId === site.id ? "Copied!" : "Script"}
+                                </Button>
+                                <Button variant="outline" size="sm" asChild className="h-8 text-xs font-medium rounded-lg text-slate-600 hover:text-slate-900 transition-colors">
+                                  <Link href={`/banner?siteId=${site.siteId}`}><Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit Banner</Link>
+                                </Button>
+                              </>
+                            )}
+                            {!isActive && (
+                              <Button size="sm" asChild className="h-8 text-xs font-medium rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 transition-colors">
+                                <Link href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}>Review Plan</Link>
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg ml-1"
+                              onClick={() => confirmDelete(site)}
+                              disabled={deletingId === site.id}
+                              title="Delete domain"
+                            >
+                              {deletingId === site.id ? (
+                                <span className="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            ) : (
+              <EmptyState 
+                icon={Globe}
+                title="No domains connected yet"
+                description="Use the form on the left to scan and add your first website. Once connected, you can install the tracking script."
+              />
+            )}
+          </div>
+        </SectionCard>
+      </div>
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete domain</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete <strong>{siteToDelete?.domain}</strong>? This cannot be undone and the script will stop working on this domain.
+      <Dialog open={pendingDeleteOpen} onOpenChange={setPendingDeleteOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl p-6">
+          <DialogHeader className="mb-4">
+            <DialogTitle className="text-xl pb-1">Remove pending domain</DialogTitle>
+            <DialogDescription className="text-[15px] pt-2">
+              Remove <strong className="text-slate-900 font-semibold">{pendingToDelete?.domain}</strong> from pending list? You can easily re-scan it anytime.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={deleteSite} disabled={deletingId}>
-              {deletingId ? "Deleting…" : "Delete"}
+          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-slate-100 mt-2">
+            <Button variant="ghost" onClick={() => setPendingDeleteOpen(false)} className="rounded-xl">Cancel</Button>
+            <Button variant="destructive" onClick={deletePendingDomain} disabled={deletingPendingId} className="rounded-xl shadow-sm">
+              {deletingPendingId ? "Removing…" : "Remove Domain"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl p-6 border-rose-100">
+          <DialogHeader className="mb-4">
+            <DialogTitle className="text-xl text-rose-600 pb-1">Delete Domain Permanently</DialogTitle>
+            <DialogDescription className="text-[15px] pt-2">
+              Are you sure you want to delete <strong className="text-slate-900 font-semibold">{siteToDelete?.domain}</strong>? This action cannot be undone, and any installed consent script will immediately stop functioning.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-slate-100 mt-2">
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)} className="rounded-xl">Cancel</Button>
+            <Button variant="destructive" onClick={deleteSite} disabled={deletingId} className="rounded-xl shadow-sm bg-rose-600 hover:bg-rose-700">
+              {deletingId ? "Deleting…" : "Yes, drop it"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -535,8 +551,8 @@ export default function DomainsPage() {
     <Suspense
       fallback={
         <DashboardLayout>
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+          <div className="flex items-center justify-center h-[60vh]">
+            <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
           </div>
         </DashboardLayout>
       }

@@ -4,6 +4,8 @@ import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import AuthLayout from "@/components/auth/AuthLayout";
+import { Loader2 } from "lucide-react";
 import {
   InputOTP,
   InputOTPGroup,
@@ -46,6 +48,7 @@ function VerifyOtpContent() {
     }
     setLoading(true);
     setError("");
+    
     try {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
@@ -58,16 +61,19 @@ function VerifyOtpContent() {
         setLoading(false);
         return;
       }
+      
       const result = await signIn("verify-token", {
         token: data.verifyToken,
         redirect: false,
       });
+      
       if (result?.error) {
         setError("Verification succeeded but login failed. Please sign in with your password.");
         setLoading(false);
-        router.push(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+        // Do not block UI, allow user to click back to login
         return;
       }
+      
       // Full page redirect so session cookie is sent and start-trial gets authenticated user
       window.location.href = `/start-trial?callbackUrl=${encodeURIComponent(callbackUrl)}`;
     } catch (err) {
@@ -99,8 +105,8 @@ function VerifyOtpContent() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
       </div>
     );
   }
@@ -108,105 +114,101 @@ function VerifyOtpContent() {
   if (session) return null;
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md">
-          <Link href="/" className="flex items-center gap-2 mb-8">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-lg">C</span>
+    <AuthLayout
+      title="Verify your email"
+      subtitle="We sent a 6-digit code to your inbox."
+    >
+      <div className="w-full">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200/60 rounded-xl text-[13px] font-medium text-red-700 animate-in fade-in slide-in-from-top-2">
+              {error}
             </div>
-            <span className="text-xl font-semibold text-gray-900">ConsentFlow</span>
-          </Link>
+          )}
 
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Verify your email</h1>
-          <p className="text-gray-500 mb-2">
-            We sent a 6-digit code to your email. Enter it below.
-          </p>
-          <p className="text-gray-500 mb-6 text-sm">
-            OTP expires in <span className="font-medium text-gray-700">10 minutes</span>.
-          </p>
+          <div className="space-y-1.5">
+            <label htmlFor="email" className="block text-sm font-medium text-slate-700">
+              Email address
+            </label>
+            <input
+              id="email"
+              type="email"
+              required
+              disabled={loading}
+              value={email}
+              onChange={(e) => setUserEmailOverride(e.target.value)}
+              className="w-full px-3.5 py-2.5 bg-white border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-xl text-[15px] shadow-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all duration-200 disabled:opacity-50 disabled:bg-slate-50"
+              placeholder="you@example.com"
+            />
+          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {error && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {error}
-              </div>
-            )}
-
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email address
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label htmlFor="otp" className="block text-sm font-medium text-slate-700">
+                Verification code
               </label>
-              <input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setUserEmailOverride(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="you@example.com"
-              />
+              <span className="text-[11px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md uppercase tracking-wide">
+                Expires in 10m
+              </span>
             </div>
-
-            <div>
-              <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
-                Verification code (6 digits)
-              </label>
+            <div className="flex justify-center">
               <InputOTP
                 id="otp"
                 maxLength={6}
                 value={otp}
                 onChange={(value) => setOtp(value)}
-                containerClassName="justify-center"
+                disabled={loading}
               >
-                <InputOTPGroup className="justify-center gap-2 sm:gap-3 bg-white border-2 border-gray-200 rounded-xl p-3">
+                <InputOTPGroup className="gap-2 sm:gap-3">
                   {[0, 1, 2, 3, 4, 5].map((index) => (
                     <InputOTPSlot
                       key={index}
                       index={index}
-                      className="h-14 w-12 sm:h-16 sm:w-14 text-2xl sm:text-3xl font-semibold border-2 border-gray-200 rounded-lg bg-gray-50 data-[active=true]:border-indigo-500 data-[active=true]:ring-2 data-[active=true]:ring-indigo-200"
+                      className="h-12 w-10 sm:h-14 sm:w-12 text-xl font-bold bg-white border border-slate-200 transition-all rounded-xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 data-[active=true]:border-indigo-500 data-[active=true]:ring-4 data-[active=true]:ring-indigo-500/10"
                     />
                   ))}
                 </InputOTPGroup>
               </InputOTP>
             </div>
+          </div>
 
+          <button
+            type="submit"
+            disabled={loading || otp.length !== 6 || !email.trim()}
+            className="relative w-full py-2.5 px-4 mt-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),0_4px_10px_rgba(99,102,241,0.25)] border border-indigo-500 text-white font-medium rounded-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center gap-2 group overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-[150%] group-hover:translate-x-[150%] transition-transform duration-700 ease-in-out" />
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Verifying...
+              </>
+            ) : (
+              "Verify Code"
+            )}
+          </button>
+        </form>
+
+        <div className="mt-8 pt-6 border-t border-slate-100 space-y-3">
+          <p className="text-[13px] text-center text-slate-500 font-medium">
+            Didn't receive the code?{" "}
             <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 px-4 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              type="button"
+              onClick={handleResend}
+              disabled={resendCooldown > 0 || loading}
+              className="text-indigo-600 font-semibold hover:text-indigo-700 hover:underline underline-offset-4 disabled:text-slate-400 disabled:no-underline transition-all"
             >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                  Verifying...
-                </span>
-              ) : (
-                "Verify and sign in"
-              )}
+              {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend OTP"}
             </button>
-
-            <p className="text-sm text-center text-gray-500">
-              Didn&apos;t receive the code?{" "}
-              <button
-                type="button"
-                onClick={handleResend}
-                disabled={resendCooldown > 0}
-                className="text-indigo-600 hover:text-indigo-700 font-medium disabled:text-gray-400 disabled:cursor-not-allowed"
-              >
-                {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend OTP"}
-              </button>
-            </p>
-          </form>
-
-          <p className="mt-6 text-center text-sm text-gray-500">
-            <Link href="/login" className="text-indigo-600 hover:text-indigo-700 font-medium">
+          </p>
+          <p className="text-[13px] text-center text-slate-500 font-medium">
+            <Link href="/login" className="text-slate-900 font-bold hover:underline underline-offset-4 transition-all">
               Back to sign in
             </Link>
           </p>
         </div>
       </div>
-    </div>
+    </AuthLayout>
   );
 }
 
@@ -214,8 +216,8 @@ export default function VerifyOtpPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full" />
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
         </div>
       }
     >

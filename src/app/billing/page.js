@@ -2,168 +2,141 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
+import { format } from "date-fns";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PLAN_DETAILS, PLAN_CURRENCY } from "@/lib/paddle";
+import { toast } from "sonner";
+import { Receipt, CheckCircle2, Clock, XCircle, CreditCard, ChevronRight, Download } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+// Shared components
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SectionCard, SectionCardHeader } from "@/components/shared/SectionCard";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { AlertTriangle, CreditCard, Clock, CheckCircle2, XCircle } from "lucide-react";
-import { PLAN_DETAILS, PLAN_CURRENCY, ADDON_BRANDING_PRICE_EUR } from "@/lib/paddle";
 
 function BillingContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  
   const [loading, setLoading] = useState(true);
   const [subscriptions, setSubscriptions] = useState([]);
-  const [sites, setSites] = useState([]);
-  const [userTrialActive, setUserTrialActive] = useState(false);
-  const [userTrialEndAt, setUserTrialEndAt] = useState(null);
-  const [userTrialDaysLeft, setUserTrialDaysLeft] = useState(null);
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelImmediateOpen, setCancelImmediateOpen] = useState(false);
-  const [cancelAllOpen, setCancelAllOpen] = useState(false);
-  const [siteToCancel, setSiteToCancel] = useState(null);
-  const [cancelling, setCancelling] = useState(false);
-  const [cancellingAddonId, setCancellingAddonId] = useState(null);
+  const [portalUrls, setPortalUrls] = useState({});
+  const [urlLoading, setUrlLoading] = useState({});
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/login");
+    if (status === "unauthenticated") {
+      router.push("/login");
+    }
   }, [status, router]);
 
   useEffect(() => {
-    if (session) fetchData();
-  }, [session]);
+    if (status === "authenticated") {
+      fetchBillingData();
+    }
+  }, [status]);
 
-  const fetchData = async () => {
+  const fetchBillingData = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const [subsRes, sitesRes] = await Promise.all([
         fetch("/api/subscription"),
-        fetch("/api/sites"),
+        fetch("/api/sites")
       ]);
-      if (subsRes.ok) {
-        const data = await subsRes.json();
-        setSubscriptions(data.subscriptions || []);
-        if (data.userTrialActive !== undefined) {
-          setUserTrialActive(data.userTrialActive);
-          setUserTrialEndAt(data.userTrialEndAt);
-          setUserTrialDaysLeft(data.userTrialDaysLeft);
+      
+      let subsData = { subscriptions: [] };
+      let sitesData = [];
+      
+      if (subsRes.ok) subsData = await subsRes.json();
+      if (sitesRes.ok) sitesData = await sitesRes.json();
+
+      // Create a map of active domains
+      const activeDomainsMap = sitesData.reduce((acc, site) => {
+        acc[site.siteId] = site.domain;
+        return acc;
+      }, {});
+
+      // For active domains without a subscription, add a placeholder
+      const subsMap = new Map();
+      if (subsData.subscriptions && Array.isArray(subsData.subscriptions)) {
+        subsData.subscriptions.forEach(sub => subsMap.set(sub.siteId, sub));
+      }
+
+      const allSubs = [];
+      
+      // First add all actual subscriptions from paddle
+      if (subsData.subscriptions && Array.isArray(subsData.subscriptions)) {
+        subsData.subscriptions.forEach(sub => {
+          allSubs.push({
+            ...sub,
+            domain: activeDomainsMap[sub.siteId] || sub.domain || 'Unknown Domain',
+            isPlaceholder: false
+          });
+        });
+      }
+
+      // Then add placeholders for domains without subscriptions
+      Object.keys(activeDomainsMap).forEach(siteId => {
+        if (!subsMap.has(siteId)) {
+          allSubs.push({
+            id: `placeholder-${siteId}`,
+            siteId,
+            domain: activeDomainsMap[siteId],
+            status: 'none',
+            isActive: false,
+            isPlaceholder: true,
+            subscription: null
+          });
         }
-      }
-      if (sitesRes.ok) {
-        const data = await sitesRes.json();
-        setSites(data);
-      }
+      });
+
+      // Sort by status (active first)
+      allSubs.sort((a, b) => {
+        if (a.isActive && !b.isActive) return -1;
+        if (!a.isActive && b.isActive) return 1;
+        return 0;
+      });
+
+      setSubscriptions(allSubs);
     } catch (err) {
-      console.error("Error fetching data:", err);
-      toast.error("Failed to load billing data");
+      console.error("Error fetching billing data:", err);
+      setError("Failed to load billing information. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCancelSubscription = async (siteId, immediately = false) => {
-    setCancelling(true);
+  const getPortalUrl = async (customerId, txId) => {
     try {
-      const response = await fetch("/api/subscription", {
+      setUrlLoading(prev => ({ ...prev, [txId || customerId]: true }));
+      const res = await fetch(`/api/payment/portal`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "cancel",
-          siteId,
-          cancelAtPeriodEnd: !immediately,
-        }),
-      });
-      const data = await response.json();
-      if (response.ok) {
-        toast.success(data.message || "Subscription cancelled");
-        setCancelOpen(false);
-        setCancelImmediateOpen(false);
-        setCancelAllOpen(false);
-        setSiteToCancel(null);
-        fetchData();
-      } else {
-        toast.error(data.error || "Failed to cancel subscription");
-      }
-    } catch (err) {
-      toast.error("Something went wrong");
-    } finally {
-      setCancelling(false);
-    }
-  };
-
-  const confirmCancel = (sub, atEnd = true) => {
-    setSiteToCancel(sub);
-    atEnd ? setCancelOpen(true) : setCancelImmediateOpen(true);
-  };
-
-  const confirmCancelAll = () => {
-    setCancelAllOpen(true);
-  };
-
-  const handleCancelAddon = async (siteId) => {
-    setCancellingAddonId(siteId);
-    try {
-      const res = await fetch("/api/subscription", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "cancelAddon", siteId }),
+        body: JSON.stringify({ customerId }),
       });
       const data = await res.json();
-      if (res.ok) {
-        toast.success(data.message || "Add-on cancelled");
-        fetchData();
+      if (data.url) {
+        setPortalUrls(prev => ({ ...prev, [txId || customerId]: data.url }));
+        window.open(data.url, "_blank");
       } else {
-        toast.error(data.error || "Failed to cancel add-on");
+        toast.error("Could not load billing portal");
       }
-    } catch (err) {
-      toast.error("Something went wrong");
+    } catch (e) {
+      toast.error("Failed to communicate with billing system");
     } finally {
-      setCancellingAddonId(null);
-    }
-  };
-
-  const doCancelAll = async () => {
-    setCancelling(true);
-    const toCancel = subscriptions.filter((s) => s.isActive);
-    try {
-      for (const sub of toCancel) {
-        const res = await fetch("/api/subscription", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "cancel", siteId: sub.siteId, cancelAtPeriodEnd: true }),
-        });
-        if (!res.ok) {
-          const data = await res.json();
-          toast.error(data.error || "Failed to cancel " + sub.domain);
-        }
-      }
-      const ok = toCancel.length > 0;
-      if (ok) {
-        toast.success("All subscriptions will cancel at period end");
-        setCancelAllOpen(false);
-        fetchData();
-      }
-    } catch (err) {
-      toast.error("Something went wrong");
-    } finally {
-      setCancelling(false);
+      setUrlLoading(prev => ({ ...prev, [txId || customerId]: false }));
     }
   };
 
   if (status === "loading" || loading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
         </div>
       </DashboardLayout>
     );
@@ -171,264 +144,172 @@ function BillingContent() {
 
   if (!session) return null;
 
-  const activeSubscriptions = subscriptions.filter((s) => s.isActive);
-  const totalMonthly = activeSubscriptions.reduce((acc, sub) => {
-    const plan = sub.subscription?.plan || "basic";
-    const details = PLAN_DETAILS[plan];
-    const isYearly = sub.subscription?.billingInterval === "yearly";
-    const planAmount = isYearly && details?.yearly ? details.yearly / 12 : (details?.monthly ?? details?.price ?? 0);
-    const addonAmount = sub.subscription?.removeBrandingAddon ? ADDON_BRANDING_PRICE_EUR : 0;
-    return acc + planAmount + addonAmount;
-  }, 0);
-
   return (
     <DashboardLayout>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight">Billing & Subscriptions</h1>
-        <p className="text-muted-foreground mt-1">
-          Manage your domain subscriptions and billing. All plans include a <strong>14-day free trial</strong> (first domain only).
-        </p>
-      </div>
+      <PageHeader 
+        title="Billing Details" 
+        description="Monitor subscriptions, access tax invoices, and update payment methods securely."
+      />
 
-      {userTrialActive && userTrialDaysLeft !== null && (
-        <Card className="mb-6 border-blue-200 bg-blue-50/50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                <Clock className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-blue-900">Your 14-day free trial is active</h3>
-                <p className="text-sm text-blue-700">
-                  {userTrialDaysLeft > 0
-                    ? `${userTrialDaysLeft} day${userTrialDaysLeft !== 1 ? "s" : ""} remaining`
-                    : "Your trial ends today"}
-                  {userTrialEndAt && (
-                    <span className="ml-2">
-                      (ends {new Date(userTrialEndAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })})
-                    </span>
-                  )}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {error ? (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 px-5 py-4 rounded-xl mb-6 shadow-sm">
+          <div className="flex items-center gap-2 font-medium">
+             <XCircle className="h-5 w-5" />
+             {error}
+          </div>
+        </div>
+      ) : subscriptions.length === 0 ? (
+        <SectionCard hoverLift>
+          <EmptyState 
+            icon={Receipt}
+            title="No billing history"
+            description="You don't have any active subscriptions or connected domains. Start by adding a domain."
+          />
+          <div className="text-center pb-6">
+            <Button asChild className="rounded-xl shadow-sm bg-indigo-600 hover:bg-indigo-700">
+              <Link href="/dashboard/domains">Go to Domains</Link>
+            </Button>
+          </div>
+        </SectionCard>
+      ) : (
+        <div className="space-y-6">
+          {subscriptions.map((sub, index) => {
+             const subData = sub.subscription || {};
+             const statusLower = subData.status?.toLowerCase() || sub.status?.toLowerCase();
+             const planBase = subData.plan || "basic";
+             const planName = PLAN_DETAILS[planBase]?.name || "Custom Plan";
+             const isTrial = statusLower === 'trial' || sub.userTrialActive;
+             
+             // Setup pill colors based on status
+             let statusBadge = null;
+             if (sub.isPlaceholder) {
+                statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 rounded">No Plan</span>;
+             } else if (sub.isActive) {
+                if (isTrial) {
+                   statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 rounded">Trial Active</span>;
+                } else {
+                   statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 rounded">Active</span>;
+                }
+             } else if (statusLower === 'past_due' || statusLower === 'pending') {
+                statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 rounded">Action Needed</span>;
+             } else if (statusLower === 'canceled' || statusLower === 'paused') {
+                statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 rounded">{statusLower}</span>;
+             } else {
+                statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 rounded">{statusLower || 'Unknown'}</span>;
+             }
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Active Subscriptions</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{activeSubscriptions.length}</p>
-            <p className="text-xs text-muted-foreground mt-1">across {sites.length} domains</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Monthly Total</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{PLAN_CURRENCY} {totalMonthly}</p>
-            <p className="text-xs text-muted-foreground mt-1">billed monthly</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Next Billing</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{activeSubscriptions.length > 0 ? "Various" : "—"}</p>
-            <p className="text-xs text-muted-foreground mt-1">per domain renewal</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Domain Subscriptions</CardTitle>
-          <CardDescription>Each domain has its own subscription</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {subscriptions.length > 0 ? (
-            <div className="divide-y">
-              {subscriptions.map((sub) => {
-                const plan = sub.subscription?.plan || "basic";
-                const planDetails = PLAN_DETAILS[plan];
-                const status = sub.subscription?.status?.toLowerCase();
-                const isTrial = status === "trial";
-                const isActive = sub.isActive;
-                const cancelAtPeriodEnd = sub.subscription?.cancelAtPeriodEnd;
-                const hasRemoveBrandingAddon = sub.subscription?.removeBrandingAddon === true;
-                const isYearly = sub.subscription?.billingInterval === "yearly";
-                const planPrice = isYearly ? (planDetails?.yearly ?? planDetails?.price) : (planDetails?.monthly ?? planDetails?.price);
-                const planPeriod = isYearly ? "year" : "month";
-                const showTrialBadge = (sub.isFirstDomain && userTrialActive) || (isTrial && !sub.isFirstDomain);
-                const trialDaysDisplay = sub.trialDaysLeft ?? userTrialDaysLeft ?? 0;
-
-                return (
-                  <div key={sub.siteId} className="py-5 first:pt-0">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-center gap-2 mb-2">
-                          <h3 className="font-semibold">{sub.domain}</h3>
-                          {showTrialBadge && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">
-                              Free trial — {trialDaysDisplay} day{trialDaysDisplay !== 1 ? "s" : ""} left
-                            </span>
-                          )}
-                          {isActive && !(sub.isFirstDomain && userTrialActive) && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded">
-                              <CheckCircle2 className="h-3 w-3" /> Active
-                            </span>
-                          )}
-                          {cancelAtPeriodEnd && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded">Cancels at period end</span>
-                          )}
-                          {!isActive && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">
-                              <XCircle className="h-3 w-3" /> Inactive
-                            </span>
-                          )}
-                          {hasRemoveBrandingAddon && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded">Remove branding ({PLAN_CURRENCY} {ADDON_BRANDING_PRICE_EUR}/mo)</span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                          <span><strong className="text-foreground">{planDetails?.name}</strong> Plan</span>
-                          <span>{PLAN_CURRENCY} {planPrice ?? 0}/{planPeriod}</span>
-                          <span>
-                            {planDetails?.pageViews === Infinity ? "Unlimited" : planDetails?.pageViews?.toLocaleString()} page views
-                          </span>
-                        </div>
-                        {sub.subscription?.currentPeriodEnd && (
-                          <p className="text-sm text-muted-foreground mt-2">
-                            {cancelAtPeriodEnd ? "Access until" : "Renews on"}:{" "}
-                            {new Date(sub.subscription.currentPeriodEnd).toLocaleDateString("en-US", {
-                              year: "numeric",
-                              month: "long",
-                              day: "numeric",
-                            })}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 shrink-0">
-                        <Button variant="secondary" size="sm" asChild>
-                          <Link href={`/plans?siteId=${sub.siteId}&domain=${encodeURIComponent(sub.domain)}`}>Change Plan</Link>
-                        </Button>
-                        {hasRemoveBrandingAddon && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCancelAddon(sub.siteId)}
-                            disabled={cancellingAddonId === sub.siteId}
-                          >
-                            {cancellingAddonId === sub.siteId ? "Cancelling…" : "Cancel add-on"}
-                          </Button>
-                        )}
-                        {isActive && !cancelAtPeriodEnd && (
-                          <Button variant="outline" size="sm" onClick={() => confirmCancel(sub)}>
-                            Cancel
-                          </Button>
-                        )}
-                      </div>
+             return (
+               <SectionCard key={sub.id || sub.paddleSubscriptionId || sub.siteId || index} noPadding className="overflow-hidden group">
+                 <div className="p-5 sm:p-6 pb-0 sm:pb-0">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                       <div>
+                         <div className="flex items-center gap-3 flex-wrap mb-1">
+                            <h3 className="text-[17px] font-semibold tracking-tight text-slate-900">{sub.domain}</h3>
+                            {statusBadge}
+                         </div>
+                         <p className="text-[14px] text-slate-500">
+                           {sub.isPlaceholder ? "Add a subscription to start tracking." : `${planName} Tier`} 
+                           {subData.billingInterval && ` • Billed ${subData.billingInterval}`}
+                         </p>
+                       </div>
+                       
+                       <div className="flex items-center gap-2">
+                         {!sub.isPlaceholder && (
+                           <>
+                             {(sub.customerId || subData.customerId) && (
+                               <Button
+                                 variant="outline"
+                                 size="sm"
+                                 onClick={() => getPortalUrl(sub.customerId || subData.customerId, sub.id)}
+                                 disabled={urlLoading[sub.id]}
+                                 className="rounded-lg h-9 text-[13px] font-medium text-slate-700 bg-white shadow-sm hover:bg-slate-50 border-slate-200"
+                               >
+                                 {urlLoading[sub.id] ? (
+                                   <span className="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full mr-2" />
+                                 ) : (
+                                   <CreditCard className="h-3.5 w-3.5 mr-2" />
+                                 )}
+                                 Paddle Portal
+                               </Button>
+                             )}
+                           </>
+                         )}
+                         <Button size="sm" asChild className="rounded-lg h-9 text-[13px] font-medium bg-indigo-50 text-indigo-700 shadow-none border border-indigo-200 hover:bg-indigo-100">
+                           <Link href={`/plans?siteId=${sub.siteId}&domain=${encodeURIComponent(sub.domain)}`}>
+                             {sub.isPlaceholder ? "Select Plan" : "Change Plan"}
+                           </Link>
+                         </Button>
+                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="py-12 text-center">
-              <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-4">
-                <CreditCard className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <h3 className="text-lg font-medium mb-1">No subscriptions yet</h3>
-              <p className="text-muted-foreground text-sm mb-4">Add a domain and select a plan to get started</p>
-              <Button asChild>
-                <Link href="/dashboard/domains">Add Domain</Link>
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                 </div>
 
-      <Card className="border-destructive/50">
-        <CardHeader className="pb-4">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-destructive" />
-            <CardTitle className="text-destructive">Danger Zone</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h3 className="font-medium">Cancel All Subscriptions</h3>
-              <p className="text-sm text-muted-foreground">
-                This will cancel all your domain subscriptions. Access continues until the end of each billing period.
-              </p>
-            </div>
-            <Button variant="destructive" onClick={confirmCancelAll} disabled={activeSubscriptions.length === 0}>
-              Cancel All
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+                 {!sub.isPlaceholder && (
+                   <div className="mt-6 border-t border-slate-100 bg-slate-50/50 p-5 sm:p-6">
+                     <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                       <div>
+                         <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Billing Period</p>
+                         <p className="text-[14px] font-medium text-slate-900 capitalize">
+                           {subData.billingInterval || "Monthly"}
+                         </p>
+                       </div>
+                       
+                       <div>
+                         <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Current Period Ends</p>
+                         <p className="text-[14px] font-medium text-slate-900">
+                           {isTrial && sub.trialEndAt ? (
+                             format(new Date(sub.trialEndAt), "MMM d, yyyy")
+                           ) : subData.currentPeriodEnd ? (
+                             format(new Date(subData.currentPeriodEnd), "MMM d, yyyy")
+                           ) : (
+                             "—"
+                           )}
+                         </p>
+                       </div>
 
-      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancel subscription</DialogTitle>
-            <DialogDescription>
-              Cancel <strong>{siteToCancel?.domain}</strong>? You will have access until the end of your current period.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelOpen(false)}>Keep</Button>
-            <Button variant="destructive" onClick={() => siteToCancel && handleCancelSubscription(siteToCancel.siteId, false)} disabled={cancelling}>
-              {cancelling ? "Cancelling…" : "Cancel at period end"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={cancelImmediateOpen} onOpenChange={setCancelImmediateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancel immediately</DialogTitle>
-            <DialogDescription>
-              Cancel <strong>{siteToCancel?.domain}</strong> now? You will lose access right away.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelImmediateOpen(false)}>Back</Button>
-            <Button variant="destructive" onClick={() => siteToCancel && handleCancelSubscription(siteToCancel.siteId, true)} disabled={cancelling}>
-              {cancelling ? "Cancelling…" : "Cancel now"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={cancelAllOpen} onOpenChange={setCancelAllOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancel all subscriptions</DialogTitle>
-            <DialogDescription>
-              Cancel all {activeSubscriptions.length} subscription(s)? You will keep access until the end of each billing period.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelAllOpen(false)}>Keep</Button>
-            <Button variant="destructive" onClick={doCancelAll} disabled={cancelling}>
-              {cancelling ? "Cancelling…" : "Cancel all"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                       <div>
+                         <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Plan Add-ons</p>
+                         <div className="flex flex-col gap-1 mt-1">
+                           {sub.removeBrandingAddon ? (
+                             <span className="inline-flex items-center gap-1.5 text-[13px] text-slate-700">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500" />
+                                White-label UI
+                             </span>
+                           ) : (
+                             <span className="text-[13px] text-slate-500">—</span>
+                           )}
+                         </div>
+                       </div>
+                       
+                       <div>
+                         <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Paddle Ref</p>
+                         <p className="text-[13px] font-mono text-slate-500 truncate max-w-[120px]" title={sub.paddleSubscriptionId || subData.paddleSubscriptionId}>
+                           {sub.paddleSubscriptionId || subData.paddleSubscriptionId || "—"}
+                         </p>
+                       </div>
+                     </div>
+                   </div>
+                 )}
+               </SectionCard>
+             );
+          })}
+        </div>
+      )}
     </DashboardLayout>
   );
 }
 
 export default function BillingPage() {
-  return <BillingContent />;
+  return (
+    <Suspense
+      fallback={
+        <DashboardLayout>
+          <div className="flex items-center justify-center h-[60vh]">
+            <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
+          </div>
+        </DashboardLayout>
+      }
+    >
+      <BillingContent />
+    </Suspense>
+  );
 }

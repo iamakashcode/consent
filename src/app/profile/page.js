@@ -4,38 +4,30 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef, Suspense } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-
-// Icons
-const UserIcon = () => (
-  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-  </svg>
-);
-
-const LockIcon = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-  </svg>
-);
-
-const AlertIcon = () => (
-  <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-  </svg>
-);
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SectionCard } from "@/components/shared/SectionCard";
+import { FormField } from "@/components/shared/FormField";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { User, Lock, AlertTriangle, LogOut, Trash2, Calendar, Receipt } from "lucide-react";
 
 function ProfileContent() {
   const { data: session, status, update } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  
   const [subscriptionCount, setSubscriptionCount] = useState(0);
   const hasCheckedPayment = useRef(false);
 
@@ -54,7 +46,6 @@ function ProfileContent() {
     }
   }, [session]);
 
-  // Check for payment success
   useEffect(() => {
     if (typeof window !== "undefined" && session && !hasCheckedPayment.current) {
       const paymentSuccess = searchParams?.get("payment");
@@ -72,7 +63,7 @@ function ProfileContent() {
             sessionStorage.removeItem("paddle_redirect_url");
           }
           await fetchSubscriptions();
-          alert("Payment successful! Your subscription is now active.");
+          toast.success("Payment successful! Your subscription is now active.");
           window.history.replaceState({}, "", "/profile");
         };
         
@@ -110,11 +101,10 @@ function ProfileContent() {
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
-      // In a real app, you'd call an API to update the profile
       await update({ name });
-      alert("Profile updated successfully!");
+      toast.success("Profile updated successfully!");
     } catch (err) {
-      alert("Failed to update profile");
+      toast.error("Failed to update profile");
     } finally {
       setSaving(false);
     }
@@ -138,17 +128,17 @@ function ProfileContent() {
       return;
     }
 
-    setSaving(true);
+    setPasswordSaving(true);
     try {
-      // In a real app, you'd call an API to change the password
-      alert("Password changed successfully!");
+      // API call to change password would go here
+      toast.success("Password changed successfully!");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
       setPasswordError("Failed to change password");
     } finally {
-      setSaving(false);
+      setPasswordSaving(false);
     }
   };
 
@@ -158,24 +148,23 @@ function ProfileContent() {
     );
 
     if (confirmText !== "DELETE") {
-      alert("Account deletion cancelled.");
+      toast.info("Account deletion cancelled.");
       return;
     }
 
     try {
-      // In a real app, you'd call an API to delete the account
-      alert("Account deleted. You will be logged out.");
+      toast.success("Account deleted. You will be logged out.");
       signOut({ callbackUrl: "/" });
     } catch (err) {
-      alert("Failed to delete account");
+      toast.error("Failed to delete account");
     }
   };
 
   if (status === "loading" || loading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
         </div>
       </DashboardLayout>
     );
@@ -185,179 +174,191 @@ function ProfileContent() {
 
   return (
     <DashboardLayout>
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Profile Settings</h1>
-        <p className="text-gray-500 mt-1">Manage your account settings and preferences</p>
-      </div>
+      <PageHeader 
+        title="Profile Settings" 
+        description="Manage your account settings, security preferences, and active subscriptions."
+      />
 
-      <div className="max-w-2xl space-y-6">
-        {/* Profile Info Card */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
-                <UserIcon />
-              </div>
-              <div>
-                <h2 className="font-semibold text-gray-900">Profile Information</h2>
-                <p className="text-sm text-gray-500">Update your personal details</p>
-              </div>
+      <div className="max-w-3xl space-y-6 pb-12">
+        
+        {/* Profile Info */}
+        <SectionCard>
+          <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm shrink-0">
+              <User className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-[16px] font-bold text-slate-900 tracking-tight">Personal Information</h2>
+              <p className="text-[13px] text-slate-500 font-medium">Update your name and contact details.</p>
             </div>
           </div>
-          <div className="p-6 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Your name"
+          
+          <div className="p-6">
+            <div className="grid sm:grid-cols-2 gap-6">
+              <FormField 
+                 label="Full Name"
+                 type="text"
+                 value={name}
+                 onChange={(e) => setName(e.target.value)}
+                 placeholder="Your full name"
               />
+              <div className="space-y-2">
+                 <label className="text-[13px] font-bold text-slate-700 block">Email Address</label>
+                 <div className="relative">
+                    <input
+                      type="email"
+                      value={email}
+                      disabled
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-500 rounded-xl px-4 py-2.5 text-[14px] cursor-not-allowed shadow-sm font-medium"
+                    />
+                    <span className="absolute right-3 top-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 bg-white px-1.5 rounded">Verified</span>
+                 </div>
+                 <p className="text-[12px] font-medium text-slate-400 pt-1">Email tied to your identity provider.</p>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
-              <input
-                type="email"
-                value={email}
-                disabled
-                className="w-full px-4 py-2.5 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-500 cursor-not-allowed"
-              />
-              <p className="mt-1 text-xs text-gray-500">Email cannot be changed</p>
-            </div>
-            <div className="pt-2">
-              <button
-                onClick={handleSaveProfile}
-                disabled={saving}
-                className="px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 transition-colors"
+            
+            <div className="mt-6 flex justify-end">
+              <Button 
+                onClick={handleSaveProfile} 
+                disabled={saving || session?.user?.name === name} 
+                className="rounded-xl h-10 px-6 font-semibold bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all text-[14px]"
               >
-                {saving ? "Saving..." : "Save Changes"}
-              </button>
+                {saving ? "Saving..." : "Save Profile"}
+              </Button>
             </div>
           </div>
+        </SectionCard>
+
+        {/* Account Summary Stats */}
+        <div className="grid sm:grid-cols-2 gap-6">
+           <SectionCard noPadding className="overflow-hidden">
+              <div className="p-6 flex items-start gap-4">
+                 <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0">
+                    <Receipt className="w-6 h-6 text-emerald-600" />
+                 </div>
+                 <div className="flex-1">
+                    <p className="text-[13px] font-semibold tracking-widest text-slate-500 uppercase mb-1">Active Subscriptions</p>
+                    <p className="text-3xl font-extrabold text-slate-900 tracking-tight">{subscriptionCount}</p>
+                 </div>
+              </div>
+           </SectionCard>
+           
+           <SectionCard noPadding className="overflow-hidden">
+              <div className="p-6 flex items-start gap-4">
+                 <div className="w-12 h-12 rounded-2xl bg-purple-50 border border-purple-100 flex items-center justify-center shrink-0">
+                    <Calendar className="w-6 h-6 text-purple-600" />
+                 </div>
+                 <div className="flex-1">
+                    <p className="text-[13px] font-semibold tracking-widest text-slate-500 uppercase mb-1">Member Since</p>
+                    <p className="text-xl font-bold text-slate-900 tracking-tight mt-1.5">
+                      {new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                    </p>
+                 </div>
+              </div>
+           </SectionCard>
         </div>
 
-        {/* Account Summary */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">Account Summary</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-sm text-gray-500 mb-1">Active Subscriptions</p>
-              <p className="text-2xl font-bold text-gray-900">{subscriptionCount}</p>
+        {/* Change Password */}
+        <SectionCard>
+          <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 shadow-sm shrink-0">
+              <Lock className="w-5 h-5" />
             </div>
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-sm text-gray-500 mb-1">Member Since</p>
-              <p className="text-lg font-semibold text-gray-900">
-                {new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" })}
-              </p>
+            <div>
+              <h2 className="text-[16px] font-bold text-slate-900 tracking-tight">Security</h2>
+              <p className="text-[13px] text-slate-500 font-medium">Update your password to stay secure.</p>
             </div>
           </div>
-        </div>
-
-        {/* Change Password Card */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-600">
-                <LockIcon />
-              </div>
-              <div>
-                <h2 className="font-semibold text-gray-900">Change Password</h2>
-                <p className="text-sm text-gray-500">Update your password regularly for security</p>
-              </div>
-            </div>
-          </div>
-          <div className="p-6 space-y-4">
+          
+          <div className="p-6">
             {passwordError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {passwordError}
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl mb-6 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+                <p className="text-[13px] font-medium text-rose-700 leading-snug">{passwordError}</p>
               </div>
             )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Enter current password"
+            
+            <div className="grid gap-6 max-w-md">
+              <FormField 
+                 label="Current Password"
+                 type="password"
+                 value={currentPassword}
+                 onChange={(e) => setCurrentPassword(e.target.value)}
+                 placeholder="••••••••"
+              />
+              <FormField 
+                 label="New Password"
+                 type="password"
+                 value={newPassword}
+                 onChange={(e) => setNewPassword(e.target.value)}
+                 placeholder="••••••••"
+              />
+              <FormField 
+                 label="Confirm New Password"
+                 type="password"
+                 value={confirmPassword}
+                 onChange={(e) => setConfirmPassword(e.target.value)}
+                 placeholder="••••••••"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Enter new password"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Confirm new password"
-              />
-            </div>
-            <div className="pt-2">
-              <button
-                onClick={handleChangePassword}
-                disabled={saving}
-                className="px-6 py-2.5 text-sm font-medium text-white bg-gray-800 rounded-lg hover:bg-gray-900 disabled:bg-gray-400 transition-colors"
+            
+            <div className="mt-6">
+              <Button 
+                onClick={handleChangePassword} 
+                disabled={passwordSaving} 
+                className="rounded-xl h-10 px-6 font-semibold bg-slate-900 hover:bg-slate-800 shadow-sm transition-all text-[14px]"
               >
-                {saving ? "Changing..." : "Change Password"}
-              </button>
+                {passwordSaving ? "Updating..." : "Update Password"}
+              </Button>
             </div>
           </div>
-        </div>
+        </SectionCard>
 
         {/* Danger Zone */}
-        <div className="bg-white rounded-xl border border-red-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-red-200 bg-red-50">
-            <div className="flex items-center gap-3">
-              <AlertIcon />
-              <div>
-                <h2 className="font-semibold text-red-800">Danger Zone</h2>
-                <p className="text-sm text-red-600">Irreversible actions</p>
-              </div>
+        <SectionCard className="border-rose-200 bg-rose-50/10">
+          <div className="px-6 py-5 border-b border-rose-100 flex items-center gap-4 bg-rose-50/50">
+            <div className="w-10 h-10 rounded-xl bg-rose-100 border border-rose-200 flex items-center justify-center text-rose-600 shadow-sm shrink-0 mt-0.5">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-[16px] font-bold text-rose-800 tracking-tight">Danger Zone</h2>
+              <p className="text-[13px] text-rose-600/80 font-medium">Irreversible security actions.</p>
             </div>
           </div>
-          <div className="p-6 space-y-4">
-            <div className="flex items-start justify-between">
+          
+          <div className="p-6 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h3 className="font-medium text-gray-900">Sign Out Everywhere</h3>
-                <p className="text-sm text-gray-500">Sign out of all sessions on all devices</p>
+                <h3 className="font-bold text-slate-900 tracking-tight text-[15px]">Sign Out Everywhere</h3>
+                <p className="text-[13px] text-slate-500 mt-1 font-medium">Force sign out on all devices securely.</p>
               </div>
-              <button
+              <Button
+                variant="outline"
                 onClick={() => signOut({ callbackUrl: "/" })}
-                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="rounded-xl h-10 border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 sm:w-auto w-full"
               >
-                Sign Out
-              </button>
+                <LogOut className="w-4 h-4 mr-2" /> Sign Out All
+              </Button>
             </div>
-            <div className="border-t border-gray-200 pt-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-medium text-gray-900">Delete Account</h3>
-                  <p className="text-sm text-gray-500">
-                    Permanently delete your account and all associated data
-                  </p>
-                </div>
-                <button
-                  onClick={handleDeleteAccount}
-                  className="px-4 py-2 text-sm font-medium text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
-                >
-                  Delete Account
-                </button>
+            
+            <div className="h-px bg-slate-200 w-full" />
+            
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="font-bold text-slate-900 tracking-tight text-[15px]">Delete Account</h3>
+                <p className="text-[13px] text-slate-500 mt-1 font-medium">Permanently delete your account and domains.</p>
               </div>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteAccount}
+                className="rounded-xl h-10 bg-rose-600 hover:bg-rose-700 font-semibold shadow-sm sm:w-auto w-full text-white"
+              >
+                <Trash2 className="w-4 h-4 mr-2" /> Delete Account
+              </Button>
             </div>
           </div>
-        </div>
+        </SectionCard>
+        
       </div>
     </DashboardLayout>
   );
@@ -368,8 +369,8 @@ export default function ProfilePage() {
     <Suspense
       fallback={
         <DashboardLayout>
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+          <div className="flex items-center justify-center h-[60vh]">
+            <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
           </div>
         </DashboardLayout>
       }

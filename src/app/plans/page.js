@@ -6,12 +6,11 @@ import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
 import { ADDON_BRANDING_PRICE_EUR, PLAN_DETAILS, PLAN_CURRENCY } from "@/lib/paddle";
+import { Check, ArrowRight, ShieldCheck, Zap, Server } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-const CheckIcon = () => (
-  <svg className="w-5 h-5 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-  </svg>
-);
+// Shared components
+import { PageHeader } from "@/components/shared/PageHeader";
 
 function PlansContent() {
   const { data: session, status } = useSession();
@@ -26,9 +25,8 @@ function PlansContent() {
   const domain = searchParams?.get("domain") || null;
   const [currentSubscription, setCurrentSubscription] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(!!siteId);
-  const [isFirstDomain, setIsFirstDomain] = useState(true); // free trial only for first domain
+  const [isFirstDomain, setIsFirstDomain] = useState(true);
 
-  // Fetch sites count: first domain = 0 existing sites (trial); 1+ sites = no trial / upgrade
   useEffect(() => {
     if (status !== "authenticated" || !siteId) return;
     let cancelled = false;
@@ -36,14 +34,12 @@ function PlansContent() {
       .then((r) => r.json())
       .then((sites) => {
         if (cancelled || !Array.isArray(sites)) return;
-        // Only 0 existing sites = first domain (free trial). Pending domain not in sites until paid.
         setIsFirstDomain(sites.length === 0);
       })
       .catch(() => { if (!cancelled) setIsFirstDomain(true); });
     return () => { cancelled = true; };
   }, [siteId, status]);
 
-  // Fetch current subscription for this domain when siteId is present
   useEffect(() => {
     if (!siteId || status !== "authenticated") {
       if (siteId && status === "authenticated") setSubscriptionLoading(false);
@@ -96,8 +92,8 @@ function PlansContent() {
   if (status === "loading") {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
         </div>
       </DashboardLayout>
     );
@@ -108,18 +104,15 @@ function PlansContent() {
   const handlePlanSelect = async (planKey) => {
     if (!siteId) {
       alert("Please add a domain first before selecting a plan.");
-      router.push("/dashboard");
+      router.push("/dashboard/domains");
       return;
     }
 
     const isUpgrade = currentSubscription?.isActive && ["active", "trial"].includes(currentSubscription?.status) && currentSubscription?.plan !== planKey;
-    const isNewSubscription = !currentSubscription?.plan || !currentSubscription?.isActive;
-
     setLoading(true);
     setSelectedPlan(planKey);
 
     try {
-      // Always use Paddle for free trial too: 14-day trial, EUR 0 now, card on file so we charge after trial
       const response = await fetch("/api/payment/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -141,32 +134,20 @@ function PlansContent() {
         return;
       }
 
-      // Get checkout URL (prefer checkoutUrl, then subscriptionAuthUrl)
       let checkoutUrl = data.checkoutUrl || data.subscriptionAuthUrl;
-
-      // If checkout URL points to our domain (embedded checkout), redirect to our checkout page
       if (checkoutUrl && checkoutUrl.includes(window.location.origin)) {
         const transactionId = data.transactionId || checkoutUrl.match(/_ptxn=([^&]+)/)?.[1];
         if (transactionId) {
           checkoutUrl = `/checkout?_ptxn=${transactionId}`;
-          console.log("[Plans] Using embedded checkout page:", checkoutUrl);
         }
-      } else {
-        console.log("[Plans] Using Paddle hosted checkout URL:", checkoutUrl);
       }
 
       if (checkoutUrl) {
-        if (data.subscriptionId) {
-          sessionStorage.setItem("paddle_subscription_id", data.subscriptionId);
-        }
-        if (data.transactionId) {
-          sessionStorage.setItem("paddle_transaction_id", data.transactionId);
-        }
+        if (data.subscriptionId) sessionStorage.setItem("paddle_subscription_id", data.subscriptionId);
+        if (data.transactionId) sessionStorage.setItem("paddle_transaction_id", data.transactionId);
         sessionStorage.setItem("paddle_site_id", siteId);
         sessionStorage.setItem("paddle_redirect_url", `/dashboard/domains?payment=success&siteId=${siteId}`);
 
-        // Redirect to Paddle checkout (same tab for better UX)
-        // Use window.location.assign to avoid React linting error
         window.location.assign(checkoutUrl);
         setLoading(false);
         setSelectedPlan(null);
@@ -175,18 +156,12 @@ function PlansContent() {
 
       if (data.subscriptionId) {
         try {
-          const authResponse = await fetch(
-            `/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`
-          );
+          const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${data.subscriptionId}`);
           if (authResponse.ok) {
             const authData = await authResponse.json();
             if (authData.authUrl) {
-              if (data.subscriptionId) {
-                sessionStorage.setItem("paddle_subscription_id", data.subscriptionId);
-              }
-              if (data.transactionId) {
-                sessionStorage.setItem("paddle_transaction_id", data.transactionId);
-              }
+              if (data.subscriptionId) sessionStorage.setItem("paddle_subscription_id", data.subscriptionId);
+              if (data.transactionId) sessionStorage.setItem("paddle_transaction_id", data.transactionId);
               sessionStorage.setItem("paddle_site_id", siteId);
               window.open(authData.authUrl, "_blank");
               setLoading(false);
@@ -213,111 +188,82 @@ function PlansContent() {
 
   return (
     <DashboardLayout>
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">
-          {siteId ? (currentSubscription?.isActive ? `Change plan for ${domain || "Your Domain"}` : `Choose Plan for ${domain || "Your Domain"}`) : "Choose Your Plan"}
-        </h1>
-        <p className="text-gray-500 mt-1">
-          {siteId
-            ? currentSubscription?.isActive
-              ? "Upgrade or change your plan. Your current subscription will be cancelled and replaced after payment."
-              : "Select a plan to activate consent tracking for this domain."
-            : "Each domain requires its own subscription plan."}
-        </p>
-        {siteId && domain && (
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-lg">
-              <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-              </svg>
-              <span className="text-sm font-medium text-indigo-700">{domain}</span>
-            </div>
-            {subscriptionLoading ? (
-              <span className="text-sm text-gray-500">Loading current plan…</span>
-            ) : currentSubscription?.plan ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium">
-                  Current plan: <span className="capitalize ml-1">{currentSubscription.plan}</span>
-                  {currentSubscription.billingInterval === "yearly" && <span className="ml-1 text-gray-500">(Yearly)</span>}
+      <PageHeader 
+        title={siteId ? (currentSubscription?.isActive ? `Change plan for ${domain || "your domain"}` : `Choose plan for ${domain || "your domain"}`) : "Choose your plan"} 
+        description={siteId ? (currentSubscription?.isActive ? "Upgrade your tier to unlock more features." : "Select a tier to activate consent tracking on your property.") : "Start by adding a domain from your dashboard to select a plan."}
+      />
+
+      {siteId && domain && currentSubscription?.plan && !subscriptionLoading && (
+        <div className="mb-10 bg-indigo-50/50 border border-indigo-100 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
+            <span className="text-[13px] font-semibold text-slate-500 uppercase tracking-widest">Current Status</span>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 text-[13px] font-medium shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mr-2" />
+                <span className="capitalize">{currentSubscription.plan}</span>
+                {currentSubscription.billingInterval === "yearly" && <span className="ml-1 text-slate-400 font-normal">Yearly</span>}
+              </span>
+              
+              {currentSubscription.userTrialActive && (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-[13px] font-medium shadow-sm">
+                  Active Trial
+                  {currentSubscription.trialDaysLeft != null && (
+                    <span className="ml-1 opacity-80 font-normal">— {currentSubscription.trialDaysLeft}d left</span>
+                  )}
                 </span>
-                {currentSubscription.userTrialActive && (
-                  <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-green-100 text-green-800 text-sm font-medium">
-                    Free trial
-                    {currentSubscription.trialDaysLeft != null && (
-                      <span className="ml-1">— {currentSubscription.trialDaysLeft} days left</span>
-                    )}
-                  </span>
-                )}
-                {currentSubscription.removeBrandingAddon && (
-                  <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-amber-100 text-amber-800 text-sm font-medium">
-                    Remove branding ({PLAN_CURRENCY} 3)
-                  </span>
-                )}
-                <Link
-                  href="/billing"
-                  className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
-                >
-                  Cancel / manage →
-                </Link>
-              </div>
-            ) : null}
+              )}
+              
+              {currentSubscription.removeBrandingAddon && (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-[13px] font-medium shadow-sm">
+                  White-label Addon Active
+                </span>
+              )}
+            </div>
           </div>
-        )}
-        {!siteId && (
-          <div className="mt-4">
-            <Link
-              href="/dashboard"
-              className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
-            >
-              ← Add a domain first
-            </Link>
-          </div>
-        )}
-      </div>
+          <Link href="/billing" className="text-[13px] font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm transition-colors hover:bg-slate-50">
+            Manage Subscription <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      )}
 
-      {/* Loading Overlay */}
       {loading && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-8 text-center">
-            <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-            <p className="text-gray-900 font-medium">Setting up payment...</p>
-            <p className="text-sm text-gray-500 mt-1">Please wait</p>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full mx-4 text-center animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+               <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full"></div>
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 tracking-tight">Preparing Checkout</h3>
+            <p className="text-[15px] text-slate-500 mt-2">Connecting to secure payment gateway...</p>
           </div>
         </div>
       )}
 
-      {/* Billing tabs */}
       {siteId && (
-        <div className="flex border-b border-gray-200 mb-6">
-          <button
-            type="button"
-            onClick={() => setTab("monthly")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === "monthly" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-          >
-            Monthly
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("yearly")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === "yearly" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-          >
-            Yearly (save 2 months)
-          </button>
+        <div className="flex justify-center mb-10">
+          <div className="inline-flex items-center bg-slate-100 p-1.5 rounded-xl border border-slate-200 shadow-sm">
+            <button
+              onClick={() => setTab("monthly")}
+              className={cn(
+                "px-6 py-2.5 text-[14px] font-semibold tracking-wide rounded-lg transition-all duration-200",
+                tab === "monthly" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+              )}
+            >
+              Pay Monthly
+            </button>
+            <button
+              onClick={() => setTab("yearly")}
+              className={cn(
+                "px-6 py-2.5 text-[14px] font-semibold tracking-wide rounded-lg transition-all duration-200 flex items-center gap-2",
+                tab === "yearly" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+              )}
+            >
+              Pay Yearly <span className="text-[10px] uppercase font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded mr-1">Save ~16%</span>
+            </button>
+          </div>
         </div>
       )}
 
-      {siteId && (
-        <div className="text-sm text-gray-500 mb-4 space-y-1">
-          <p>Prices are final: e.g. {PLAN_CURRENCY} 15 + {PLAN_CURRENCY} 3 addon = {PLAN_CURRENCY} 18/month (no extra tax).</p>
-          <p>If checkout shows a higher total, set Paddle Dashboard → Catalog/Tax so prices are tax-inclusive or tax is off.</p>
-        </div>
-      )}
-
-      {/* Plans Grid */}
-      <div className="grid md:grid-cols-3 gap-6 mb-8">
+      <div className="grid lg:grid-cols-3 gap-8 max-w-6xl mx-auto mb-16 items-start">
         {Object.entries(PLAN_DETAILS).map(([planKey, plan]) => {
           const price = tab === "monthly" ? plan.monthly : plan.yearly;
           const period = tab === "monthly" ? "/month" : "/year";
@@ -325,81 +271,105 @@ function PlansContent() {
           const isCurrentPlan = currentSubscription?.plan === planKey;
           const canUpgrade = currentSubscription?.isActive && ["active", "trial"].includes(currentSubscription?.status) && !isCurrentPlan;
           const isNewSubscription = !currentSubscription?.plan || !currentSubscription?.isActive;
-          const addonTrialCopy = isFirstDomain && isNewSubscription;
-          const buttonLabel = !siteId
-            ? "Add Domain First"
-            : loading && selectedPlan === planKey
-              ? "Processing..."
-              : isCurrentPlan
-                ? "Current plan"
-                : canUpgrade
-                  ? `Upgrade to ${plan.name}`
-                  : isFirstDomain
-                    ? "Start 14-day free trial"
-                    : `Subscribe — ${PLAN_CURRENCY} ${price}${period}`;
           const disabled = !siteId || loading || isCurrentPlan;
+          
+          let buttonLabel = !siteId ? "Add Domain First" : isCurrentPlan ? "Current Plan Active" : canUpgrade ? `Switch to ${plan.name}` : `Subscribe for ${PLAN_CURRENCY} ${price}${period}`;
+          if (isFirstDomain && isNewSubscription && siteId) buttonLabel = "Start 14-day Free Trial";
+
           return (
             <div
               key={planKey}
-              className={`relative bg-white rounded-xl p-6 border-2 transition-all ${isCurrentPlan ? "border-indigo-400 ring-2 ring-indigo-100" : plan.popular ? "border-indigo-500 shadow-lg" : "border-gray-200 hover:border-gray-300"
-                }`}
+              className={cn(
+                "relative bg-white rounded-3xl p-8 transition-all duration-300 flex flex-col h-full",
+                isCurrentPlan 
+                  ? "border-2 border-indigo-200 ring-4 ring-indigo-50 shadow-md" 
+                  : plan.popular 
+                    ? "border-2 border-slate-900 shadow-xl lg:-mt-4 lg:mb-4 bg-gradient-to-b from-slate-900 to-slate-800 text-white" 
+                    : "border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300"
+              )}
             >
               {plan.popular && !isCurrentPlan && (
-                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                  <span className="bg-indigo-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
-                    Most Popular
+                <div className="absolute -top-4 inset-x-0 flex justify-center">
+                  <span className="bg-indigo-500 text-white text-[11px] font-bold tracking-widest uppercase px-4 py-1.5 rounded-full shadow-md z-10 border border-indigo-400">
+                    Most Selected
                   </span>
                 </div>
               )}
               {isCurrentPlan && (
-                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                  <span className="bg-indigo-100 text-indigo-800 text-xs font-semibold px-3 py-1 rounded-full border border-indigo-200">
-                    Current plan
+                <div className="absolute -top-4 inset-x-0 flex justify-center">
+                  <span className="bg-indigo-100 text-indigo-700 text-[11px] font-bold tracking-widest uppercase px-4 py-1.5 rounded-full shadow-sm z-10 border border-indigo-200">
+                    Active Plan
                   </span>
                 </div>
               )}
 
-              <h3 className="text-xl font-semibold text-gray-900 mb-1">{plan.name}</h3>
-              <p className="text-sm text-gray-500 mb-4">{plan.description}</p>
-
               <div className="mb-6">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-gray-900">{PLAN_CURRENCY} {price}</span>
-                  <span className="text-gray-500">{period}</span>
-                </div>
-                <p className={`text-xs font-medium mt-1 ${isFirstDomain && isNewSubscription ? "text-green-600" : "text-gray-500"}`}>
-                  {isFirstDomain && isNewSubscription ? `14-day free trial • ${PLAN_CURRENCY} 0 now` : canUpgrade ? `Upgrade — ${PLAN_CURRENCY} ${price}${period} after payment` : !isFirstDomain && isNewSubscription ? `${PLAN_CURRENCY} ${price}${period} — no trial for extra domains` : "—"}
-                </p>
+                <h3 className={cn("text-2xl font-bold tracking-tight", plan.popular && !isCurrentPlan ? "text-white" : "text-slate-900")}>{plan.name}</h3>
+                <p className={cn("text-[14px] mt-2", plan.popular && !isCurrentPlan ? "text-slate-300" : "text-slate-500")}>{plan.description}</p>
               </div>
 
-              <ul className="space-y-3 mb-6">
-                {plan.features.map((feature, idx) => (
-                  <li key={idx} className="flex items-start gap-3 text-sm">
-                    <CheckIcon />
-                    <span className="text-gray-600">{feature}</span>
-                  </li>
-                ))}
-              </ul>
+              <div className="mb-8">
+                <div className="flex items-baseline gap-1.5">
+                  <span className={cn("text-4xl font-extrabold tracking-tight", plan.popular && !isCurrentPlan ? "text-white" : "text-slate-900")}>
+                    {PLAN_CURRENCY}{price}
+                  </span>
+                  <span className={cn("text-[15px] font-medium", plan.popular && !isCurrentPlan ? "text-slate-400" : "text-slate-500")}>
+                    {period}
+                  </span>
+                </div>
+                {isFirstDomain && isNewSubscription && (
+                  <p className="text-[13px] font-medium text-emerald-500 mt-2 flex items-center gap-1.5">
+                    <Zap className="h-3.5 w-3.5 fill-current" /> Includes 14-day free trial
+                  </p>
+                )}
+              </div>
+
+              <div className="flex-1">
+                <ul className="space-y-4 mb-8">
+                  {plan.features.map((feature, idx) => (
+                    <li key={idx} className="flex items-start gap-3">
+                      <div className={cn(
+                        "mt-0.5 rounded-full p-0.5", 
+                        plan.popular && !isCurrentPlan ? "bg-indigo-500/20 text-indigo-300" : "bg-indigo-50 text-indigo-600"
+                      )}>
+                        <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                      </div>
+                      <span className={cn("text-[14px] leading-snug font-medium", plan.popular && !isCurrentPlan ? "text-slate-300" : "text-slate-600")}>
+                        {feature}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
               {siteId && (
-                <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
-                      checked={addonSelected}
-                      onChange={(e) =>
-                        setAddonChoiceByPlan((prev) => ({ ...(prev || {}), [planKey]: e.target.checked }))
-                      }
-                      disabled={disabled}
-                    />
+                <div className={cn(
+                  "mb-6 rounded-xl p-4 transition-colors",
+                  plan.popular && !isCurrentPlan ? "bg-slate-800/50 border-slate-700" : "bg-slate-50 border-slate-100",
+                  "border"
+                )}>
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <div className={cn(
+                      "mt-0.5 flex shrink-0 items-center justify-center rounded border h-5 w-5 transition-colors",
+                      addonSelected 
+                        ? plan.popular && !isCurrentPlan ? "bg-indigo-500 border-indigo-500" : "bg-indigo-600 border-indigo-600"
+                        : plan.popular && !isCurrentPlan ? "border-slate-600 group-hover:border-slate-500" : "border-slate-300 bg-white group-hover:border-slate-400"
+                    )}>
+                      {addonSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={addonSelected}
+                        onChange={(e) => setAddonChoiceByPlan((prev) => ({ ...(prev || {}), [planKey]: e.target.checked }))}
+                        disabled={disabled}
+                      />
+                    </div>
                     <div>
-                      <p className="text-sm font-semibold text-gray-900">Remove branding (optional)</p>
-                      <p className="text-xs text-gray-600 mt-0.5">
-                        <strong>Unchecked</strong> = you pay only the plan price ({PLAN_CURRENCY} {price}{period}). No {PLAN_CURRENCY} 3 charge.
+                      <p className={cn("text-[14px] font-semibold", plan.popular && !isCurrentPlan ? "text-white" : "text-slate-900")}>
+                        White-label Addon
                       </p>
-                      <p className="text-xs text-gray-600 mt-1">
-                        <strong>Checked</strong> = we remove &quot;Powered by Cookie Access&quot; and add {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}{tab === "monthly" ? "/month" : "/year"}. Total: {PLAN_CURRENCY} {price} + {PLAN_CURRENCY} {tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10} = {PLAN_CURRENCY} {tab === "monthly" ? price + ADDON_BRANDING_PRICE_EUR : price + ADDON_BRANDING_PRICE_EUR * 10}{tab === "monthly" ? "/month" : "/year"}.
+                      <p className={cn("text-[12px] mt-1 leading-relaxed", plan.popular && !isCurrentPlan ? "text-slate-400" : "text-slate-500")}>
+                        Remove "Powered by ConsentFlow" branding from the public banner. <strong className={plan.popular && !isCurrentPlan ? "text-slate-300" : "text-slate-700"}>+{PLAN_CURRENCY}{tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}{period}</strong>
                       </p>
                     </div>
                   </label>
@@ -409,45 +379,58 @@ function PlansContent() {
               <button
                 onClick={() => !disabled && handlePlanSelect(planKey)}
                 disabled={disabled}
-                className={`w-full py-3 text-sm font-medium rounded-lg transition-colors ${disabled
-                  ? "bg-gray-100 text-gray-500 cursor-not-allowed"
-                  : plan.popular || canUpgrade
-                    ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                    : "bg-gray-100 text-gray-900 hover:bg-gray-200"
-                  }`}
+                className={cn(
+                  "w-full py-4 text-[15px] font-bold tracking-wide rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 group",
+                  disabled
+                    ? "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+                    : isCurrentPlan
+                      ? "bg-indigo-50 text-indigo-700 border border-indigo-200 cursor-default"
+                      : plan.popular && !isCurrentPlan
+                        ? "bg-indigo-500 text-white hover:bg-indigo-400 hover:shadow-indigo-500/25 hover:shadow-lg"
+                        : "bg-slate-900 text-white hover:bg-slate-800 hover:shadow-lg"
+                )}
               >
                 {buttonLabel}
+                {!disabled && !isCurrentPlan && <ArrowRight className="h-4 w-4 opacity-70 group-hover:translate-x-1 transition-transform" />}
               </button>
             </div>
           );
         })}
       </div>
 
-      {/* FAQ Section */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-6">Frequently Asked Questions</h2>
-        <div className="grid md:grid-cols-2 gap-6">
+      <div className="max-w-4xl mx-auto">
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900 mb-8 text-center">Common Questions</h2>
+        <div className="grid md:grid-cols-2 gap-x-12 gap-y-8">
           {[
             {
+              icon: ShieldCheck,
               q: "How does the trial work?",
-              a: "Your first domain gets a 14-day free trial. Extra domains require a paid subscription from day one (no trial). You won't be charged for the first domain until the trial ends.",
+              a: "Your first domain receives an unrestricted 14-day free trial on any tier. We collect payment details upfront to prevent abuse, but won't charge you until day 15. You can cancel anytime before then.",
             },
             {
-              q: "Can I cancel anytime?",
-              a: "Yes! Cancel during the trial and you won't be charged. Cancel after and you'll have access until the end of your billing period.",
+              icon: Zap,
+              q: "Can I manage multiple domains?",
+              a: "Yes. Each workspace domain operates concurrently but requires its own separate subscription. This ensures usage limits and tracking isolations remain strict per domain.",
             },
             {
-              q: "One subscription per domain?",
-              a: "Yes, each domain needs its own subscription. Only your first domain gets the 14-day free trial; additional domains are paid from day one.",
+              icon: Server,
+              q: "What happens if I exceed limits?",
+              a: "Your consent banners will remain active and compliant. However, you will stop receiving detailed analytics logs in your dashboard until you upgrade to the next tier.",
             },
             {
-              q: "What happens if I exceed page views?",
-              a: "Your consent banner will continue working, but you'll see a warning in your dashboard. Upgrade to continue tracking accurately.",
+              icon: Check,
+              q: "Is it easy to cancel?",
+              a: "Incredibly easy. You can cancel your subscription from your billing dashboard with a single click. You'll retain access to your chosen tier until the end of your billing cycle.",
             },
           ].map((faq, idx) => (
-            <div key={idx} className="p-4 bg-gray-50 rounded-lg">
-              <h3 className="font-medium text-gray-900 mb-2">{faq.q}</h3>
-              <p className="text-sm text-gray-600">{faq.a}</p>
+            <div key={idx} className="flex gap-4">
+              <div className="shrink-0 w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center border border-indigo-100/50">
+                <faq.icon className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <h3 className="text-[16px] font-bold text-slate-900 mb-1.5">{faq.q}</h3>
+                <p className="text-[14px] text-slate-500 leading-relaxed">{faq.a}</p>
+              </div>
             </div>
           ))}
         </div>
@@ -461,8 +444,8 @@ export default function PlansPage() {
     <Suspense
       fallback={
         <DashboardLayout>
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+          <div className="flex items-center justify-center h-[60vh]">
+             <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
           </div>
         </DashboardLayout>
       }

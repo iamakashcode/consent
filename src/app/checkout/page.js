@@ -3,6 +3,8 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import Script from "next/script";
+import { ShieldAlert, RefreshCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 function CheckoutContent() {
   const searchParams = useSearchParams();
@@ -13,7 +15,6 @@ function CheckoutContent() {
   const [clientToken, setClientToken] = useState(null);
   const [tokenError, setTokenError] = useState(null);
 
-  // Fetch client-side token from API
   useEffect(() => {
     const fetchClientToken = async () => {
       try {
@@ -21,13 +22,11 @@ function CheckoutContent() {
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.error || "Failed to get client token");
+          throw new Error(data.error || "Failed to initialize secure checkout session");
         }
 
         setClientToken(data.token);
-        console.log("[Checkout] Client token fetched, environment:", data.environment);
       } catch (error) {
-        console.error("[Checkout] Error fetching client token:", error);
         setTokenError(error.message);
       }
     };
@@ -36,43 +35,23 @@ function CheckoutContent() {
   }, []);
 
   useEffect(() => {
-    if (!transactionId) {
-      console.error("[Checkout] No transaction ID in URL");
-      return;
-    }
+    if (!transactionId || !clientToken) return;
 
-    if (!clientToken) {
-      // Wait for client token to be fetched
-      return;
-    }
-
-    // Initialize Paddle.js and open checkout
     const initializeAndOpen = () => {
-      if (!window.Paddle) {
-        console.error("[Checkout] Paddle.js not loaded");
-        return;
-      }
+      if (!window.Paddle) return;
 
       try {
-        // Set environment (sandbox or live) based on token prefix
         const isSandbox = clientToken.startsWith("test_");
-        if (isSandbox) {
-          window.Paddle.Environment.set("sandbox");
-          console.log("[Checkout] Set Paddle environment to sandbox");
-        }
+        if (isSandbox) window.Paddle.Environment.set("sandbox");
 
-        // Initialize Paddle.js with client-side token
-        window.Paddle.Initialize({
-          token: clientToken,
-        });
+        window.Paddle.Initialize({ token: clientToken });
 
-
-        // Build success URL: addon flow -> payment/return?addon=remove_branding; plan flow -> payment/return?transaction_id&siteId for confirm-pending-domain
         const siteId = siteIdParam || (typeof window !== "undefined" ? window.sessionStorage?.getItem("paddle_site_id") : null);
         const isAddon = addonParam === "remove_branding";
         const redirectTarget = isAddon && redirectParam
           ? redirectParam
           : `/dashboard/domains?payment=success${siteId ? `&siteId=${encodeURIComponent(siteId)}` : ""}`;
+        
         const successUrl = `${window.location.origin}/payment/return?transaction_id=${encodeURIComponent(transactionId)}${siteId ? `&siteId=${encodeURIComponent(siteId)}` : ""}${isAddon ? "&addon=remove_branding" : ""}&redirect=${encodeURIComponent(redirectTarget)}`;
 
         window.Paddle.Checkout.open({
@@ -82,19 +61,14 @@ function CheckoutContent() {
             displayMode: "overlay",
           },
         });
-
-        console.log("[Checkout] Opened Paddle checkout for transaction:", transactionId);
       } catch (error) {
-        console.error("[Checkout] Error opening Paddle checkout:", error);
-        setTokenError(`Failed to open checkout: ${error.message}`);
+        setTokenError(`Failed to establish secure connection: ${error.message}`);
       }
     };
 
-    // Wait for Paddle.js to load
     if (typeof window !== "undefined" && window.Paddle) {
       initializeAndOpen();
     } else {
-      // Wait for Paddle.js to load
       const checkPaddle = setInterval(() => {
         if (window.Paddle) {
           clearInterval(checkPaddle);
@@ -102,22 +76,20 @@ function CheckoutContent() {
         }
       }, 100);
 
-      // Timeout after 10 seconds
       setTimeout(() => {
         clearInterval(checkPaddle);
-        if (!window.Paddle) {
-          setTokenError("Paddle.js failed to load. Please refresh the page.");
-        }
+        if (!window.Paddle) setTokenError("Payment gateway timed out. Please check your connection and refresh.");
       }, 10000);
     }
   }, [transactionId, clientToken, addonParam, redirectParam, siteIdParam]);
 
   if (!transactionId) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Invalid Checkout</h1>
-          <p className="text-gray-600">No transaction ID provided.</p>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans">
+        <div className="text-center max-w-sm w-full bg-white rounded-2xl p-8 shadow-sm border border-slate-200">
+          <ShieldAlert className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 mb-2">Invalid Session</h1>
+          <p className="text-[14px] text-slate-500">No active checkout identifier found. Please start the process again from your dashboard.</p>
         </div>
       </div>
     );
@@ -125,20 +97,21 @@ function CheckoutContent() {
 
   if (tokenError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center max-w-md">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-4">
-            <h1 className="text-xl font-bold text-red-900 mb-2">Checkout Error</h1>
-            <p className="text-red-700 text-sm mb-4">{tokenError}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Retry
-            </button>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans">
+        <div className="text-center max-w-md w-full bg-white rounded-2xl p-8 shadow-xl border border-rose-100">
+          <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-100">
+             <ShieldAlert className="w-8 h-8 text-rose-500" />
           </div>
-          <p className="text-gray-500 text-sm">
-            If the issue persists, please contact support.
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 mb-2">Connection Error</h1>
+          <p className="text-[14px] font-medium text-rose-600 bg-rose-50 p-3 rounded-xl mb-6">{tokenError}</p>
+          <Button
+            onClick={() => window.location.reload()}
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl h-12 font-medium"
+          >
+            <RefreshCcw className="w-4 h-4 mr-2" /> Retry Connection
+          </Button>
+          <p className="text-[13px] text-slate-400 mt-4">
+            If the issue persists, your protective software might be blocking the secure payment gateway.
           </p>
         </div>
       </div>
@@ -147,17 +120,19 @@ function CheckoutContent() {
 
   return (
     <>
-      <Script
-        src="https://cdn.paddle.com/paddle/v2/paddle.js"
-        onLoad={() => {
-          console.log("[Checkout] Paddle.js loaded");
-        }}
-      />
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-600">
-            {!clientToken ? "Loading checkout..." : "Opening checkout..."}
+      <Script src="https://cdn.paddle.com/paddle/v2/paddle.js" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans">
+        <div className="text-center animate-in fade-in zoom-in-95 duration-500">
+          <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-md border border-slate-100 mx-auto mb-6 relative">
+            <div className="absolute inset-0 border-[3px] border-indigo-100 rounded-3xl"></div>
+            <div className="absolute inset-0 border-[3px] border-indigo-600 rounded-3xl border-t-transparent animate-spin"></div>
+            <div className="w-8 h-8 bg-indigo-50 rounded-full flex items-center justify-center">
+              <div className="w-3 h-3 bg-indigo-600 rounded-full animate-ping"></div>
+            </div>
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight mb-2">Opening secure checkout</h2>
+          <p className="text-[15px] font-medium text-slate-500">
+            {!clientToken ? "Initializing encryption..." : "Connecting to paddle..."}
           </p>
         </div>
       </div>
@@ -168,8 +143,8 @@ function CheckoutContent() {
 export default function CheckoutPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 font-sans">
+        <div className="w-12 h-12 border-[3px] border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
       </div>
     }>
       <CheckoutContent />

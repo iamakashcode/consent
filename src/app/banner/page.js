@@ -5,10 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SectionCard } from "@/components/shared/SectionCard";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { getScriptPath } from "@/lib/script-urls";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -16,66 +19,66 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Globe, CheckCircle2 } from "lucide-react";
+import { Globe, CheckCircle2, ShieldCheck, PaintBucket, Columns, Settings2, LayoutTemplate, Layers, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const POSITIONS = [
-  { id: "bottom", label: "Bottom", icon: "⬇️" },
-  { id: "top", label: "Top", icon: "⬆️" },
-  { id: "bottom-left", label: "Bottom Left", icon: "↙️" },
-  { id: "bottom-right", label: "Bottom Right", icon: "↘️" },
+  { id: "bottom", label: "Bottom", icon: <Columns className="rotate-90 w-4 h-4" /> },
+  { id: "top", label: "Top", icon: <Columns className="-rotate-90 w-4 h-4" /> },
+  { id: "bottom-left", label: "Bottom Left", icon: <LayoutTemplate className="w-4 h-4 flip-horizontal rotate-180" /> },
+  { id: "bottom-right", label: "Bottom Right", icon: <LayoutTemplate className="w-4 h-4 rotate-180" /> },
 ];
 
-// 3–4 preset designs: only colors + position (same shape as config). Script unchanged.
 const DESIGN_PRESETS = [
   {
     id: "minimal",
-    name: "Minimal",
-    backgroundColor: "#1F2937",
-    textColor: "#F9FAFB",
-    buttonColor: "#4F46E5",
-    buttonTextColor: "#FFFFFF",
+    name: "Minimalist",
+    backgroundColor: "#ffffff",
+    textColor: "#0f172a",
+    buttonColor: "#0f172a",
+    buttonTextColor: "#ffffff",
     position: "bottom",
   },
   {
     id: "modern",
-    name: "Modern",
-    backgroundColor: "#667eea",
-    textColor: "#FFFFFF",
-    buttonColor: "#FFFFFF",
-    buttonTextColor: "#667eea",
-    position: "bottom",
-  },
-  {
-    id: "elegant",
-    name: "Elegant",
-    backgroundColor: "#FFFFFF",
-    textColor: "#1F2937",
-    buttonColor: "#1F2937",
-    buttonTextColor: "#FFFFFF",
+    name: "Modern Brand",
+    backgroundColor: "#4f46e5",
+    textColor: "#ffffff",
+    buttonColor: "#ffffff",
+    buttonTextColor: "#4f46e5",
     position: "bottom",
   },
   {
     id: "dark",
-    name: "Dark",
-    backgroundColor: "#000000",
-    textColor: "#FFFFFF",
-    buttonColor: "#FFFFFF",
-    buttonTextColor: "#000000",
+    name: "Midnight",
+    backgroundColor: "#09090b",
+    textColor: "#fafafa",
+    buttonColor: "#fafafa",
+    buttonTextColor: "#09090b",
+    position: "bottom",
+  },
+  {
+    id: "enterprise",
+    name: "Enterprise",
+    backgroundColor: "#f8fafc",
+    textColor: "#334155",
+    buttonColor: "#2563eb",
+    buttonTextColor: "#ffffff",
     position: "bottom",
   },
 ];
 
 const DEFAULT_CONFIG = {
-  backgroundColor: "#1F2937",
-  textColor: "#F9FAFB",
-  buttonColor: "#4F46E5",
-  buttonTextColor: "#FFFFFF",
+  backgroundColor: "#ffffff",
+  textColor: "#0f172a",
+  buttonColor: "#0f172a",
+  buttonTextColor: "#ffffff",
   position: "bottom",
   title: "We value your privacy",
-  description: "We use cookies to enhance your browsing experience and analyze site traffic.",
+  description: "We use cookies to enhance your browsing experience, serve personalized ads or content, and analyze our traffic. By clicking 'Accept All', you consent to our use of cookies.",
   acceptText: "Accept All",
   rejectText: "Reject All",
-  customizeText: "Customize",
+  customizeText: "Customize Settings",
   showRejectButton: true,
   showCustomizeButton: true,
 };
@@ -96,9 +99,8 @@ function BannerContent() {
   const [previewError, setPreviewError] = useState("");
   const [showInstall, setShowInstall] = useState(false);
   const [activeInstallTab, setActiveInstallTab] = useState("manual");
-  const [copyStatus, setCopyStatus] = useState("");
-  const [verifyStatus, setVerifyStatus] = useState("");
   const [isVerified, setIsVerified] = useState(false);
+  const [verifyStatus, setVerifyStatus] = useState("");
   const [canCustomizeBanner, setCanCustomizeBanner] = useState(true);
   const [cannotCustomizeReason, setCannotCustomizeReason] = useState("");
   const [addonCheckoutLoading, setAddonCheckoutLoading] = useState(false);
@@ -117,8 +119,6 @@ function BannerContent() {
           totalViews: data.totalViews ?? 0,
           totalUniquePages: data.totalUniquePages ?? 0,
         });
-      } else {
-        setSiteStats({ totalViews: 0, totalUniquePages: 0 });
       }
     } catch {
       setSiteStats({ totalViews: 0, totalUniquePages: 0 });
@@ -133,11 +133,7 @@ function BannerContent() {
 
   const sanitizeDomain = useCallback((value) => {
     if (!value) return "";
-    return value
-      .replace(/^https?:\/\//i, "")
-      .replace(/^www\./i, "")
-      .split("/")[0]
-      .trim();
+    return value.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].trim();
   }, []);
 
   const encodePreviewConfig = useCallback((value) => {
@@ -165,7 +161,6 @@ function BannerContent() {
       output = `${baseTag}\n` + output;
     }
 
-    // Ensure script is placed before </body> or at the end, and executes immediately
     if (/<\/body>/i.test(output)) {
       output = output.replace(/<\/body>/i, `${scriptTag}\n</body>`);
     } else if (/<\/html>/i.test(output)) {
@@ -191,9 +186,7 @@ function BannerContent() {
       const data = await response.json();
       setPreviewSourceHtml(data.html);
       const html = buildPreviewHtml(data.html, safeDomain, site.siteId, initialConfig);
-      if (html) {
-        setPreviewHtml(html);
-      }
+      if (html) setPreviewHtml(html);
     } catch (err) {
       setPreviewSourceHtml("");
       setPreviewHtml("");
@@ -209,7 +202,6 @@ function BannerContent() {
 
     const fetchSitesOnce = async () => {
       try {
-        // Fetch sites and subscriptions
         const [sitesRes, subsRes] = await Promise.all([
           fetch("/api/sites"),
           fetch("/api/subscription"),
@@ -219,46 +211,24 @@ function BannerContent() {
           const sitesData = await sitesRes.json();
           let activeSites = [];
 
-          // Get subscription data to filter only active domains
           if (subsRes.ok) {
             const subsData = await subsRes.json();
             const subscriptionsMap = {};
             (subsData.subscriptions || []).forEach((item) => {
-              subscriptionsMap[item.siteId] = {
-                ...item,
-                userTrialActive: subsData.userTrialActive || false,
-              };
+              subscriptionsMap[item.siteId] = { ...item, userTrialActive: subsData.userTrialActive || false };
             });
 
-            // Filter sites that have active subscriptions or user trial
             activeSites = sitesData.filter(site => {
               const subData = subscriptionsMap[site.siteId];
               return subData?.isActive || subsData.userTrialActive;
             });
           } else {
-            // If subscription API fails, show all sites (fallback)
             activeSites = sitesData;
           }
 
           setSites(activeSites);
-
-          // Only allow siteId from URL if it's in active (verified/paid) list - no URL hack without payment
           const siteIdParam = searchParams?.get("siteId");
-          let nextSite = null;
-
-          if (siteIdParam && activeSites.length > 0) {
-            nextSite = activeSites.find(s => s.siteId === siteIdParam || s.id === siteIdParam);
-            // If URL has siteId but not in active list, clear it from URL (user can't access without payment)
-            if (!nextSite && typeof window !== "undefined") {
-              const u = new URL(window.location.href);
-              u.searchParams.delete("siteId");
-              window.history.replaceState({}, "", u.pathname + u.search);
-            }
-          }
-
-          if (!nextSite && activeSites.length > 0) {
-            nextSite = activeSites[0];
-          }
+          let nextSite = activeSites.length > 0 ? activeSites.find(s => s.siteId === siteIdParam || s.id === siteIdParam) || activeSites[0] : null;
 
           if (nextSite) {
             setSelectedSite(nextSite);
@@ -266,31 +236,23 @@ function BannerContent() {
             fetchSiteStats(nextSite.siteId);
             let initialConfig = DEFAULT_CONFIG;
             if (nextSite?.bannerConfig) {
-              const parsedConfig = typeof nextSite.bannerConfig === "string"
-                ? JSON.parse(nextSite.bannerConfig)
-                : nextSite.bannerConfig;
+              const parsedConfig = typeof nextSite.bannerConfig === "string" ? JSON.parse(nextSite.bannerConfig) : nextSite.bannerConfig;
               initialConfig = { ...DEFAULT_CONFIG, ...parsedConfig };
             }
             setConfig(initialConfig);
             setDebouncedConfig(initialConfig);
             loadPreviewOnce(nextSite, initialConfig);
-            // Check whether customization is allowed (subscription + view limit)
             fetch(`/api/sites/${nextSite.siteId}/can-customize`)
               .then((res) => res.ok ? res.json() : { canCustomize: true })
               .then((data) => {
                 setCanCustomizeBanner(!!data.canCustomize);
                 setCannotCustomizeReason(data.reason || "");
-              })
-              .catch(() => {
-                setCanCustomizeBanner(true);
-                setCannotCustomizeReason("");
-              });
-            // Check verification status
+              }).catch(() => {});
             checkVerificationStatus(nextSite.siteId);
           }
         }
       } catch (err) {
-        console.error("Error fetching sites:", err);
+        console.error("Error:", err);
       } finally {
         setLoading(false);
       }
@@ -298,35 +260,6 @@ function BannerContent() {
 
     fetchSitesOnce();
   }, [status, loadPreviewOnce, searchParams, fetchSiteStats]);
-
-  // Refetch sites when returning from add-on purchase so subscription.removeBrandingAddon is updated
-  useEffect(() => {
-    if (searchParams?.get("addon") !== "success") return;
-    let cancelled = false;
-    fetch("/api/sites")
-      .then((r) => r.json())
-      .then((sitesData) => {
-        if (cancelled || !Array.isArray(sitesData)) return;
-        setSites((prev) =>
-          prev.map((s) => {
-            const updated = sitesData.find((n) => n.siteId === s.siteId);
-            return updated ? { ...s, ...updated } : s;
-          })
-        );
-        setSelectedSite((current) => {
-          const updated = sitesData.find((s) => s.siteId === current?.siteId);
-          return updated ? { ...current, ...updated } : current;
-        });
-      })
-      .finally(() => {
-        if (!cancelled && typeof window !== "undefined") {
-          const u = new URL(window.location.href);
-          u.searchParams.delete("addon");
-          window.history.replaceState({}, "", u.pathname + u.search);
-        }
-      });
-    return () => { cancelled = true; };
-  }, [searchParams]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -338,58 +271,14 @@ function BannerContent() {
   useEffect(() => {
     if (!previewSourceHtml || !selectedSite) return;
     const html = buildPreviewHtml(previewSourceHtml, selectedSite.domain, selectedSite.siteId, debouncedConfig);
-    if (html) {
-      setPreviewHtml(html);
-    }
+    if (html) setPreviewHtml(html);
   }, [buildPreviewHtml, debouncedConfig, previewSourceHtml, selectedSite]);
-
-  const handleSiteChange = (siteId) => {
-    const site = sites.find((s) => s.siteId === siteId);
-    if (site) {
-      setSelectedSite(site);
-      selectedSiteRef.current = site;
-      fetchSiteStats(site.siteId);
-      setCanCustomizeBanner(true);
-      setCannotCustomizeReason("");
-      let newConfig = DEFAULT_CONFIG;
-      if (site.bannerConfig) {
-        const parsedConfig = typeof site.bannerConfig === "string"
-          ? JSON.parse(site.bannerConfig)
-          : site.bannerConfig;
-        newConfig = {
-          ...DEFAULT_CONFIG,
-          ...parsedConfig,
-          description: parsedConfig.description ?? parsedConfig.message ?? DEFAULT_CONFIG.description,
-          acceptText: parsedConfig.acceptText ?? parsedConfig.acceptButtonText ?? DEFAULT_CONFIG.acceptText,
-          rejectText: parsedConfig.rejectText ?? parsedConfig.rejectButtonText ?? DEFAULT_CONFIG.rejectText,
-          customizeText: parsedConfig.customizeText ?? parsedConfig.customizeButtonText ?? DEFAULT_CONFIG.customizeText,
-          showRejectButton: parsedConfig.showRejectButton ?? (parsedConfig.showReject !== false),
-          showCustomizeButton: parsedConfig.showCustomizeButton ?? true,
-        };
-      }
-      setConfig(newConfig);
-      setDebouncedConfig(newConfig);
-      loadPreviewOnce(site, newConfig);
-      // Fetch whether customization is allowed (subscription + view limit)
-      fetch(`/api/sites/${site.siteId}/can-customize`)
-        .then((res) => res.ok ? res.json() : { canCustomize: true })
-        .then((data) => {
-          setCanCustomizeBanner(!!data.canCustomize);
-          setCannotCustomizeReason(data.reason || "");
-        })
-        .catch(() => {
-          setCanCustomizeBanner(true);
-          setCannotCustomizeReason("");
-        });
-    }
-  };
 
   const handleSave = async () => {
     if (!selectedSite) return;
 
     setSaving(true);
     try {
-      // Save full schema for DB: include message (script) + description (UI), all button options
       const bannerConfig = {
         ...config,
         message: config.description ?? config.message,
@@ -405,76 +294,15 @@ function BannerContent() {
       });
 
       if (response.ok) {
-        alert("Banner settings saved successfully!");
-        setSites((prev) =>
-          prev.map((s) =>
-            s.siteId === selectedSite.siteId ? { ...s, bannerConfig } : s
-          )
-        );
+        toast.success("Banner settings saved successfully!");
+        setSites((prev) => prev.map((s) => s.siteId === selectedSite.siteId ? { ...s, bannerConfig } : s));
       } else {
-        const data = await response.json();
-        alert(data.error || "Failed to save settings");
+        toast.error("Failed to save settings");
       }
     } catch (err) {
-      alert("An error occurred while saving");
+      toast.error("An error occurred while saving");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleReset = () => {
-    if (confirm("Reset to default settings?")) {
-      setConfig(DEFAULT_CONFIG);
-    }
-  };
-
-  const handlePurchaseBrandingAddon = async () => {
-    if (!selectedSite) return;
-    setAddonCheckoutLoading(true);
-    try {
-      const res = await fetch("/api/payment/create-addon-checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siteId: selectedSite.siteId, addonType: "remove_branding" }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success && data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-        return;
-      }
-      alert(data.error || "Failed to start checkout. Subscribe to a plan first if you haven’t.");
-    } catch (err) {
-      alert("Something went wrong. Please try again.");
-    } finally {
-      setAddonCheckoutLoading(false);
-    }
-  };
-
-  const getInstallCode = () => {
-    if (!selectedSite) return "";
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ||
-      (typeof window !== "undefined" ? window.location.origin : "");
-    const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL?.replace(/\/$/, "") || "";
-    const scriptSrc = r2Base
-      ? `${r2Base}/${getScriptPath(selectedSite.siteId, false)}`
-      : `${baseUrl}/cdn/sites/${selectedSite.siteId}/script.js`;
-    return [
-      "<!-- Start Cookie Access banner -->",
-      `<script id="consentflow" src="${scriptSrc}"></script>`,
-      "<!-- End Cookie Access banner -->",
-    ].join("\n");
-  };
-
-  const handleCopyCode = async () => {
-    const code = getInstallCode();
-    if (!code) return;
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopyStatus("Copied!");
-      setTimeout(() => setCopyStatus(""), 2000);
-    } catch (err) {
-      setCopyStatus("Copy failed");
-      setTimeout(() => setCopyStatus(""), 2000);
     }
   };
 
@@ -485,20 +313,14 @@ function BannerContent() {
       if (res.ok) {
         const data = await res.json();
         setIsVerified(data.isVerified || false);
-        if (data.isVerified) {
-          setVerifyStatus("Verified ✓");
-        }
       }
-    } catch (err) {
-      console.error("Error checking verification:", err);
-    }
+    } catch (err) {}
   };
 
   const handleVerify = async () => {
     if (!selectedSite) return;
     setVerifyStatus("Crawling website...");
     try {
-      // First, re-crawl the website to check if script is installed
       const crawlRes = await fetch("/api/crawl", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -510,684 +332,453 @@ function BannerContent() {
         return;
       }
 
-      // Wait a bit for script to load
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Then check verification status
-      setVerifyStatus("Checking verification...");
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      setVerifyStatus("Verifying code...");
+      
       const res = await fetch(`/api/sites/${selectedSite.siteId}/verify`, { method: "POST" });
       const data = await res.json();
 
       if (res.ok && data.verified) {
         setIsVerified(true);
-        setVerifyStatus("Verified ✓");
-        // Reload preview to show verified state
-        if (selectedSite) {
-          loadPreviewOnce(selectedSite, config);
-        }
-        // Refresh site data
-        const sitesRes = await fetch("/api/sites");
-        if (sitesRes.ok) {
-          const sitesData = await sitesRes.json();
-          const updatedSite = sitesData.find(s => s.siteId === selectedSite.siteId);
-          if (updatedSite) {
-            setSelectedSite(updatedSite);
-            setSites(sitesData);
-          }
-        }
+        toast.success("Domain verified successfully!");
+        setVerifyStatus("");
+        if (selectedSite) loadPreviewOnce(selectedSite, config);
       } else {
         setIsVerified(false);
-        setVerifyStatus(data.message || "Not verified yet - Add script to your website");
+        setVerifyStatus(data.message || "Not verified yet - please ensure script is in the <head>");
+        toast.error("Verification failed");
       }
     } catch (err) {
-      console.error("Verify error:", err);
-      setVerifyStatus("Verify failed");
+      setVerifyStatus("Verification error");
       setIsVerified(false);
     }
+  };
+
+  const getInstallCode = () => {
+    if (!selectedSite) return "";
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "");
+    const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL?.replace(/\/$/, "") || "";
+    const scriptSrc = r2Base ? `${r2Base}/${getScriptPath(selectedSite.siteId, false)}` : `${baseUrl}/cdn/sites/${selectedSite.siteId}/script.js`;
+    return [
+      "<!-- Start Cookie Access banner -->",
+      `<script id="consentflow" src="${scriptSrc}"></script>`,
+      "<!-- End Cookie Access banner -->",
+    ].join("\n");
   };
 
   if (status === "loading" || loading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
         </div>
       </DashboardLayout>
     );
   }
 
-  if (!session) {
-    router.push("/login");
-    return null;
-  }
+  if (!session) return null;
 
   return (
     <DashboardLayout>
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Manage</h1>
-          <p className="text-muted-foreground mt-1">Customize banner, install code, and view stats for this domain</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {selectedSite && !isVerified && (
-            <Button size="sm" variant="destructive" className="bg-amber-600 hover:bg-amber-700" onClick={() => setShowInstall(true)}>
-              Script not installed — Install & verify
-            </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={() => setShowInstall(true)} disabled={!selectedSite}>
-            Install Code
-          </Button>
-          {canCustomizeBanner && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-400"
-                onClick={() => customizeSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-              >
-                Customize
+      <PageHeader 
+        title="Banner Setup" 
+        description="Design and configure your privacy banner to match your platform's aesthetic."
+        action={
+           canCustomizeBanner && (
+              <Button onClick={handleSave} disabled={saving || !selectedSite} className="rounded-xl px-5 h-10 font-medium bg-slate-900 shadow-sm transition-all hover:bg-slate-800">
+                {saving ? "Saving..." : "Save Configuration"}
               </Button>
-              <Button variant="secondary" size="sm" onClick={handleReset}>
-                Reset
-              </Button>
-              <Button size="sm" onClick={handleSave} disabled={saving || !selectedSite}>
-                {saving ? "Saving…" : "Save Changes"}
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+           )
+        }
+      />
 
       {sites.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center mb-4">
-              <Globe className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <CardTitle className="mb-1">No domains yet</CardTitle>
-            <CardDescription className="mb-4">Add a domain first to customize its banner</CardDescription>
-            <Button asChild>
-              <Link href="/dashboard/domains">Add Domain</Link>
+        <SectionCard hoverLift>
+          <EmptyState 
+            icon={LayoutTemplate}
+            title="Design Dashboard"
+            description="Add your first domain to begin configuring your consent banner."
+          />
+          <div className="text-center pb-6">
+            <Button asChild className="rounded-xl shadow-sm bg-indigo-600 hover:bg-indigo-700">
+              <Link href="/dashboard/domains"><Plus className="w-4 h-4 mr-2" /> Add Domain</Link>
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </SectionCard>
       ) : (
-        <>
-          {/* Script not installed / not verified — prominent notice */}
-          {selectedSite && !isVerified && (
-            <Card className="mb-6 border-amber-300 bg-amber-50 dark:bg-amber-950/30">
-              <CardContent className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-6">
-                <div className="flex items-start gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-amber-200 dark:bg-amber-800/50 flex items-center justify-center shrink-0">
-                    <Globe className="h-5 w-5 text-amber-700 dark:text-amber-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-amber-900 dark:text-amber-100">Script not installed or not verified</h3>
-                    <p className="text-sm text-amber-800 dark:text-amber-200 mt-0.5">
-                      The consent banner will not appear on your website until you install the code and verify. Click &quot;Install Code&quot;, add the code to your site, then click &quot;Verify installation&quot;.
-                    </p>
-                  </div>
-                </div>
-                <Button size="sm" onClick={() => setShowInstall(true)} className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white">
-                  Install Code & verify
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          <div className="grid lg:grid-cols-2 gap-6">
-            {/* Left: Settings */}
-            <div className="space-y-6">
-              {/* Domain + Page views & Page count */}
-              {selectedSite && (
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Domain &amp; stats</CardTitle>
-                    <CardDescription>Selected domain and consent metrics</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">Domain</label>
-                      <div className="mt-1 px-3 py-2 rounded-md border bg-muted/50 text-sm font-medium">
-                        {selectedSite.domain}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="rounded-lg border bg-muted/30 p-4">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Page views</p>
-                        <p className="text-2xl font-bold mt-1">{siteStats.totalViews.toLocaleString()}</p>
-                      </div>
-                      <div className="rounded-lg border bg-muted/30 p-4">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Page count</p>
-                        <p className="text-2xl font-bold mt-1">{siteStats.totalUniquePages.toLocaleString()}</p>
-                      </div>
-                    </div>
-                    {sites.length > 1 && (
-                      <p className="text-xs text-muted-foreground">
-                        <Link href="/dashboard/domains" className="text-primary hover:underline">Manage all domains</Link>
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Customization unavailable */}
-              {selectedSite && !canCustomizeBanner && (
-                <Card className="border-amber-200 bg-amber-50/50">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base text-amber-800">Banner customization unavailable</CardTitle>
-                    <CardDescription className="text-amber-700">{cannotCustomizeReason}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button variant="outline" size="sm" asChild className="border-amber-300 text-amber-800 hover:bg-amber-100">
-                      <Link href="/plans">View plans</Link>
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Hide branding */}
-              {selectedSite && (
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Hide branding</CardTitle>
-                    <CardDescription>
-                      {selectedSite.subscription?.removeBrandingAddon
-                        ? "Branding is hidden on your consent banner."
-                        : '"Powered by Cookie Access" is shown on the banner. Add the add-on to hide it.'}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {selectedSite.subscription?.removeBrandingAddon ? (
-                      <p className="text-sm text-muted-foreground">No action needed.</p>
-                    ) : (
-                      <Button
-                        size="sm"
-                        onClick={handlePurchaseBrandingAddon}
-                        disabled={addonCheckoutLoading}
-                      >
-                        {addonCheckoutLoading ? "Loading…" : "Hide branding — EUR 3/month"}
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Banner customization - Design, Colors, Position, Text, Buttons */}
-              {canCustomizeBanner && (
-                <>
-                  <Card id="banner-customize" ref={customizeSectionRef} className="scroll-mt-6">
-                    <CardHeader className="pb-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <CardTitle className="text-base">Banner customization</CardTitle>
-                          <CardDescription>Design, colors, position, and copy — all options are saved to your domain.</CardDescription>
-                        </div>
-                        <Button size="sm" onClick={handleSave} disabled={saving || !selectedSite} className="shrink-0">
-                          {saving ? "Saving…" : "Save Changes"}
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-8">
-                      {/* Design presets */}
-                      <div className="space-y-3">
-                        <div>
-                          <h3 className="text-sm font-semibold text-gray-900">Design</h3>
-                          <p className="text-xs text-gray-500 mt-0.5">Pick a preset, then tweak colors and position below if needed.</p>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          {DESIGN_PRESETS.map((preset) => {
-                            const isActive =
-                              config.backgroundColor === preset.backgroundColor &&
-                              config.buttonColor === preset.buttonColor &&
-                              config.position === preset.position;
-                            return (
-                              <button
-                                key={preset.id}
-                                type="button"
-                                onClick={() => setConfig({
-                                  ...config,
-                                  backgroundColor: preset.backgroundColor,
-                                  textColor: preset.textColor,
-                                  buttonColor: preset.buttonColor,
-                                  buttonTextColor: preset.buttonTextColor,
-                                  position: preset.position,
-                                })}
-                                className={`rounded-xl border-2 p-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${isActive
-                                  ? "border-indigo-500 bg-indigo-50 shadow-sm ring-1 ring-indigo-200"
-                                  : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                                  }`}
-                              >
-                                <div className="flex gap-1.5 mb-2">
-                                  <span
-                                    className="h-7 flex-1 rounded-md"
-                                    style={{ backgroundColor: preset.backgroundColor }}
-                                    title="Background"
-                                  />
-                                  <span
-                                    className="h-7 w-9 rounded-md"
-                                    style={{ backgroundColor: preset.buttonColor }}
-                                    title="Button"
-                                  />
-                                </div>
-                                <span className="text-sm font-medium text-gray-800">{preset.name}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Colors */}
-                      <div className="space-y-3">
-                        <h3 className="text-sm font-semibold text-gray-900">Colors</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-2">Background</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="color"
-                                value={config.backgroundColor}
-                                onChange={(e) => setConfig({ ...config, backgroundColor: e.target.value })}
-                                className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200"
-                              />
-                              <input
-                                type="text"
-                                value={config.backgroundColor}
-                                onChange={(e) => setConfig({ ...config, backgroundColor: e.target.value })}
-                                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-2">Text</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="color"
-                                value={config.textColor}
-                                onChange={(e) => setConfig({ ...config, textColor: e.target.value })}
-                                className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200"
-                              />
-                              <input
-                                type="text"
-                                value={config.textColor}
-                                onChange={(e) => setConfig({ ...config, textColor: e.target.value })}
-                                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-2">Button</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="color"
-                                value={config.buttonColor}
-                                onChange={(e) => setConfig({ ...config, buttonColor: e.target.value })}
-                                className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200"
-                              />
-                              <input
-                                type="text"
-                                value={config.buttonColor}
-                                onChange={(e) => setConfig({ ...config, buttonColor: e.target.value })}
-                                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-2">Button Text</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="color"
-                                value={config.buttonTextColor}
-                                onChange={(e) => setConfig({ ...config, buttonTextColor: e.target.value })}
-                                className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200"
-                              />
-                              <input
-                                type="text"
-                                value={config.buttonTextColor}
-                                onChange={(e) => setConfig({ ...config, buttonTextColor: e.target.value })}
-                                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Position */}
-                      <div className="space-y-3">
-                        <h3 className="text-sm font-semibold text-gray-900">Position</h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          {POSITIONS.map((pos) => (
-                            <button
-                              key={pos.id}
-                              type="button"
-                              onClick={() => setConfig({ ...config, position: pos.id })}
-                              className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-all ${config.position === pos.id
-                                ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                                : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                                }`}
-                            >
-                              <span>{pos.icon}</span>
-                              <span className="text-sm font-medium">{pos.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Text */}
-                      <div className="space-y-3">
-                        <h3 className="text-sm font-semibold text-gray-900">Text</h3>
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Title</label>
-                            <Input
-                              value={config.title ?? ""}
-                              onChange={(e) => setConfig({ ...config, title: e.target.value })}
-                              placeholder="e.g. We value your privacy"
-                              className="max-w-md"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Description</label>
-                            <textarea
-                              value={config.description ?? ""}
-                              onChange={(e) => setConfig({ ...config, description: e.target.value })}
-                              rows={3}
-                              placeholder="Banner body text"
-                              className="w-full max-w-md px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Buttons — all options saved to DB */}
-                      <div className="space-y-3">
-                        <h3 className="text-sm font-semibold text-gray-900">Buttons</h3>
-                        <p className="text-xs text-gray-500">Labels and visibility; all saved with your banner.</p>
-                        <div className="space-y-4 max-w-md">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Accept button text</label>
-                            <Input
-                              value={config.acceptText ?? ""}
-                              onChange={(e) => setConfig({ ...config, acceptText: e.target.value })}
-                              placeholder="Accept All"
-                              className="bg-white"
-                            />
-                          </div>
-                          <div className="flex flex-wrap items-start gap-4">
-                            <div className="flex-1 min-w-[200px]">
-                              <label className="block text-xs font-medium text-gray-500 mb-1.5">Reject button text</label>
-                              <Input
-                                value={config.rejectText ?? ""}
-                                onChange={(e) => setConfig({ ...config, rejectText: e.target.value })}
-                                placeholder="Reject All"
-                                disabled={!config.showRejectButton}
-                                className="bg-white disabled:opacity-60"
-                              />
-                            </div>
-                            {/* <label className="flex items-center gap-2 cursor-pointer pt-7">
-                              <input
-                                type="checkbox"
-                                checked={config.showRejectButton}
-                                onChange={(e) => setConfig({ ...config, showRejectButton: e.target.checked })}
-                                className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                              />
-                              <span className="text-sm text-gray-600">Show reject</span>
-                            </label> */}
-                          </div>
-                          {/* <div className="flex flex-wrap items-start gap-4">
-                            <div className="flex-1 min-w-[200px]">
-                              <label className="block text-xs font-medium text-gray-500 mb-1.5">Customize button text</label>
-                              <Input
-                                value={config.customizeText ?? ""}
-                                onChange={(e) => setConfig({ ...config, customizeText: e.target.value })}
-                                placeholder="Customize"
-                                disabled={!config.showCustomizeButton}
-                                className="bg-white disabled:opacity-60"
-                              />
-                            </div>
-                            <label className="flex items-center gap-2 cursor-pointer pt-7">
-                              <input
-                                type="checkbox"
-                                checked={config.showCustomizeButton}
-                                onChange={(e) => setConfig({ ...config, showCustomizeButton: e.target.checked })}
-                                className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                              />
-                              <span className="text-sm text-gray-600">Show customize</span>
-                            </label>
-                          </div> */}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </>
-              )}
-            </div>
-
-            {/* Preview Panel */}
-            <div className="lg:sticky lg:top-24 h-fit">
-              <Card>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-base">Live Preview</CardTitle>
-                      <CardDescription>
-                        {selectedSite?.domain ? `Previewing ${selectedSite.domain}` : "Select a domain"}
-                      </CardDescription>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      onClick={() => selectedSite && loadPreviewOnce(selectedSite, config)}
-                      disabled={!selectedSite || previewLoading}
-                    >
-                      {previewLoading ? "Refreshing…" : "Refresh"}
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-2">
-
-                  <div className="relative bg-gray-100 rounded-lg overflow-hidden" style={{ height: "500px" }}>
-                    {previewLoading && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
-                        <div className="animate-spin w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
-                      </div>
-                    )}
-
-                    {previewError && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-white">
-                        <div className="text-center px-6">
-                          <p className="text-sm font-medium text-gray-900 mb-1">Preview unavailable</p>
-                          <p className="text-xs text-gray-500">{previewError}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {previewHtml ? (
-                      <iframe
-                        title="Live banner preview"
-                        className="w-full h-full"
-                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-                        srcDoc={previewHtml}
-                        style={{ border: 'none' }}
-                      />
-                    ) : (
-                      <>
-                        {/* Simulated webpage */}
-                        <div className="absolute inset-0 p-4">
-                          <div className="bg-white h-full rounded-lg shadow-sm p-4">
-                            <div className="h-4 w-32 bg-gray-200 rounded mb-4"></div>
-                            <div className="space-y-2">
-                              <div className="h-3 w-full bg-gray-100 rounded"></div>
-                              <div className="h-3 w-5/6 bg-gray-100 rounded"></div>
-                              <div className="h-3 w-4/6 bg-gray-100 rounded"></div>
-                            </div>
-                            <div className="h-32 bg-gray-50 rounded mt-4"></div>
-                            <div className="space-y-2 mt-4">
-                              <div className="h-3 w-full bg-gray-100 rounded"></div>
-                              <div className="h-3 w-3/4 bg-gray-100 rounded"></div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Banner Preview */}
-                        <div
-                          className={`absolute left-0 right-0 p-4 ${config.position === "top"
-                            ? "top-0"
-                            : config.position === "bottom-left"
-                              ? "bottom-0 left-0 right-auto max-w-sm"
-                              : config.position === "bottom-right"
-                                ? "bottom-0 right-0 left-auto max-w-sm"
-                                : "bottom-0"
-                            }`}
-                        >
-                          <div
-                            className="rounded-lg p-4 shadow-lg"
-                            style={{
-                              backgroundColor: config.backgroundColor,
-                              color: config.textColor,
-                            }}
-                          >
-                            <h4 className="font-semibold text-sm mb-1" style={{ color: config.textColor }}>
-                              {config.title}
-                            </h4>
-                            <p className="text-xs opacity-90 mb-3" style={{ color: config.textColor }}>
-                              {config.description}
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                className="px-3 py-1.5 text-xs font-medium rounded"
-                                style={{
-                                  backgroundColor: config.buttonColor,
-                                  color: config.buttonTextColor,
-                                }}
-                              >
-                                {config.acceptText}
-                              </button>
-                              {config.showRejectButton && (
-                                <button
-                                  className="px-3 py-1.5 text-xs font-medium rounded border"
-                                  style={{
-                                    borderColor: config.textColor,
-                                    color: config.textColor,
-                                    backgroundColor: "transparent",
-                                  }}
-                                >
-                                  {config.rejectText}
-                                </button>
-                              )}
-                              {config.showCustomizeButton && (
-                                <button
-                                  className="px-3 py-1.5 text-xs font-medium"
-                                  style={{ color: config.textColor }}
-                                >
-                                  {config.customizeText}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </>
-      )}
-
-      <Dialog open={!!(showInstall && selectedSite)} onOpenChange={(open) => !open && setShowInstall(false)}>
-        <DialogContent className="max-w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-          <DialogHeader className="space-y-2">
-            <DialogTitle className="text-lg sm:text-xl">Install code</DialogTitle>
-            <DialogDescription className="text-sm">
-              Add the code to your website, then verify. Until then the banner will not appear.
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Warning */}
-          <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/40 px-4 py-3">
-            <div className="shrink-0 mt-0.5 h-5 w-5 rounded-full bg-amber-200 dark:bg-amber-700 flex items-center justify-center text-amber-700 dark:text-amber-200 font-bold text-xs">!</div>
-            <div className="min-w-0 text-sm text-amber-800 dark:text-amber-200">
-              <p className="font-semibold">Script not installed</p>
-              <p className="mt-0.5 opacity-90">Paste the code right after <code className="bg-amber-200/50 dark:bg-amber-800/50 px-1 rounded">&lt;head&gt;</code>, then click &quot;Verify installation&quot;.</p>
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex gap-1 p-1 rounded-lg bg-muted/60 border">
-            <button
-              type="button"
-              onClick={() => setActiveInstallTab("manual")}
-              className={`flex-1 min-w-0 py-2.5 px-3 rounded-md text-sm font-medium transition-colors ${activeInstallTab === "manual"
-                ? "bg-background shadow-sm text-foreground border"
-                : "text-muted-foreground hover:text-foreground"}`}
-            >
-              Install manually
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveInstallTab("gtm")}
-              className={`flex-1 min-w-0 py-2.5 px-3 rounded-md text-sm font-medium transition-colors ${activeInstallTab === "gtm"
-                ? "bg-background shadow-sm text-foreground border"
-                : "text-muted-foreground hover:text-foreground"}`}
-            >
-              Google Tag Manager
-            </button>
-          </div>
-
-          {/* Content */}
-          <div className="space-y-4">
-            {activeInstallTab === "manual" ? (
-              <>
+        <div className="flex flex-col xl:flex-row gap-6 pb-12">
+          {/* Main Configuration Area */}
+          <div className="flex-1 space-y-6">
+             
+            {!isVerified && selectedSite && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-400"></div>
                 <div>
-                  <p className="text-sm font-medium text-foreground mb-1">Step 1 — Copy the code</p>
-                  <p className="text-xs text-muted-foreground mb-2">Step 2 — Paste it right after the opening &lt;head&gt; tag on your site</p>
-                  <div className="rounded-lg border bg-muted/50 overflow-hidden">
-                    <pre className="text-[11px] sm:text-xs overflow-auto whitespace-pre-wrap font-mono p-4 max-h-[220px] sm:max-h-[280px]">
-                      {getInstallCode()}
-                    </pre>
-                  </div>
-                  <Button className="w-full sm:w-auto mt-2" size="sm" onClick={handleCopyCode}>
-                    {copyStatus || "Copy code"}
-                  </Button>
+                   <h3 className="text-[16px] font-bold text-amber-900 flex items-center gap-2">
+                     Script Not Verified <span className="bg-amber-100 text-amber-800 text-[10px] uppercase font-bold px-2 py-0.5 rounded tracking-wider">Action Needed</span>
+                   </h3>
+                   <p className="text-[13px] text-amber-700 mt-1 font-medium">Please install the tracking code to activate the banner on your website.</p>
                 </div>
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-muted-foreground">Add this site key to your ConsentFlow CMP template in GTM, then publish and verify.</p>
-                <div className="rounded-lg border bg-muted/50 p-4 break-all text-sm font-mono select-all">
-                  {selectedSite?.siteId}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Verify section — clear status */}
-          <div className="rounded-xl border-2 bg-muted/30 p-4 space-y-3">
-            <p className="text-sm font-semibold text-foreground">Verification</p>
-            {!isVerified ? (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  After adding the code to your site, click the button below to verify. Once verified, the banner will work on your website.
-                </p>
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                  <Button size="sm" onClick={handleVerify} className="sm:shrink-0">
-                    Verify installation
-                  </Button>
-                  <span className="inline-flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800">
-                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" aria-hidden />
-                    {verifyStatus || "Not verified yet"}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center gap-3 rounded-lg border border-green-300 bg-green-50 dark:bg-green-950/40 px-4 py-3 text-sm font-medium text-green-800 dark:text-green-200">
-                <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
-                <span>Domain verified — script is live on your site</span>
+                <Button onClick={() => setShowInstall(true)} className="shrink-0 rounded-xl bg-amber-600 hover:bg-amber-700 text-white shadow-sm font-semibold h-9">
+                   Install & Verify
+                </Button>
               </div>
             )}
+            
+            {/* Design & Position Options */}
+            {canCustomizeBanner ? (
+               <SectionCard>
+                  <div className="p-6 border-b border-slate-100">
+                     <h3 className="text-[17px] font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                       <PaintBucket className="w-5 h-5 text-indigo-600" /> Theme & Appearance
+                     </h3>
+                     <p className="text-[13px] text-slate-500 font-medium mt-1">Select a starting preset or build your own aesthetic.</p>
+                  </div>
+                  
+                  <div className="p-6 space-y-8">
+                     <div>
+                        <p className="text-[12px] font-bold uppercase tracking-widest text-slate-400 mb-3">Quick Presets</p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                           {DESIGN_PRESETS.map((preset) => {
+                              const isActive = config.backgroundColor === preset.backgroundColor && config.buttonColor === preset.buttonColor;
+                              return (
+                                 <button
+                                    key={preset.id}
+                                    onClick={() => setConfig({
+                                       ...config,
+                                       backgroundColor: preset.backgroundColor,
+                                       textColor: preset.textColor,
+                                       buttonColor: preset.buttonColor,
+                                       buttonTextColor: preset.buttonTextColor,
+                                    })}
+                                    className={cn(
+                                       "p-4 rounded-xl border text-left transition-all",
+                                       isActive ? "border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20 shadow-sm" : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50"
+                                    )}
+                                 >
+                                    <div className="flex gap-2 mb-3">
+                                       <span className="w-6 h-6 rounded-full border border-black/10 shadow-sm" style={{ backgroundColor: preset.backgroundColor }} />
+                                       <span className="w-6 h-6 rounded-full border border-black/10 shadow-sm" style={{ backgroundColor: preset.buttonColor }} />
+                                    </div>
+                                    <span className={cn("text-[13px] font-bold block", isActive ? "text-indigo-900" : "text-slate-700")}>{preset.name}</span>
+                                 </button>
+                              );
+                           })}
+                        </div>
+                     </div>
+                     
+                     <div>
+                        <p className="text-[12px] font-bold uppercase tracking-widest text-slate-400 mb-3">Color Tokens</p>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                           {[
+                             { label: "Background", key: "backgroundColor" },
+                             { label: "Text Color", key: "textColor" },
+                             { label: "Button primary", key: "buttonColor" },
+                             { label: "Button Text", key: "buttonTextColor" },
+                           ].map((item) => (
+                             <div key={item.key} className="p-3 border border-slate-200 rounded-xl bg-slate-50/50 flex items-center gap-3">
+                               <input
+                                 type="color"
+                                 value={config[item.key]}
+                                 onChange={(e) => setConfig({ ...config, [item.key]: e.target.value })}
+                                 className="w-8 h-8 rounded shrink-0 cursor-pointer overflow-hidden bg-transparent p-0 border-0"
+                               />
+                               <div className="flex-1 min-w-0">
+                                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">{item.label}</label>
+                                  <input
+                                    type="text"
+                                    value={config[item.key]}
+                                    onChange={(e) => setConfig({ ...config, [item.key]: e.target.value })}
+                                    className="w-full text-[13px] font-mono bg-transparent outline-none uppercase text-slate-900 font-semibold"
+                                  />
+                               </div>
+                             </div>
+                           ))}
+                        </div>
+                     </div>
+                     
+                     <div className="h-px bg-slate-100" />
+                     
+                     <div>
+                        <p className="text-[12px] font-bold uppercase tracking-widest text-slate-400 mb-3">Placement</p>
+                        <div className="flex flex-wrap gap-2">
+                           {POSITIONS.map((pos) => (
+                              <button
+                                 key={pos.id}
+                                 onClick={() => setConfig({ ...config, position: pos.id })}
+                                 className={cn(
+                                    "flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border transition-all text-[13px] font-medium",
+                                    config.position === pos.id ? "border-indigo-600 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-600/20 shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                                 )}
+                              >
+                                 <span className={cn("opacity-80", config.position === pos.id ? "text-indigo-600" : "text-slate-400")}>{pos.icon}</span> {pos.label}
+                              </button>
+                           ))}
+                        </div>
+                     </div>
+                  </div>
+               </SectionCard>
+            ) : (
+               <SectionCard className="border-amber-200 bg-amber-50">
+                  <div className="p-6 text-center">
+                     <ShieldCheck className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+                     <h3 className="text-[16px] font-bold text-amber-900 mb-2">Customization Locked</h3>
+                     <p className="text-[14px] font-medium text-amber-700 mb-6">{cannotCustomizeReason || "You must select a premium tier to uniquely brand this domain."}</p>
+                     <Button asChild className="rounded-xl font-bold tracking-wide shadow-sm" variant="default">
+                        <Link href={`/plans?siteId=${selectedSite?.siteId}&domain=${selectedSite?.domain}`}>View Premium Options</Link>
+                     </Button>
+                  </div>
+               </SectionCard>
+            )}
+
+            {/* Content Options */}
+            {canCustomizeBanner && (
+               <SectionCard>
+                  <div className="p-6 border-b border-slate-100">
+                     <h3 className="text-[17px] font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                       <Settings2 className="w-5 h-5 text-indigo-600" /> Copy & Labels
+                     </h3>
+                     <p className="text-[13px] text-slate-500 font-medium mt-1">Configure localized text values spanning the banner.</p>
+                  </div>
+                  
+                  <div className="p-6 space-y-6">
+                     <div className="space-y-4">
+                        <div>
+                           <label className="text-[12px] font-bold text-slate-700 uppercase tracking-wider block mb-1.5">Headline</label>
+                           <Input
+                             value={config.title ?? ""}
+                             onChange={(e) => setConfig({ ...config, title: e.target.value })}
+                             className="rounded-xl h-11 bg-slate-50 font-medium text-[14px] shadow-sm border-slate-200"
+                           />
+                        </div>
+                        <div>
+                           <label className="text-[12px] font-bold text-slate-700 uppercase tracking-wider block mb-1.5">Description text</label>
+                           <textarea
+                             value={config.description ?? ""}
+                             onChange={(e) => setConfig({ ...config, description: e.target.value })}
+                             rows={3}
+                             className="w-full rounded-xl p-3 bg-slate-50 font-medium text-[13px] text-slate-700 shadow-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none"
+                           />
+                        </div>
+                     </div>
+                     
+                     <div className="grid sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+                        <div>
+                           <label className="text-[12px] font-bold text-slate-700 uppercase tracking-wider block mb-1.5">Primary Action</label>
+                           <Input
+                             value={config.acceptText ?? ""}
+                             onChange={(e) => setConfig({ ...config, acceptText: e.target.value })}
+                             className="rounded-xl h-11 bg-indigo-50/50 border-indigo-100 font-semibold text-indigo-700"
+                           />
+                        </div>
+                        <div>
+                           <label className="text-[12px] font-bold text-slate-700 uppercase tracking-wider block mb-1.5">Secondary Action</label>
+                           <Input
+                             value={config.rejectText ?? ""}
+                             onChange={(e) => setConfig({ ...config, rejectText: e.target.value })}
+                             className="rounded-xl h-11 bg-slate-50 border-slate-200 font-medium text-slate-600"
+                           />
+                        </div>
+                     </div>
+                  </div>
+               </SectionCard>
+            )}
+
+          </div>
+
+          {/* Right Sidebar - Preview & Integration */}
+          <div className="w-full xl:w-[450px] space-y-6">
+             <SectionCard noPadding className="overflow-hidden lg:sticky lg:top-8 shadow-md">
+                <div className="bg-slate-900 border-b border-slate-800 p-4 flex items-center justify-between">
+                   <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 bg-slate-800 border border-slate-700 rounded flex items-center justify-center shrink-0">
+                         <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                      </div>
+                      <span className="text-[13px] font-semibold text-slate-200 tracking-wider uppercase">Live Preview</span>
+                   </div>
+                   <Button
+                     variant="ghost"
+                     size="sm"
+                     onClick={() => selectedSite && loadPreviewOnce(selectedSite, config)}
+                     disabled={!selectedSite || previewLoading}
+                     className="text-slate-400 hover:text-white hover:bg-slate-800 h-7 text-[11px] rounded uppercase font-bold tracking-wider"
+                   >
+                     Reload Simulator
+                   </Button>
+                </div>
+                
+                <div className="relative bg-white aspect-[4/3] flex flex-col items-center justify-center border-b border-slate-100 overflow-hidden">
+                   {previewLoading && (
+                      <div className="absolute inset-0 bg-white/70 backdrop-blur-sm z-10 flex items-center justify-center">
+                         <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                      </div>
+                   )}
+                   
+                   {previewError ? (
+                      <div className="text-center p-6">
+                         <ShieldCheck className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                         <span className="text-[14px] font-medium text-slate-500">{previewError}</span>
+                      </div>
+                   ) : previewHtml ? (
+                      <iframe
+                        className="w-full h-full border-none"
+                        sandbox="allow-scripts allow-same-origin"
+                        srcDoc={previewHtml}
+                      />
+                   ) : (
+                      // Fallback dummy view
+                      <div className="w-full h-full bg-slate-50 p-6 flex flex-col">
+                         <div className="w-32 h-6 bg-slate-200 rounded-md mb-6" />
+                         <div className="w-full h-4 bg-slate-200 rounded mb-2" />
+                         <div className="w-3/4 h-4 bg-slate-200 rounded mb-8" />
+                         
+                         <div className="w-full h-48 bg-slate-200/50 rounded-xl mb-6" />
+                         
+                         {/* Fallback Banner visualization if iframe fails or is empty initially */}
+                         <div className={cn(
+                            "absolute max-w-sm rounded-[14px] shadow-xl p-5 border border-black/5 animate-in fade-in slide-in-from-bottom-4 duration-500",
+                            config.position === "bottom" ? "bottom-4 left-4 right-4 max-w-none mx-auto w-[calc(100%-32px)]" :
+                            config.position === "top" ? "top-4 left-4 right-4 max-w-none mx-auto w-[calc(100%-32px)]" :
+                            config.position === "bottom-left" ? "bottom-4 left-4" : "bottom-4 right-4"
+                         )} style={{ backgroundColor: config.backgroundColor, color: config.textColor }}>
+                            <p className="font-bold text-[14px] mb-1.5">{config.title}</p>
+                            <p className="font-medium text-[12px] opacity-80 mb-4 leading-relaxed">{config.description}</p>
+                            <div className="flex gap-2.5">
+                               <div className="px-3.5 py-1.5 rounded-lg text-[12px] font-bold shadow-sm" style={{ backgroundColor: config.buttonColor, color: config.buttonTextColor }}>
+                                 {config.acceptText}
+                               </div>
+                               {config.showRejectButton && (
+                                 <div className="px-3.5 py-1.5 rounded-lg text-[12px] font-bold border border-current opacity-70">
+                                   {config.rejectText}
+                                 </div>
+                               )}
+                            </div>
+                         </div>
+                      </div>
+                   )}
+                </div>
+                
+                <div className="p-4 bg-slate-50">
+                   <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Active Setup</span>
+                      {isVerified ? (
+                         <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-100 uppercase tracking-widest px-2 py-0.5 rounded">
+                           <CheckCircle2 className="w-3 h-3" /> Live
+                         </span>
+                      ) : (
+                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-100 uppercase tracking-widest px-2 py-0.5 rounded">
+                           Pending
+                         </span>
+                      )}
+                   </div>
+                   <Button onClick={() => setShowInstall(true)} variant="outline" className="w-full rounded-lg border-slate-200 shadow-sm h-10 font-medium text-slate-700 hover:bg-white text-[13px]">
+                      View Installation Code
+                   </Button>
+                </div>
+             </SectionCard>
+          </div>
+        </div>
+      )}
+
+      {/* Installation Dialog */}
+      <Dialog open={!!(showInstall && selectedSite)} onOpenChange={(open) => !open && setShowInstall(false)}>
+        <DialogContent className="max-w-2xl p-0 overflow-hidden border-0 shadow-2xl rounded-2xl bg-slate-50">
+          <div className="bg-slate-900 border-b border-slate-800 px-6 py-5">
+             <DialogTitle className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+               Connect Infrastructure
+             </DialogTitle>
+             <DialogDescription className="text-slate-400 mt-1 font-medium">
+               Deploy the tracking module directly into your codebase or tag manager.
+             </DialogDescription>
+          </div>
+          
+          <div className="p-6">
+             <div className="flex gap-2 p-1.5 rounded-xl bg-slate-200/50 border border-slate-200 mb-6">
+               <button
+                 onClick={() => setActiveInstallTab("manual")}
+                 className={cn("flex-1 py-2 text-[13px] font-bold rounded-lg transition-all", activeInstallTab === "manual" ? "bg-white text-slate-900 shadow-sm border border-slate-200" : "text-slate-500 hover:text-slate-700")}
+               >
+                 Raw Install
+               </button>
+               <button
+                 onClick={() => setActiveInstallTab("gtm")}
+                 className={cn("flex-1 py-2 text-[13px] font-bold rounded-lg transition-all", activeInstallTab === "gtm" ? "bg-white text-slate-900 shadow-sm border border-slate-200" : "text-slate-500 hover:text-slate-700")}
+               >
+                 Google Tag Manager
+               </button>
+             </div>
+             
+             {activeInstallTab === "manual" ? (
+               <div className="space-y-4">
+                  <div className="flex items-start gap-4 p-4 rounded-xl bg-indigo-50 border border-indigo-100">
+                     <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold font-mono text-sm shrink-0">1</div>
+                     <div>
+                        <p className="text-[14px] font-bold text-slate-900 mb-1">Insert Snippet</p>
+                        <p className="text-[13px] text-slate-600 font-medium">Place this module in your <code className="text-xs bg-slate-200/70 px-1 rounded text-slate-800">{'<head>'}</code> tag, preferably at the very beginning.</p>
+                     </div>
+                  </div>
+                  
+                  <div className="relative group">
+                     <pre className="p-5 rounded-xl bg-slate-900 border-2 border-slate-800 text-slate-300 font-mono text-[13px] overflow-x-auto selection:bg-indigo-500/30">
+                       {getInstallCode()}
+                     </pre>
+                     <Button 
+                       onClick={async () => {
+                         await navigator.clipboard.writeText(getInstallCode());
+                         toast.success("Snippet copied to clipboard");
+                       }} 
+                       size="sm" 
+                       className="absolute top-4 right-4 rounded-lg bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 text-[11px] font-bold uppercase tracking-widest shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                     >
+                       Copy
+                     </Button>
+                  </div>
+               </div>
+             ) : (
+               <div className="space-y-4">
+                  <div className="flex items-start gap-4 p-4 rounded-xl bg-purple-50 border border-purple-100">
+                     <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold font-mono text-sm shrink-0">1</div>
+                     <div>
+                        <p className="text-[14px] font-bold text-slate-900 mb-1">GTM Template Keys</p>
+                        <p className="text-[13px] text-slate-600 font-medium">Use this unique identifier when setting up the ConsentFlow template within Google Tag Manager.</p>
+                     </div>
+                  </div>
+                  
+                  <div className="relative group">
+                     <div className="p-5 rounded-xl bg-slate-100 border border-slate-300 text-slate-900 font-mono text-[16px] overflow-x-auto text-center font-bold tracking-widest items-center justify-center select-all">
+                       {selectedSite?.siteId}
+                     </div>
+                     <Button 
+                       onClick={async () => {
+                         await navigator.clipboard.writeText(selectedSite?.siteId);
+                         toast.success("Key copied to clipboard");
+                       }} 
+                       size="sm" 
+                       className="absolute top-1/2 -translate-y-1/2 right-4 rounded-lg bg-white hover:bg-slate-50 text-slate-900 border border-slate-300 text-[11px] font-bold uppercase tracking-widest shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                     >
+                       Copy Key
+                     </Button>
+                  </div>
+               </div>
+             )}
+             
+             <div className="mt-8 pt-6 border-t border-slate-200 text-center">
+                {!isVerified ? (
+                   <div className="space-y-4">
+                      <Button onClick={handleVerify} className="h-12 px-8 rounded-xl font-bold tracking-wide shadow-sm bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto mx-auto text-[15px]">
+                         Test Installation
+                      </Button>
+                      {verifyStatus && (
+                         <p className="text-[13px] font-bold text-amber-600 animate-pulse">{verifyStatus}</p>
+                      )}
+                   </div>
+                ) : (
+                   <div className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      <CheckCircle2 className="w-5 h-5" />
+                      <span className="text-[14px] font-bold tracking-wide">Infrastructure Confirmed Active</span>
+                   </div>
+                )}
+             </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1200,8 +791,8 @@ export default function BannerPage() {
     <Suspense
       fallback={
         <DashboardLayout>
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+          <div className="flex items-center justify-center h-[60vh]">
+            <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
           </div>
         </DashboardLayout>
       }
