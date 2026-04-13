@@ -401,11 +401,14 @@ function BannerContent() {
         title="Banner Setup"
         description="Design and configure your privacy banner to match your platform's aesthetic."
         action={
-          canCustomizeBanner && (
-            <Button onClick={handleSave} disabled={saving || !selectedSite} className="rounded-xl px-5 h-10 font-medium bg-slate-900 shadow-sm transition-all hover:bg-slate-800">
-              {saving ? "Saving..." : "Save Configuration"}
-            </Button>
-          )
+          <Button
+            onClick={handleSave}
+            disabled={saving || !selectedSite || !canCustomizeBanner}
+            title={!canCustomizeBanner ? (cannotCustomizeReason || "Customization is locked for this domain.") : ""}
+            className="rounded-xl px-5 h-10 font-medium bg-slate-900 shadow-sm transition-all hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {saving ? "Saving..." : "Save Configuration"}
+          </Button>
         }
       />
 
