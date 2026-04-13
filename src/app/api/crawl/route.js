@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { generateSiteId } from "@/lib/store";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
-import { getCdnUrl, R2_CONFIGURED } from "@/lib/cdn-service";
 
 /**
  * Crawl a domain and detect trackers
@@ -230,9 +229,7 @@ export async function POST(req) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ||
       req.headers.get("origin") ||
       `http://${req.headers.get("host")}`;
-    const scriptUrl = R2_CONFIGURED
-      ? getCdnUrl(site.siteId, false)
-      : `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
+    const scriptUrl = `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
 
     // Check if site has a subscription
     const hasSubscription = !!site.subscription;

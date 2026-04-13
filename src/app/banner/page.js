@@ -8,7 +8,6 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { getScriptPath } from "@/lib/script-urls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -376,8 +375,7 @@ function BannerContent() {
   const getInstallCode = () => {
     if (!selectedSite) return "";
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "");
-    const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL?.replace(/\/$/, "") || "";
-    const scriptSrc = r2Base ? `${r2Base}/${getScriptPath(selectedSite.siteId, false)}` : `${baseUrl}/cdn/sites/${selectedSite.siteId}/script.js`;
+    const scriptSrc = `${baseUrl}/cdn/sites/${selectedSite.siteId}/script.js`;
     return [
       "<!-- Start Cookie Access banner -->",
       `<script id="consentflow" src="${scriptSrc}"></script>`,

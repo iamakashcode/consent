@@ -6,7 +6,6 @@ import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
-import { getScriptPath } from "@/lib/script-urls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -225,10 +224,7 @@ function DomainsContent() {
 
   const copyScript = async (site) => {
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
-    const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL?.replace(/\/$/, "") || "";
-    const scriptSrc = r2Base
-      ? `${r2Base}/${getScriptPath(site.siteId, false)}`
-      : `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
+    const scriptSrc = `${baseUrl}/cdn/sites/${site.siteId}/script.js`;
     const scriptTag = `<script src="${scriptSrc}"></script>`;
     try {
       await navigator.clipboard.writeText(scriptTag);

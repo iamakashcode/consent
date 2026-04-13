@@ -7,6 +7,7 @@
 
 import { getScript, scriptExists, R2_CONFIGURED, getCdnUrl } from "@/lib/cdn-service";
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req, { params }) {
   try {
@@ -28,7 +29,24 @@ export async function GET(req, { params }) {
       const exists = await scriptExists(siteId, false);
       if (exists) {
         const r2Url = getCdnUrl(siteId, false);
-        if (r2Url) return NextResponse.redirect(r2Url, 307);
+        if (r2Url) {
+          // Cache-bust on config/domain updates so immutable object caches don't pin stale banner JS.
+          let version = "0";
+          try {
+            const site = await prisma.site.findUnique({
+              where: { siteId },
+              select: { updatedAt: true },
+            });
+            if (site?.updatedAt) {
+              version = String(new Date(site.updatedAt).getTime());
+            }
+          } catch {
+            // Ignore DB errors; still redirect without version if needed.
+          }
+
+          const separator = r2Url.includes("?") ? "&" : "?";
+          return NextResponse.redirect(`${r2Url}${separator}v=${version}`, 307);
+        }
       }
     }
 
