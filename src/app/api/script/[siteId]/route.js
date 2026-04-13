@@ -1433,18 +1433,31 @@ var maxVerificationAttempts=5;
     var userAgent=navigator.userAgent||'';
     var referer=document.referrer||'';
     
+    var payload={
+      pagePath:pagePath,
+      pageTitle:pageTitle,
+      userAgent:userAgent,
+      referer:referer
+    };
+
     fetch(trackUrl,{
       method:'POST',
       mode:'cors',
       credentials:'omit',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        pagePath:pagePath,
-        pageTitle:pageTitle,
-        userAgent:userAgent,
-        referer:referer
-      })
-    }).catch(function(err){});
+      body:JSON.stringify(payload)
+    }).catch(function(){
+      // Fallback to lightweight GET ping when POST is blocked by CORS/network policies.
+      try{
+        var pingUrl=trackUrl+
+          (trackUrl.indexOf('?')===-1?'?':'&')+
+          'pagePath='+encodeURIComponent(pagePath)+
+          '&pageTitle='+encodeURIComponent(pageTitle)+
+          '&referer='+encodeURIComponent(referer);
+        var img=new Image();
+        img.src=pingUrl;
+      }catch(e){}
+    });
   }catch(e){}
 })();
 

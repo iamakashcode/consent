@@ -83,6 +83,20 @@ const DEFAULT_CONFIG = {
   showCustomizeButton: true,
 };
 
+const normalizeEditorConfig = (rawConfig) => {
+  if (!rawConfig || typeof rawConfig !== "object") return DEFAULT_CONFIG;
+  return {
+    ...DEFAULT_CONFIG,
+    ...rawConfig,
+    description: rawConfig.description ?? rawConfig.message ?? DEFAULT_CONFIG.description,
+    acceptText: rawConfig.acceptText ?? rawConfig.acceptButtonText ?? DEFAULT_CONFIG.acceptText,
+    rejectText: rawConfig.rejectText ?? rawConfig.rejectButtonText ?? DEFAULT_CONFIG.rejectText,
+    customizeText: rawConfig.customizeText ?? rawConfig.customizeButtonText ?? DEFAULT_CONFIG.customizeText,
+    showRejectButton: rawConfig.showRejectButton ?? rawConfig.showReject ?? DEFAULT_CONFIG.showRejectButton,
+    showCustomizeButton: rawConfig.showCustomizeButton ?? DEFAULT_CONFIG.showCustomizeButton,
+  };
+};
+
 function BannerContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -236,8 +250,12 @@ function BannerContent() {
             fetchSiteStats(nextSite.siteId);
             let initialConfig = DEFAULT_CONFIG;
             if (nextSite?.bannerConfig) {
-              const parsedConfig = typeof nextSite.bannerConfig === "string" ? JSON.parse(nextSite.bannerConfig) : nextSite.bannerConfig;
-              initialConfig = { ...DEFAULT_CONFIG, ...parsedConfig };
+              try {
+                const parsedConfig = typeof nextSite.bannerConfig === "string" ? JSON.parse(nextSite.bannerConfig) : nextSite.bannerConfig;
+                initialConfig = normalizeEditorConfig(parsedConfig);
+              } catch {
+                initialConfig = DEFAULT_CONFIG;
+              }
             }
             setConfig(initialConfig);
             setDebouncedConfig(initialConfig);
@@ -296,6 +314,7 @@ function BannerContent() {
       if (response.ok) {
         toast.success("Banner settings saved successfully!");
         setSites((prev) => prev.map((s) => s.siteId === selectedSite.siteId ? { ...s, bannerConfig } : s));
+        setSelectedSite((prev) => (prev ? { ...prev, bannerConfig } : prev));
       } else {
         toast.error("Failed to save settings");
       }

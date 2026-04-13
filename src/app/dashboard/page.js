@@ -139,8 +139,16 @@ function DashboardContent() {
 
   const activeCount = Object.values(subscriptions).filter((s) => s.isActive).length;
   const trialCount = Object.values(subscriptions).filter((s) => (s.subscription?.status === "trial" || s.userTrialActive)).length;
-  const totalPageViews = Object.values(siteStats).reduce((acc, stats) => acc + (stats?.totalViews || 0), 0);
-  const totalUniquePages = Object.values(siteStats).reduce((acc, stats) => acc + (stats?.totalUniquePages || 0), 0);
+  const getViewsForSite = (site) => {
+    const stats = siteStats[site.siteId];
+    if (stats && typeof stats.totalViews === "number") return stats.totalViews;
+    return site.pageViews || 0;
+  };
+  const totalPageViews = sites.reduce((acc, site) => acc + getViewsForSite(site), 0);
+  const totalUniquePages = sites.reduce((acc, site) => {
+    const stats = siteStats[site.siteId];
+    return acc + (stats?.totalUniquePages || 0);
+  }, 0);
   const verifiedCount = sites.filter((s) => s.isVerified).length;
   const paymentSuccess = searchParams?.get("payment") === "success";
 
