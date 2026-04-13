@@ -200,7 +200,7 @@ export default function SignupForm() {
               </button>
             </div>
           </div>
-          
+
           <div className="space-y-1.5 relative">
             <label htmlFor="confirmPassword" className="block text-[13px] font-medium text-slate-700">
               Confirm
@@ -238,7 +238,7 @@ export default function SignupForm() {
             className="w-4 h-4 mt-0.5 rounded appearance-none border border-slate-300 bg-white checked:bg-indigo-600 checked:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-colors duration-200 cursor-pointer disabled:opacity-50 checked:bg-[url('data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTYgMTYiIGZpbGw9IndoaXRlIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik0xMi4yMDcgNC4yOTNsLTEuNDE0LTEuNDE0TDcgNy4xNzJMNyA4LjU4Nmw0LjQxNC00LjQxNEwxMi4yMDcgNC4yOTN6TTUuNDE0IDUuMTMyTDQgNi41NDZsNS45NCA1Ljk0IDEuNDE0LTEuNDE0TDQuMTMyIDUuMTR6IiBmaWxsPSJ3aGl0ZSIvPjwvc3ZnPg==')] bg-no-repeat bg-center"
           />
           <label htmlFor="agreed" className="text-xs font-medium text-slate-500 leading-tight">
-            I agree to ConsentFlow's{" "}
+            I agree to ConsentFlow&apos;s{" "}
             <a href="#" className="font-bold text-slate-700 hover:underline underline-offset-2">Terms of Service</a>{" "}
             and{" "}
             <a href="#" className="font-bold text-slate-700 hover:underline underline-offset-2">Privacy Policy</a>.
@@ -252,7 +252,7 @@ export default function SignupForm() {
         >
           {/* Shine effect */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-[150%] group-hover:translate-x-[150%] transition-transform duration-700 ease-in-out" />
-          
+
           {isLoading ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -267,8 +267,8 @@ export default function SignupForm() {
       {/* Footer link */}
       <p className="mt-8 text-center text-[13px] text-slate-500 font-medium">
         Already have an account?{" "}
-        <Link 
-          href={`/login${callbackUrl !== "/dashboard" ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""}`} 
+        <Link
+          href={`/login${callbackUrl !== "/dashboard" ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""}`}
           className="text-slate-900 font-bold hover:underline underline-offset-4 transition-all"
         >
           Sign in

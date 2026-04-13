@@ -36,7 +36,7 @@ export default function Testimonials() {
             Loved by developers & founders
           </h2>
           <p className="text-lg text-slate-500">
-            Don't just take our word for it. Here is what leading teams are saying.
+            Don&apos;t just take our word for it. Here is what leading teams are saying.
           </p>
         </div>
 
@@ -52,7 +52,7 @@ export default function Testimonials() {
                     <Star key={s} className="w-4 h-4 text-amber-400 fill-amber-400" />
                   ))}
                 </div>
-                <p className="text-slate-700 leading-relaxed mb-8">"{t.text}"</p>
+                <p className="text-slate-700 leading-relaxed mb-8">&quot;{t.text}&quot;</p>
               </div>
 
               <div className="flex items-center gap-3">
