@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES, normalizeBannerConfig } from "@/lib/banner-templates";
+import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES, normalizeBannerConfig, bannerPlacementCss } from "@/lib/banner-templates";
 import { hasVerificationColumns } from "@/lib/db-utils";
 import { isSubscriptionActive } from "@/lib/subscription";
 import { getScript, getCdnUrl } from "@/lib/cdn-service";
@@ -1209,7 +1209,9 @@ export function generateMainScript(siteId, allowedDomain, isPreview, config, ban
   const safeAccept = escapeForTemplate(acceptText);
   const safeReject = escapeForTemplate(rejectText);
   const safeBranding = escapeForTemplate(DEFAULT_BRANDING_TEXT);
-  
+  const safeCustomize = escapeForTemplate(config?.customizeText || "Customize");
+  const placementCss = bannerPlacementCss(position);
+
   return `
 /* ======================================================
    CONSENT BANNER & DOMAIN VERIFICATION
@@ -1474,11 +1476,8 @@ var maxVerificationAttempts=5;
   if(styles){
     banner.style.cssText=styles;
   }else{
-    var pos='${position || 'bottom'}';
     banner.style.cssText=
-      'position:fixed;'+
-      (pos==='top'?'top:0;bottom:auto;':'bottom:0;top:auto;')+
-      'left:0;right:0;'+
+      'position:fixed;${placementCss}'+
       'background:#1f2937;color:#fff;padding:20px;'+
       'display:flex;justify-content:space-between;'+
       'align-items:center;gap:15px;flex-wrap:wrap;'+
@@ -1499,7 +1498,7 @@ var maxVerificationAttempts=5;
     ${showBranding ? `'<p style="margin:8px 0 0 0;font-size:11px;opacity:0.7;">${safeBranding}</p>'+` : ''}
     '</div>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
-    '<a href="#" id="consentflow-manage-prefs" style="'+customizeBtnStyle+'">Customize</a>'+
+    '<a href="#" id="consentflow-manage-prefs" style="'+customizeBtnStyle+'">${safeCustomize || 'Customize'}</a>'+
     '<button id="consentflow-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept All'}</button>'+
     ${showReject ? `'<button id="consentflow-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject All'}</button>'+` : ''}
     '</div>';
@@ -1671,9 +1670,9 @@ export async function GET(req, { params }) {
     const normalized = normalizeBannerConfig(rawConfig);
     const { title, message, acceptText, rejectText, showReject, position, style: normStyle } = normalized;
     const style = normStyle || {};
-    const posStyle = position === "top" ? "top:0;bottom:auto;" : "bottom:0;top:auto;";
+    const posStyle = bannerPlacementCss(position);
     const bannerStyle =
-      `position:fixed;${posStyle}left:0;right:0;` +
+      `position:fixed;${posStyle}` +
       `background:${style.backgroundColor || '#1f2937'};` +
       `color:${style.textColor || '#ffffff'};` +
       `padding:${style.padding || '20px'};` +

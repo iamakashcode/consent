@@ -112,10 +112,26 @@ export const DEFAULT_BANNER_CONFIG = {
 };
 
 /**
+ * Fixed positioning for the consent banner (must match preview + live script).
+ * Corner placements use a card width; full-width uses left/right stretch.
+ */
+export function bannerPlacementCss(position) {
+  const p = position || "bottom";
+  if (p === "top") return "top:0;bottom:auto;left:0;right:0;";
+  if (p === "bottom-left") {
+    return "bottom:24px;left:24px;right:auto;top:auto;width:auto;max-width:min(92vw,520px);";
+  }
+  if (p === "bottom-right") {
+    return "bottom:24px;right:24px;left:auto;top:auto;width:auto;max-width:min(92vw,520px);";
+  }
+  return "bottom:0;top:auto;left:0;right:0;";
+}
+
+/**
  * Normalize banner config from either:
  * - Banner page shape: backgroundColor, textColor, description, showRejectButton, acceptText, etc.
  * - DB/template shape: message, acceptText, showReject, template, style
- * Returns { title, message, acceptText, rejectText, showReject, position, style } for script generation.
+ * Returns fields used by the consent script generator.
  */
 export function normalizeBannerConfig(config) {
   if (!config || typeof config !== "object") {
@@ -125,6 +141,7 @@ export function normalizeBannerConfig(config) {
       message: "This site uses tracking cookies to enhance your browsing experience and analyze site traffic.",
       acceptText: "Accept All",
       rejectText: "Reject All",
+      customizeText: "Customize",
       showReject: true,
       position: "bottom",
       style: t?.style || {
@@ -159,6 +176,7 @@ export function normalizeBannerConfig(config) {
     message: config.message ?? config.description ?? "This site uses tracking cookies to enhance your browsing experience and analyze site traffic.",
     acceptText: config.acceptText ?? config.acceptButtonText ?? "Accept All",
     rejectText: config.rejectText ?? config.rejectButtonText ?? "Reject All",
+    customizeText: config.customizeText ?? config.customizeButtonText ?? "Customize",
     showReject: config.showReject !== false && config.showRejectButton !== false,
     position: config.position ?? "bottom",
     style,

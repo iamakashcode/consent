@@ -5,7 +5,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES, normalizeBannerConfig } from "@/lib/banner-templates";
+import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES, normalizeBannerConfig, bannerPlacementCss } from "@/lib/banner-templates";
 import { isSubscriptionActive, checkPageViewLimit } from "@/lib/subscription";
 import { uploadScript, getCdnUrl, uploadBlankScript } from "./cdn-service";
 
@@ -71,9 +71,9 @@ export async function generateAndUploadScript(siteId, options = {}) {
     const normalized = normalizeBannerConfig(rawConfig);
     const { title, message, acceptText, rejectText, showReject, position, style: normStyle } = normalized;
     const style = normStyle || {};
-    const posStyle = position === "top" ? "top:0;bottom:auto;" : "bottom:0;top:auto;";
+    const posStyle = bannerPlacementCss(position);
     const bannerStyle =
-      `position:fixed;${posStyle}left:0;right:0;` +
+      `position:fixed;${posStyle}` +
       `background:${style.backgroundColor || '#1f2937'};` +
       `color:${style.textColor || '#ffffff'};` +
       `padding:${style.padding || '20px'};` +

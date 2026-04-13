@@ -1,4 +1,9 @@
-export function PageHeader({ title, description, children, className = "" }) {
+/**
+ * `action` is an alias for `children` (same slot). Some pages used `action` before the
+ * component only supported `children`, which hid Save buttons entirely.
+ */
+export function PageHeader({ title, description, children, action, className = "" }) {
+  const slot = action ?? children;
   return (
     <div className={`mb-8 sm:flex sm:items-center sm:justify-between gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500 ${className}`}>
       <div className="flex-1 min-w-0 mb-4 sm:mb-0">
@@ -11,9 +16,9 @@ export function PageHeader({ title, description, children, className = "" }) {
           </p>
         )}
       </div>
-      {children && (
+      {slot && (
         <div className="flex shrink-0 items-center justify-start sm:justify-end gap-3">
-          {children}
+          {slot}
         </div>
       )}
     </div>

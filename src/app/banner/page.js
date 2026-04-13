@@ -293,6 +293,10 @@ function BannerContent() {
 
   const handleSave = async () => {
     if (!selectedSite) return;
+    if (!canCustomizeBanner) {
+      toast.error(cannotCustomizeReason || "You cannot save banner changes for this domain right now.");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -314,8 +318,16 @@ function BannerContent() {
         toast.success("Banner settings saved successfully!");
         setSites((prev) => prev.map((s) => s.siteId === selectedSite.siteId ? { ...s, bannerConfig } : s));
         setSelectedSite((prev) => (prev ? { ...prev, bannerConfig } : prev));
+        if (selectedSite) loadPreviewOnce(selectedSite, config);
       } else {
-        toast.error("Failed to save settings");
+        let msg = "Failed to save settings";
+        try {
+          const data = await response.json();
+          if (data?.error) msg = data.error;
+        } catch {
+          /* ignore */
+        }
+        toast.error(msg);
       }
     } catch (err) {
       toast.error("An error occurred while saving");
@@ -401,14 +413,20 @@ function BannerContent() {
         title="Banner Setup"
         description="Design and configure your privacy banner to match your platform's aesthetic."
         action={
-          <Button
-            onClick={handleSave}
-            disabled={saving || !selectedSite || !canCustomizeBanner}
-            title={!canCustomizeBanner ? (cannotCustomizeReason || "Customization is locked for this domain.") : ""}
-            className="rounded-xl px-5 h-10 font-medium bg-slate-900 shadow-sm transition-all hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {saving ? "Saving..." : "Save Configuration"}
-          </Button>
+          <div className="flex flex-col items-stretch sm:items-end gap-1 w-full sm:w-auto">
+            <Button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !selectedSite || !canCustomizeBanner}
+              title={!canCustomizeBanner ? (cannotCustomizeReason || "Customization is locked for this domain.") : undefined}
+              className="rounded-xl px-5 h-10 font-medium bg-slate-900 shadow-sm transition-all hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto"
+            >
+              {saving ? "Saving..." : "Save Configuration"}
+            </Button>
+            {!canCustomizeBanner && cannotCustomizeReason ? (
+              <span className="text-[12px] text-amber-700 font-medium text-right max-w-[280px]">{cannotCustomizeReason}</span>
+            ) : null}
+          </div>
         }
       />
 
@@ -602,6 +620,26 @@ function BannerContent() {
                   </div>
                 </div>
               </SectionCard>
+            )}
+
+            {canCustomizeBanner && selectedSite && (
+              <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur-sm">
+                <p className="text-[13px] text-slate-600">
+                  Save to push changes to your live script. Ensure your site uses the snippet from{" "}
+                  <button type="button" className="text-indigo-600 font-semibold underline" onClick={() => setShowInstall(true)}>
+                    View Installation Code
+                  </button>
+                  .
+                </p>
+                <Button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="rounded-xl px-6 h-11 font-medium bg-slate-900 shadow-sm shrink-0"
+                >
+                  {saving ? "Saving..." : "Save & publish"}
+                </Button>
+              </div>
             )}
 
           </div>
