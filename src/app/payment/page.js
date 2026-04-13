@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { ADDON_BRANDING_PRICE_EUR, PLAN_DETAILS, PLAN_CURRENCY } from "@/lib/paddle";
-import { ShieldCheck, CheckCircle2, Search, Zap, Loader2, ArrowLeft } from "lucide-react";
+import { ShieldCheck, CheckCircle2, Search, Zap, Loader2, ArrowLeft, Globe, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 function PaymentContent() {
@@ -89,7 +89,7 @@ function PaymentContent() {
               const authData = await authResponse.json();
               if (authData.authUrl) checkoutUrl = authData.authUrl;
             }
-          } catch (err) {}
+          } catch (err) { }
         }
 
         if (checkoutUrl) {
@@ -131,7 +131,7 @@ function PaymentContent() {
                 return;
               }
             }
-          } catch (err) {}
+          } catch (err) { }
         }
         setOrderData({ trial: data.trial, subscription: data.subscription, ...data });
         return;
@@ -148,7 +148,7 @@ function PaymentContent() {
               return;
             }
           }
-        } catch (err) {}
+        } catch (err) { }
 
         setOrderData({
           subscription: true,
@@ -237,7 +237,7 @@ function PaymentContent() {
               <label className="flex items-start gap-4 cursor-pointer group">
                 <div className={cn(
                   "mt-0.5 flex shrink-0 items-center justify-center rounded border h-5 w-5 transition-colors",
-                  includeBrandingAddon 
+                  includeBrandingAddon
                     ? "bg-indigo-600 border-indigo-600"
                     : "border-slate-300 bg-white group-hover:border-slate-400"
                 )}>
@@ -252,7 +252,7 @@ function PaymentContent() {
                 <div>
                   <p className="text-[14px] font-bold text-slate-900">White-label UI Addon</p>
                   <p className="text-[13px] font-medium text-slate-500 mt-1 leading-relaxed">
-                    Remove all ConsentFlow branding from your public banner. 
+                    Remove all ConsentFlow branding from your public banner.
                     <strong className="text-slate-900 block mt-1">+{PLAN_CURRENCY}{ADDON_BRANDING_PRICE_EUR}/mo</strong>
                   </p>
                 </div>
@@ -278,53 +278,53 @@ function PaymentContent() {
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                 {orderData.requiresPaymentSetup || (orderData.subscription && !orderData.amount) ? (
                   <>
-                     <div className="mb-6 p-4 bg-amber-50 rounded-xl border border-amber-200">
-                        <p className="text-[13px] font-medium text-amber-800 leading-relaxed text-center">
-                           Please attach a secure payment method to authorize the subscription. You will be redirected to our Merchant of Record, Paddle.
-                        </p>
-                     </div>
-                     <Button 
-                       onClick={async () => {
-                         try {
-                           if (orderData.subscriptionAuthUrl) {
-                             window.open(orderData.subscriptionAuthUrl, '_blank');
-                           } else if (orderData.subscriptionId) {
-                             const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${orderData.subscriptionId}`);
-                             const authData = await authResponse.json();
-                             if (authData.authUrl) window.open(authData.authUrl, '_blank');
-                           }
-                         } catch (err) {
-                           setError("Gateway rejected the session. Please retry.");
-                         }
-                       }}
-                       className="w-full h-14 text-[16px] font-bold tracking-wide rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20"
-                     >
-                        Enter Billing Details
-                     </Button>
+                    <div className="mb-6 p-4 bg-amber-50 rounded-xl border border-amber-200">
+                      <p className="text-[13px] font-medium text-amber-800 leading-relaxed text-center">
+                        Please attach a secure payment method to authorize the subscription. You will be redirected to our Merchant of Record, Paddle.
+                      </p>
+                    </div>
+                    <Button
+                      onClick={async () => {
+                        try {
+                          if (orderData.subscriptionAuthUrl) {
+                            window.open(orderData.subscriptionAuthUrl, '_blank');
+                          } else if (orderData.subscriptionId) {
+                            const authResponse = await fetch(`/api/payment/get-subscription-auth?subscriptionId=${orderData.subscriptionId}`);
+                            const authData = await authResponse.json();
+                            if (authData.authUrl) window.open(authData.authUrl, '_blank');
+                          }
+                        } catch (err) {
+                          setError("Gateway rejected the session. Please retry.");
+                        }
+                      }}
+                      className="w-full h-14 text-[16px] font-bold tracking-wide rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20"
+                    >
+                      Enter Billing Details
+                    </Button>
                   </>
                 ) : orderData.trial ? (
-                   <div className="text-center p-6 bg-emerald-50 border border-emerald-200 rounded-2xl">
-                      <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Zap className="w-6 h-6 text-emerald-600" />
-                      </div>
-                      <h2 className="text-xl font-bold text-slate-900 mb-2">Free Trial Activated</h2>
-                      <p className="text-[14px] font-medium text-slate-600 mb-6">Your 14-day trial has commenced instantly.</p>
-                      <Button asChild className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm font-bold tracking-wide">
-                        <Link href="/dashboard">Return to Dashboard</Link>
-                      </Button>
-                   </div>
+                  <div className="text-center p-6 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                    <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Zap className="w-6 h-6 text-emerald-600" />
+                    </div>
+                    <h2 className="text-xl font-bold text-slate-900 mb-2">Free Trial Activated</h2>
+                    <p className="text-[14px] font-medium text-slate-600 mb-6">Your 14-day trial has commenced instantly.</p>
+                    <Button asChild className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm font-bold tracking-wide">
+                      <Link href="/dashboard">Return to Dashboard</Link>
+                    </Button>
+                  </div>
                 ) : (
-                   <div className="text-center">
-                      <Button disabled className="w-full h-14 text-[16px] font-bold tracking-wide rounded-xl bg-slate-100 text-slate-500 shadow-none border border-slate-200">
-                        Please resolve gateway hold
-                      </Button>
-                   </div>
+                  <div className="text-center">
+                    <Button disabled className="w-full h-14 text-[16px] font-bold tracking-wide rounded-xl bg-slate-100 text-slate-500 shadow-none border border-slate-200">
+                      Please resolve gateway hold
+                    </Button>
+                  </div>
                 )}
               </div>
             )}
-            
+
             <p className="text-[12px] font-medium text-slate-400 text-center mt-6 mx-auto max-w-sm flex items-center justify-center gap-1.5">
-               <ShieldCheck className="w-3.5 h-3.5" /> Data protected by 256-bit SSL encryption
+              <ShieldCheck className="w-3.5 h-3.5" /> Data protected by 256-bit SSL encryption
             </p>
           </div>
         </div>

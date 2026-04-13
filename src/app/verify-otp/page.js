@@ -48,7 +48,7 @@ function VerifyOtpContent() {
     }
     setLoading(true);
     setError("");
-    
+
     try {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
@@ -61,19 +61,19 @@ function VerifyOtpContent() {
         setLoading(false);
         return;
       }
-      
+
       const result = await signIn("verify-token", {
         token: data.verifyToken,
         redirect: false,
       });
-      
+
       if (result?.error) {
         setError("Verification succeeded but login failed. Please sign in with your password.");
         setLoading(false);
         // Do not block UI, allow user to click back to login
         return;
       }
-      
+
       // Full page redirect so session cookie is sent and start-trial gets authenticated user
       window.location.href = `/start-trial?callbackUrl=${encodeURIComponent(callbackUrl)}`;
     } catch (err) {
@@ -191,7 +191,7 @@ function VerifyOtpContent() {
 
         <div className="mt-8 pt-6 border-t border-slate-100 space-y-3">
           <p className="text-[13px] text-center text-slate-500 font-medium">
-            Didn't receive the code?{" "}
+            Didn&apos;t receive the code?{" "}
             <button
               type="button"
               onClick={handleResend}

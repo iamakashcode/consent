@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect, Suspense } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import AuthLayout from "@/components/auth/AuthLayout";
 import { Loader2, Eye, EyeOff } from "lucide-react";
@@ -19,11 +19,7 @@ function ResetPasswordContent() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  useEffect(() => {
-    if (!token) {
-      setError("Invalid or missing reset link. Please request a new one from the forgot password page.");
-    }
-  }, [token]);
+  const invalidLinkError = "Invalid or missing reset link. Please request a new one from the forgot password page.";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -62,7 +58,7 @@ function ResetPasswordContent() {
     setLoading(false);
   };
 
-  if (!token && error) {
+  if (!token) {
     return (
       <AuthLayout
         title="Invalid link"
@@ -70,7 +66,7 @@ function ResetPasswordContent() {
       >
         <div className="w-full">
           <div className="p-4 bg-red-50 border border-red-200/60 rounded-xl text-[13px] font-medium text-red-700 mb-6 leading-relaxed">
-            {error}
+            {invalidLinkError}
           </div>
           <Link
             href="/forgot-password"
@@ -108,7 +104,7 @@ function ResetPasswordContent() {
                 {error}
               </div>
             )}
-            
+
             <div className="space-y-1.5 relative">
               <label htmlFor="newPassword" className="block text-sm font-medium text-slate-700">
                 New password
@@ -135,7 +131,7 @@ function ResetPasswordContent() {
                 </button>
               </div>
             </div>
-            
+
             <div className="space-y-1.5 relative">
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700">
                 Confirm password

@@ -6,21 +6,21 @@ import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import DashboardLayout from "@/components/DashboardLayout";
-import { PLAN_DETAILS, PLAN_CURRENCY } from "@/lib/paddle";
+import { PLAN_DETAILS } from "@/lib/paddle";
 import { toast } from "sonner";
-import { Receipt, CheckCircle2, Clock, XCircle, CreditCard, ChevronRight, Download } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Receipt, CheckCircle2, XCircle, CreditCard, } from "lucide-react";
+
 
 // Shared components
 import { PageHeader } from "@/components/shared/PageHeader";
-import { SectionCard, SectionCardHeader } from "@/components/shared/SectionCard";
+import { SectionCard } from "@/components/shared/SectionCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 
 function BillingContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  
+
   const [loading, setLoading] = useState(true);
   const [subscriptions, setSubscriptions] = useState([]);
   const [portalUrls, setPortalUrls] = useState({});
@@ -47,10 +47,10 @@ function BillingContent() {
         fetch("/api/subscription"),
         fetch("/api/sites")
       ]);
-      
+
       let subsData = { subscriptions: [] };
       let sitesData = [];
-      
+
       if (subsRes.ok) subsData = await subsRes.json();
       if (sitesRes.ok) sitesData = await sitesRes.json();
 
@@ -67,7 +67,7 @@ function BillingContent() {
       }
 
       const allSubs = [];
-      
+
       // First add all actual subscriptions from paddle
       if (subsData.subscriptions && Array.isArray(subsData.subscriptions)) {
         subsData.subscriptions.forEach(sub => {
@@ -146,21 +146,21 @@ function BillingContent() {
 
   return (
     <DashboardLayout>
-      <PageHeader 
-        title="Billing Details" 
+      <PageHeader
+        title="Billing Details"
         description="Monitor subscriptions, access tax invoices, and update payment methods securely."
       />
 
       {error ? (
         <div className="bg-rose-50 border border-rose-200 text-rose-700 px-5 py-4 rounded-xl mb-6 shadow-sm">
           <div className="flex items-center gap-2 font-medium">
-             <XCircle className="h-5 w-5" />
-             {error}
+            <XCircle className="h-5 w-5" />
+            {error}
           </div>
         </div>
       ) : subscriptions.length === 0 ? (
         <SectionCard hoverLift>
-          <EmptyState 
+          <EmptyState
             icon={Receipt}
             title="No billing history"
             description="You don't have any active subscriptions or connected domains. Start by adding a domain."
@@ -174,123 +174,123 @@ function BillingContent() {
       ) : (
         <div className="space-y-6">
           {subscriptions.map((sub, index) => {
-             const subData = sub.subscription || {};
-             const statusLower = subData.status?.toLowerCase() || sub.status?.toLowerCase();
-             const planBase = subData.plan || "basic";
-             const planName = PLAN_DETAILS[planBase]?.name || "Custom Plan";
-             const isTrial = statusLower === 'trial' || sub.userTrialActive;
-             
-             // Setup pill colors based on status
-             let statusBadge = null;
-             if (sub.isPlaceholder) {
-                statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 rounded">No Plan</span>;
-             } else if (sub.isActive) {
-                if (isTrial) {
-                   statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 rounded">Trial Active</span>;
-                } else {
-                   statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 rounded">Active</span>;
-                }
-             } else if (statusLower === 'past_due' || statusLower === 'pending') {
-                statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 rounded">Action Needed</span>;
-             } else if (statusLower === 'canceled' || statusLower === 'paused') {
-                statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 rounded">{statusLower}</span>;
-             } else {
-                statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 rounded">{statusLower || 'Unknown'}</span>;
-             }
+            const subData = sub.subscription || {};
+            const statusLower = subData.status?.toLowerCase() || sub.status?.toLowerCase();
+            const planBase = subData.plan || "basic";
+            const planName = PLAN_DETAILS[planBase]?.name || "Custom Plan";
+            const isTrial = statusLower === 'trial' || sub.userTrialActive;
 
-             return (
-               <SectionCard key={sub.id || sub.paddleSubscriptionId || sub.siteId || index} noPadding className="overflow-hidden group">
-                 <div className="p-5 sm:p-6 pb-0 sm:pb-0">
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                       <div>
-                         <div className="flex items-center gap-3 flex-wrap mb-1">
-                            <h3 className="text-[17px] font-semibold tracking-tight text-slate-900">{sub.domain}</h3>
-                            {statusBadge}
-                         </div>
-                         <p className="text-[14px] text-slate-500">
-                           {sub.isPlaceholder ? "Add a subscription to start tracking." : `${planName} Tier`} 
-                           {subData.billingInterval && ` • Billed ${subData.billingInterval}`}
-                         </p>
-                       </div>
-                       
-                       <div className="flex items-center gap-2">
-                         {!sub.isPlaceholder && (
-                           <>
-                             {(sub.customerId || subData.customerId) && (
-                               <Button
-                                 variant="outline"
-                                 size="sm"
-                                 onClick={() => getPortalUrl(sub.customerId || subData.customerId, sub.id)}
-                                 disabled={urlLoading[sub.id]}
-                                 className="rounded-lg h-9 text-[13px] font-medium text-slate-700 bg-white shadow-sm hover:bg-slate-50 border-slate-200"
-                               >
-                                 {urlLoading[sub.id] ? (
-                                   <span className="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full mr-2" />
-                                 ) : (
-                                   <CreditCard className="h-3.5 w-3.5 mr-2" />
-                                 )}
-                                 Paddle Portal
-                               </Button>
-                             )}
-                           </>
-                         )}
-                         <Button size="sm" asChild className="rounded-lg h-9 text-[13px] font-medium bg-indigo-50 text-indigo-700 shadow-none border border-indigo-200 hover:bg-indigo-100">
-                           <Link href={`/plans?siteId=${sub.siteId}&domain=${encodeURIComponent(sub.domain)}`}>
-                             {sub.isPlaceholder ? "Select Plan" : "Change Plan"}
-                           </Link>
-                         </Button>
-                       </div>
+            // Setup pill colors based on status
+            let statusBadge = null;
+            if (sub.isPlaceholder) {
+              statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 rounded">No Plan</span>;
+            } else if (sub.isActive) {
+              if (isTrial) {
+                statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 rounded">Trial Active</span>;
+              } else {
+                statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 rounded">Active</span>;
+              }
+            } else if (statusLower === 'past_due' || statusLower === 'pending') {
+              statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 rounded">Action Needed</span>;
+            } else if (statusLower === 'canceled' || statusLower === 'paused') {
+              statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 rounded">{statusLower}</span>;
+            } else {
+              statusBadge = <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 rounded">{statusLower || 'Unknown'}</span>;
+            }
+
+            return (
+              <SectionCard key={sub.id || sub.paddleSubscriptionId || sub.siteId || index} noPadding className="overflow-hidden group">
+                <div className="p-5 sm:p-6 pb-0 sm:pb-0">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-3 flex-wrap mb-1">
+                        <h3 className="text-[17px] font-semibold tracking-tight text-slate-900">{sub.domain}</h3>
+                        {statusBadge}
+                      </div>
+                      <p className="text-[14px] text-slate-500">
+                        {sub.isPlaceholder ? "Add a subscription to start tracking." : `${planName} Tier`}
+                        {subData.billingInterval && ` • Billed ${subData.billingInterval}`}
+                      </p>
                     </div>
-                 </div>
 
-                 {!sub.isPlaceholder && (
-                   <div className="mt-6 border-t border-slate-100 bg-slate-50/50 p-5 sm:p-6">
-                     <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                       <div>
-                         <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Billing Period</p>
-                         <p className="text-[14px] font-medium text-slate-900 capitalize">
-                           {subData.billingInterval || "Monthly"}
-                         </p>
-                       </div>
-                       
-                       <div>
-                         <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Current Period Ends</p>
-                         <p className="text-[14px] font-medium text-slate-900">
-                           {isTrial && sub.trialEndAt ? (
-                             format(new Date(sub.trialEndAt), "MMM d, yyyy")
-                           ) : subData.currentPeriodEnd ? (
-                             format(new Date(subData.currentPeriodEnd), "MMM d, yyyy")
-                           ) : (
-                             "—"
-                           )}
-                         </p>
-                       </div>
+                    <div className="flex items-center gap-2">
+                      {!sub.isPlaceholder && (
+                        <>
+                          {(sub.customerId || subData.customerId) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => getPortalUrl(sub.customerId || subData.customerId, sub.id)}
+                              disabled={urlLoading[sub.id]}
+                              className="rounded-lg h-9 text-[13px] font-medium text-slate-700 bg-white shadow-sm hover:bg-slate-50 border-slate-200"
+                            >
+                              {urlLoading[sub.id] ? (
+                                <span className="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full mr-2" />
+                              ) : (
+                                <CreditCard className="h-3.5 w-3.5 mr-2" />
+                              )}
+                              Paddle Portal
+                            </Button>
+                          )}
+                        </>
+                      )}
+                      <Button size="sm" asChild className="rounded-lg h-9 text-[13px] font-medium bg-indigo-50 text-indigo-700 shadow-none border border-indigo-200 hover:bg-indigo-100">
+                        <Link href={`/plans?siteId=${sub.siteId}&domain=${encodeURIComponent(sub.domain)}`}>
+                          {sub.isPlaceholder ? "Select Plan" : "Change Plan"}
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
 
-                       <div>
-                         <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Plan Add-ons</p>
-                         <div className="flex flex-col gap-1 mt-1">
-                           {sub.removeBrandingAddon ? (
-                             <span className="inline-flex items-center gap-1.5 text-[13px] text-slate-700">
-                                <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500" />
-                                White-label UI
-                             </span>
-                           ) : (
-                             <span className="text-[13px] text-slate-500">—</span>
-                           )}
-                         </div>
-                       </div>
-                       
-                       <div>
-                         <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Paddle Ref</p>
-                         <p className="text-[13px] font-mono text-slate-500 truncate max-w-[120px]" title={sub.paddleSubscriptionId || subData.paddleSubscriptionId}>
-                           {sub.paddleSubscriptionId || subData.paddleSubscriptionId || "—"}
-                         </p>
-                       </div>
-                     </div>
-                   </div>
-                 )}
-               </SectionCard>
-             );
+                {!sub.isPlaceholder && (
+                  <div className="mt-6 border-t border-slate-100 bg-slate-50/50 p-5 sm:p-6">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                      <div>
+                        <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Billing Period</p>
+                        <p className="text-[14px] font-medium text-slate-900 capitalize">
+                          {subData.billingInterval || "Monthly"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Current Period Ends</p>
+                        <p className="text-[14px] font-medium text-slate-900">
+                          {isTrial && sub.trialEndAt ? (
+                            format(new Date(sub.trialEndAt), "MMM d, yyyy")
+                          ) : subData.currentPeriodEnd ? (
+                            format(new Date(subData.currentPeriodEnd), "MMM d, yyyy")
+                          ) : (
+                            "—"
+                          )}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Plan Add-ons</p>
+                        <div className="flex flex-col gap-1 mt-1">
+                          {sub.removeBrandingAddon ? (
+                            <span className="inline-flex items-center gap-1.5 text-[13px] text-slate-700">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500" />
+                              White-label UI
+                            </span>
+                          ) : (
+                            <span className="text-[13px] text-slate-500">—</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Paddle Ref</p>
+                        <p className="text-[13px] font-mono text-slate-500 truncate max-w-[120px]" title={sub.paddleSubscriptionId || subData.paddleSubscriptionId}>
+                          {sub.paddleSubscriptionId || subData.paddleSubscriptionId || "—"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </SectionCard>
+            );
           })}
         </div>
       )}

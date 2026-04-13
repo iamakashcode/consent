@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 
 // Shared components
 import { PageHeader } from "@/components/shared/PageHeader";
-import { SectionCard, SectionCardHeader } from "@/components/shared/SectionCard";
+import { SectionCard } from "@/components/shared/SectionCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { inputClasses } from "@/components/shared/FormField";
 
@@ -28,12 +28,14 @@ function ConsentLogContent() {
   const router = useRouter();
   const [sites, setSites] = useState([]);
   const [selectedSiteId, setSelectedSiteId] = useState("");
-  const [logs, setLogs] = useState([]);
-  const [total, setTotal] = useState(0);
+  const [consentData, setConsentData] = useState({
+    key: "",
+    logs: [],
+    total: 0,
+    totalPages: 0,
+  });
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [logsLoading, setLogsLoading] = useState(false);
 
   const limit = 50;
 
@@ -61,33 +63,45 @@ function ConsentLogContent() {
 
   useEffect(() => {
     if (!selectedSiteId) {
-      setLogs([]);
-      setTotal(0);
-      setTotalPages(0);
       return;
     }
-    setLogsLoading(true);
+    const requestKey = `${selectedSiteId}:${page}`;
     fetch(`/api/sites/${selectedSiteId}/consent-log?page=${page}&limit=${limit}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) {
-          setLogs([]);
-          setTotal(0);
-          setTotalPages(0);
+          setConsentData((prev) => ({
+            ...prev,
+            key: requestKey,
+            logs: [],
+            total: 0,
+            totalPages: 0,
+          }));
         } else {
-          setLogs(data.logs || []);
-          setTotal(data.total ?? 0);
-          setTotalPages(data.totalPages ?? 0);
+          setConsentData({
+            key: requestKey,
+            logs: data.logs || [],
+            total: data.total ?? 0,
+            totalPages: data.totalPages ?? 0,
+          });
         }
       })
       .catch(() => {
-        setLogs([]);
-        setTotal(0);
-        setTotalPages(0);
+        setConsentData((prev) => ({
+          ...prev,
+          key: requestKey,
+          logs: [],
+          total: 0,
+          totalPages: 0,
+        }));
         toast.error("Failed to load consent log");
-      })
-      .finally(() => setLogsLoading(false));
+      });
   }, [selectedSiteId, page]);
+
+  const logsLoading = Boolean(selectedSiteId) && consentData.key !== `${selectedSiteId}:${page}`;
+  const logs = consentData.logs;
+  const total = consentData.total;
+  const totalPages = consentData.totalPages;
 
   const formatDate = (d) => {
     if (!d) return "—";
@@ -108,12 +122,12 @@ function ConsentLogContent() {
 
   return (
     <DashboardLayout>
-      <PageHeader 
-        title="Consent Log" 
+      <PageHeader
+        title="Consent Log"
         description="A tamper-proof audit log of every visitor consent choice recorded across your domains."
       />
 
-      <SectionCard hoverLift className="mb-6 pb-6 border-b-0 rounded-b-none shadow-none border-t border-x mb-0">
+      <SectionCard hoverLift className=" pb-6 border-b-0 rounded-b-none shadow-none border-t border-x mb-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1.5 w-full sm:w-80">
             <label className="block text-[13px] font-semibold tracking-wide uppercase text-slate-500">Filter by Domain</label>
@@ -136,7 +150,7 @@ function ConsentLogContent() {
               </div>
             </div>
           </div>
-          
+
           {total > 0 && (
             <div className="text-right shrink-0 mt-4 sm:mt-0">
               <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
@@ -149,7 +163,7 @@ function ConsentLogContent() {
 
       <SectionCard noPadding className="rounded-t-none border-t-0 shadow-sm relative z-10 overflow-hidden">
         {!selectedSiteId ? (
-          <EmptyState 
+          <EmptyState
             icon={ClipboardList}
             title="Awaiting domain selection"
             description="Select a domain from the dropdown above to view its associated immutable consent logs."
@@ -159,7 +173,7 @@ function ConsentLogContent() {
             <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full" />
           </div>
         ) : logs.length === 0 ? (
-          <EmptyState 
+          <EmptyState
             icon={Activity}
             title="No activity detected yet"
             description="Logs will appear chronologically here the moment visitors start accepting or rejecting your consent banner."
@@ -207,7 +221,7 @@ function ConsentLogContent() {
                       </TableCell>
                       <TableCell className="text-slate-600 text-[14px]">{formatDate(log.createdAt)}</TableCell>
                       <TableCell className="font-mono text-[13px] text-slate-500">{log.visitorIp || "—"}</TableCell>
-                      <TableCell className="max-w-[200px] px-6">
+                      <TableCell className="max-w-50 px-6">
                         {log.pageUrl ? (
                           <div className="truncate text-[13px]">
                             <a href={log.pageUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-700 hover:underline inline-flex items-center gap-1 group">

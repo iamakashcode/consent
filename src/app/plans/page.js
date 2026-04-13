@@ -188,8 +188,8 @@ function PlansContent() {
 
   return (
     <DashboardLayout>
-      <PageHeader 
-        title={siteId ? (currentSubscription?.isActive ? `Change plan for ${domain || "your domain"}` : `Choose plan for ${domain || "your domain"}`) : "Choose your plan"} 
+      <PageHeader
+        title={siteId ? (currentSubscription?.isActive ? `Change plan for ${domain || "your domain"}` : `Choose plan for ${domain || "your domain"}`) : "Choose your plan"}
         description={siteId ? (currentSubscription?.isActive ? "Upgrade your tier to unlock more features." : "Select a tier to activate consent tracking on your property.") : "Start by adding a domain from your dashboard to select a plan."}
       />
 
@@ -203,7 +203,7 @@ function PlansContent() {
                 <span className="capitalize">{currentSubscription.plan}</span>
                 {currentSubscription.billingInterval === "yearly" && <span className="ml-1 text-slate-400 font-normal">Yearly</span>}
               </span>
-              
+
               {currentSubscription.userTrialActive && (
                 <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-[13px] font-medium shadow-sm">
                   Active Trial
@@ -212,7 +212,7 @@ function PlansContent() {
                   )}
                 </span>
               )}
-              
+
               {currentSubscription.removeBrandingAddon && (
                 <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-[13px] font-medium shadow-sm">
                   White-label Addon Active
@@ -230,7 +230,7 @@ function PlansContent() {
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full mx-4 text-center animate-in zoom-in-95 duration-200">
             <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
-               <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full"></div>
+              <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full"></div>
             </div>
             <h3 className="text-xl font-bold text-slate-900 tracking-tight">Preparing Checkout</h3>
             <p className="text-[15px] text-slate-500 mt-2">Connecting to secure payment gateway...</p>
@@ -272,7 +272,7 @@ function PlansContent() {
           const canUpgrade = currentSubscription?.isActive && ["active", "trial"].includes(currentSubscription?.status) && !isCurrentPlan;
           const isNewSubscription = !currentSubscription?.plan || !currentSubscription?.isActive;
           const disabled = !siteId || loading || isCurrentPlan;
-          
+
           let buttonLabel = !siteId ? "Add Domain First" : isCurrentPlan ? "Current Plan Active" : canUpgrade ? `Switch to ${plan.name}` : `Subscribe for ${PLAN_CURRENCY} ${price}${period}`;
           if (isFirstDomain && isNewSubscription && siteId) buttonLabel = "Start 14-day Free Trial";
 
@@ -281,10 +281,10 @@ function PlansContent() {
               key={planKey}
               className={cn(
                 "relative bg-white rounded-3xl p-8 transition-all duration-300 flex flex-col h-full",
-                isCurrentPlan 
-                  ? "border-2 border-indigo-200 ring-4 ring-indigo-50 shadow-md" 
-                  : plan.popular 
-                    ? "border-2 border-slate-900 shadow-xl lg:-mt-4 lg:mb-4 bg-gradient-to-b from-slate-900 to-slate-800 text-white" 
+                isCurrentPlan
+                  ? "border-2 border-indigo-200 ring-4 ring-indigo-50 shadow-md"
+                  : plan.popular
+                    ? "border-2 border-slate-900 shadow-xl lg:-mt-4 lg:mb-4 bg-gradient-to-b from-slate-900 to-slate-800 text-white"
                     : "border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300"
               )}
             >
@@ -329,7 +329,7 @@ function PlansContent() {
                   {plan.features.map((feature, idx) => (
                     <li key={idx} className="flex items-start gap-3">
                       <div className={cn(
-                        "mt-0.5 rounded-full p-0.5", 
+                        "mt-0.5 rounded-full p-0.5",
                         plan.popular && !isCurrentPlan ? "bg-indigo-500/20 text-indigo-300" : "bg-indigo-50 text-indigo-600"
                       )}>
                         <Check className="h-3.5 w-3.5" strokeWidth={3} />
@@ -351,7 +351,7 @@ function PlansContent() {
                   <label className="flex items-start gap-3 cursor-pointer group">
                     <div className={cn(
                       "mt-0.5 flex shrink-0 items-center justify-center rounded border h-5 w-5 transition-colors",
-                      addonSelected 
+                      addonSelected
                         ? plan.popular && !isCurrentPlan ? "bg-indigo-500 border-indigo-500" : "bg-indigo-600 border-indigo-600"
                         : plan.popular && !isCurrentPlan ? "border-slate-600 group-hover:border-slate-500" : "border-slate-300 bg-white group-hover:border-slate-400"
                     )}>
@@ -369,7 +369,7 @@ function PlansContent() {
                         White-label Addon
                       </p>
                       <p className={cn("text-[12px] mt-1 leading-relaxed", plan.popular && !isCurrentPlan ? "text-slate-400" : "text-slate-500")}>
-                        Remove "Powered by ConsentFlow" branding from the public banner. <strong className={plan.popular && !isCurrentPlan ? "text-slate-300" : "text-slate-700"}>+{PLAN_CURRENCY}{tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}{period}</strong>
+                        Remove &quot;Powered by ConsentFlow&quot; branding from the public banner. <strong className={plan.popular && !isCurrentPlan ? "text-slate-300" : "text-slate-700"}>+{PLAN_CURRENCY}{tab === "monthly" ? ADDON_BRANDING_PRICE_EUR : ADDON_BRANDING_PRICE_EUR * 10}{period}</strong>
                       </p>
                     </div>
                   </label>
@@ -445,7 +445,7 @@ export default function PlansPage() {
       fallback={
         <DashboardLayout>
           <div className="flex items-center justify-center h-[60vh]">
-             <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
+            <div className="animate-spin w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full shadow-sm" />
           </div>
         </DashboardLayout>
       }

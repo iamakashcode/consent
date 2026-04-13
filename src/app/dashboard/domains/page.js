@@ -178,7 +178,7 @@ function DomainsContent() {
         setDeleteOpen(false);
         setSiteToDelete(null);
         await fetchData();
-        toast.success("Domain deleted", { description: `${siteToDelete.domain} has been removed.` });
+        toast.success("Domain deleted", { description: `${siteToDelete.domain} has been removed.`, });
       } else {
         const data = await response.json();
         toast.error(data.error || "Failed to delete domain");
@@ -282,17 +282,17 @@ function DomainsContent() {
 
   return (
     <DashboardLayout>
-      <PageHeader 
-        title="Domains" 
+      <PageHeader
+        title="Domains"
         description="Add domains, monitor installation status, and manage specific consent plans per project."
       />
 
       <div className="grid lg:grid-cols-[1fr_2fr] gap-6 mb-8 items-start">
         <SectionCard className="sticky top-20">
-          <SectionCardHeader 
-            title="Add a new domain" 
-            description="Scan your site to begin tracking." 
-            icon={Plus} 
+          <SectionCardHeader
+            title="Add a new domain"
+            description="Scan your site to begin tracking."
+            icon={Plus}
           />
           <div className="space-y-4">
             <div className="space-y-2">
@@ -305,9 +305,9 @@ function DomainsContent() {
                 onKeyDown={(e) => e.key === "Enter" && handleAddDomain()}
               />
             </div>
-            
-            <Button 
-              onClick={handleAddDomain} 
+
+            <Button
+              onClick={handleAddDomain}
               disabled={addLoading}
               className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm h-11"
             >
@@ -320,7 +320,7 @@ function DomainsContent() {
             </Button>
 
             {addError && <p className="text-sm text-rose-500 mt-2 font-medium">{addError}</p>}
-            
+
             {addResult && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 mt-3 animate-in fade-in zoom-in-95">
                 <div className="flex items-center gap-2 text-emerald-800 font-medium mb-1">
@@ -348,7 +348,7 @@ function DomainsContent() {
               <RefreshCw className="h-4 w-4 mr-2" /> Refresh
             </Button>
           </div>
-          
+
           <div className="overflow-x-auto">
             {sites.length > 0 || pendingDomains.length > 0 ? (
               <Table>
@@ -366,7 +366,7 @@ function DomainsContent() {
                       <TableCell className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="h-9 w-9 rounded-xl bg-amber-100/80 border border-amber-200/50 flex items-center justify-center shrink-0 shadow-sm">
-                            <Clock className="h-[18px] w-[18px] text-amber-600" />
+                            <Clock className="h-4.5 w-4.5 text-amber-600" />
                           </div>
                           <div>
                             <span className="font-semibold text-[14px] text-slate-900 block">{pending.domain}</span>
@@ -428,7 +428,7 @@ function DomainsContent() {
                         <TableCell className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <div className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200/50 flex items-center justify-center shrink-0 shadow-sm group-hover:bg-white group-hover:border-slate-300 transition-colors">
-                              <Globe className="h-[18px] w-[18px] text-slate-500" />
+                              <Globe className="h-4.5 w-4.5 text-slate-500" />
                             </div>
                             <div>
                               <span className="font-semibold text-[14px] text-slate-900 block">{site.domain}</span>
@@ -450,11 +450,11 @@ function DomainsContent() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {isActive ? (
-                               <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                             ) : isPending ? (
-                               <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                              <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
                             ) : (
-                               <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                              <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
                             )}
                             <span className="text-[13px] font-medium text-slate-700">{statusText}</span>
                           </div>
@@ -499,7 +499,7 @@ function DomainsContent() {
                 </TableBody>
               </Table>
             ) : (
-              <EmptyState 
+              <EmptyState
                 icon={Globe}
                 title="No domains connected yet"
                 description="Use the form on the left to scan and add your first website. Once connected, you can install the tracking script."
