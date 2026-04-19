@@ -332,8 +332,9 @@ async function createSiteFromPendingDomain(pending, transaction, subscriptionId)
 async function handleTransactionPaid(event) {
   const handled = await processPendingDomainPayment(event);
   if (handled) return;
-  // Paddle often sends `transaction.paid` before `transaction.completed`; run the same main-subscription update so plan/status are not stuck until completed fires.
-  await handleTransactionCompleted(event);
+  // Do not call `handleTransactionCompleted` from here: `transaction.paid` can arrive before checkout finishes and
+  // would clear account trial when `custom_data.upgrade` is set, without a completed payment.
+  console.log("[Webhook] transaction.paid: no pending-domain handler; subscription rows update on transaction.completed");
 }
 
 /**
@@ -432,6 +433,14 @@ async function handleTransactionCompleted(event) {
     return;
   }
 
+  const txnStatus = String(transaction?.status || "").toLowerCase();
+  if (!["completed", "billed", "paid"].includes(txnStatus)) {
+    console.log(
+      `[Webhook] handleTransactionCompleted: skip non-final transaction status=${transaction?.status} id=${transaction?.id}`
+    );
+    return;
+  }
+
   const resolved = await resolvePlanAndBillingFromTransaction(transaction, dbSubscription);
   const isUpgrade = resolved.upgrade;
   if (!isUpgrade) {
@@ -479,7 +488,7 @@ async function handleTransactionCompleted(event) {
     },
   });
 
-  if (isUpgrade && site.userId) {
+  if (isUpgrade && site.userId && newStatus === "active") {
     await clearUserTrialFields(site.userId).catch((err) =>
       console.warn("[Webhook] clearUserTrialFields after upgrade:", err?.message)
     );

@@ -7,7 +7,7 @@ import {
   inferPlanFromPaddlePriceById,
 } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
-import { startUserTrial, clearUserTrialFields } from "@/lib/subscription";
+import { startUserTrial } from "@/lib/subscription";
 
 /**
  * Sync subscription status from Paddle
@@ -197,12 +197,6 @@ export async function POST(req) {
     if (shouldStartTrial) {
       await startUserTrial(site.userId);
       console.log(`[Sync] Started user trial for user ${site.userId}`);
-    }
-
-    if (newStatus === "active" && dbSubscription.status !== "pending") {
-      await clearUserTrialFields(site.userId).catch((err) =>
-        console.warn("[Sync] clearUserTrialFields:", err?.message)
-      );
     }
 
     return Response.json({

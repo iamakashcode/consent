@@ -108,9 +108,10 @@ export async function POST(req) {
       ["basic", "starter", "pro"].includes(subPlanEarly) &&
       subPlanEarly === String(plan).toLowerCase() &&
       subIntervalEarly !== targetInterval;
+    // Include `pending`: after abandoning checkout the row stays pending; retries must still use no-trial Paddle prices when changing tier/interval.
     const serverDetectedUpgrade =
       !!subRow &&
-      ["active", "trial"].includes(subStatusEarly) &&
+      ["active", "trial", "pending"].includes(subStatusEarly) &&
       (planTierChanging || billingIntervalChanging);
     // Client sometimes omits `upgrade: true` when `isActive` is false but status is still trial — server must force no-trial Paddle price.
     const isUpgradeFlow = Boolean(upgrade) || serverDetectedUpgrade;

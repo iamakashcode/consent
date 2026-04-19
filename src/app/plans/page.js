@@ -108,11 +108,12 @@ function PlansContent() {
       return;
     }
 
-    // Do not require `isActive`: trial-only access can still report `isActive: false` while `status` is `trial`, which would skip `upgrade` and create a 14-day trial Paddle price ("Due today €0").
+    // Include `pending` (abandoned checkout): server must receive `upgrade: true` so checkout stays non-trial. Also treat billing-interval change as upgrade.
     const isUpgrade =
       !!currentSubscription?.plan &&
-      ["active", "trial"].includes(currentSubscription?.status || "") &&
-      currentSubscription.plan !== planKey;
+      ["active", "trial", "pending"].includes(currentSubscription?.status || "") &&
+      (currentSubscription.plan !== planKey ||
+        String(currentSubscription.billingInterval || "monthly").toLowerCase() !== String(tab).toLowerCase());
     setLoading(true);
     setSelectedPlan(planKey);
 
