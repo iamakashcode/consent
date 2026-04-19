@@ -5,9 +5,10 @@
  * can redirect to R2 public URL so visitors don't hit the app.
  */
 
-import { getScript, scriptExists, R2_CONFIGURED, getCdnUrl } from "@/lib/cdn-service";
+import { getScript, scriptExists, R2_CONFIGURED, getCdnUrl, BLANK_SCRIPT } from "@/lib/cdn-service";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isSubscriptionActive, checkPageViewLimit } from "@/lib/subscription";
 
 export async function GET(req, { params }) {
   try {
@@ -23,6 +24,23 @@ export async function GET(req, { params }) {
 
     const { searchParams } = new URL(req.url);
     const isPreview = searchParams.get("preview") === "1";
+
+    if (!isPreview) {
+      const [subSt, viewLim] = await Promise.all([
+        isSubscriptionActive(siteId),
+        checkPageViewLimit(siteId),
+      ]);
+      if (!subSt.isActive || viewLim.exceeded) {
+        return new NextResponse(BLANK_SCRIPT, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/javascript; charset=utf-8",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+    }
 
     // When R2 is configured and script exists, redirect to R2 so visitors don't hit the app
     if (R2_CONFIGURED && !isPreview) {

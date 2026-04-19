@@ -101,14 +101,13 @@ async function handleTracking(req, resolvedParams, payload = null) {
       }
     }
 
-    // If view limit just exceeded, sync CDN to blank so script stops working
-    checkPageViewLimit(siteId).then((viewLimit) => {
-      if (viewLimit.exceeded) {
-        syncSiteScriptWithSubscription(siteId).catch((err) =>
-          console.error("[Track] CDN sync after view limit exceeded:", err)
-        );
-      }
-    });
+    // If view limit exceeded, sync CDN to blank so script stops (await so a burst of requests still converges).
+    const viewLimit = await checkPageViewLimit(siteId);
+    if (viewLimit.exceeded) {
+      await syncSiteScriptWithSubscription(siteId).catch((err) =>
+        console.error("[Track] CDN sync after view limit exceeded:", err)
+      );
+    }
 
     // Update lastSeenAt to indicate script is still active
     const hasLastSeenAt = await prisma.$queryRaw`

@@ -232,21 +232,17 @@ export async function checkPageViewLimit(siteId) {
       return { exceeded: false, currentViews: 0, limit: Infinity };
     }
 
-    // Get period start/end (use subscription period or default to 30 days ago)
-    const periodStart = subscription.currentPeriodStart ||
-      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const periodEnd = subscription.currentPeriodEnd || new Date();
-    const periodStartMonth = new Date(Date.UTC(periodStart.getUTCFullYear(), periodStart.getUTCMonth(), 1));
-
-    // Sum view counts from SiteViewCount (one row per site per month; no per-view rows)
-    const counts = await prisma.siteViewCount.findMany({
+    // Must match /api/sites/[siteId]/track: counts are stored per calendar month (UTC month start).
+    // Plan caps are "per month" — use the current UTC month bucket only (single row per site/month).
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const row = await prisma.siteViewCount.findUnique({
       where: {
-        siteId: site.id,
-        periodStart: { gte: periodStartMonth, lte: periodEnd },
+        siteId_periodStart: { siteId: site.id, periodStart: monthStart },
       },
       select: { count: true },
     });
-    const currentViews = counts.reduce((sum, row) => sum + (row.count || 0), 0);
+    const currentViews = row?.count ?? 0;
 
     return {
       exceeded: currentViews >= limit,
@@ -257,7 +253,8 @@ export async function checkPageViewLimit(siteId) {
     };
   } catch (error) {
     console.error("Error checking page view limit:", error);
-    return { exceeded: false, currentViews: 0, limit: 0, reason: "Error" };
+    // Fail closed: if we cannot verify usage, do not allow unlimited delivery (script routes treat exceeded as block).
+    return { exceeded: true, currentViews: 0, limit: 0, reason: "Error" };
   }
 }
 

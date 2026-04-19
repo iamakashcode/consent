@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES, normalizeBannerConfig, bannerPlacementCss } from "@/lib/banner-templates";
 import { hasVerificationColumns } from "@/lib/db-utils";
-import { isSubscriptionActive } from "@/lib/subscription";
-import { getScript, getCdnUrl } from "@/lib/cdn-service";
+import { isSubscriptionActive, checkPageViewLimit } from "@/lib/subscription";
+import { getScript, getCdnUrl, BLANK_SCRIPT } from "@/lib/cdn-service";
 import { escapeForSingleQuotedJs, normalizeDomainForConsentScript } from "@/lib/consent-domain";
 
 // Generate AGGRESSIVE pre-execution blocker with IMPROVEMENTS
@@ -1589,18 +1589,43 @@ export async function GET(req, { params }) {
     const isPreview = searchParams.get("preview") === "1";
     const configParam = searchParams.get("config");
 
+    const scriptBlockHeaders = {
+      "Content-Type": "application/javascript; charset=utf-8",
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      "Access-Control-Allow-Origin": "*",
+    };
+
+    async function canServeProductionScript() {
+      const siteRow = await prisma.site.findUnique({
+        where: { siteId },
+        select: { id: true },
+      });
+      if (!siteRow) return { ok: false };
+      const [subSt, viewLim] = await Promise.all([
+        isSubscriptionActive(siteRow.id),
+        checkPageViewLimit(siteId),
+      ]);
+      return { ok: subSt.isActive && !viewLim.exceeded, subSt, viewLim };
+    }
+
     // Try to serve from CDN first (only for production, not preview with custom config)
     if (!isPreview || !configParam) {
       try {
         const cdnScript = await getScript(siteId, isPreview);
         if (cdnScript) {
-          // Script found in CDN - serve it with proper cache headers
+          // Never trust cached CDN bytes alone: re-check subscription + view cap (same as /cdn route).
+          if (!isPreview) {
+            const gate = await canServeProductionScript();
+            if (!gate.ok) {
+              return new Response(BLANK_SCRIPT, { status: 200, headers: scriptBlockHeaders });
+            }
+          }
           return new Response(cdnScript, {
             status: 200,
             headers: {
               "Content-Type": "application/javascript; charset=utf-8",
-              "Cache-Control": isPreview 
-                ? "no-cache, no-store, must-revalidate" 
+              "Cache-Control": isPreview
+                ? "no-cache, no-store, must-revalidate"
                 : "public, max-age=31536000, immutable",
               "Access-Control-Allow-Origin": "*",
             },
@@ -1637,6 +1662,10 @@ export async function GET(req, { params }) {
             headers: { "Content-Type": "application/javascript" },
           }
         );
+      }
+      const viewLimit = await checkPageViewLimit(siteId);
+      if (viewLimit.exceeded) {
+        return new Response(BLANK_SCRIPT, { status: 200, headers: scriptBlockHeaders });
       }
     }
 
