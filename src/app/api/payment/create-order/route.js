@@ -16,6 +16,7 @@ import {
   getOrCreatePaddleAddonPrice,
 } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
+import { clearUserTrialFields } from "@/lib/subscription";
 
 
 /**
@@ -96,13 +97,34 @@ export async function POST(req) {
       };
     }
 
+    const userSitesCount = await prisma.site.count({ where: { userId: session.user.id } });
+    const subRow = site.subscription || null;
+    const subStatusEarly = (subRow?.status || "").toLowerCase();
+    const subPlanEarly = (subRow?.plan || "").toLowerCase();
+    const subIntervalEarly = String(subRow?.billingInterval || "monthly").toLowerCase();
+    const targetInterval = String(billingInterval || "monthly").toLowerCase();
+    const planTierChanging =
+      ["basic", "starter", "pro"].includes(subPlanEarly) && subPlanEarly !== String(plan).toLowerCase();
+    const billingIntervalChanging =
+      ["basic", "starter", "pro"].includes(subPlanEarly) &&
+      subPlanEarly === String(plan).toLowerCase() &&
+      subIntervalEarly !== targetInterval;
+    const serverDetectedUpgrade =
+      !!subRow &&
+      ["active", "trial"].includes(subStatusEarly) &&
+      (planTierChanging || billingIntervalChanging);
+    // Client sometimes omits `upgrade: true` when `isActive` is false but status is still trial — server must force no-trial Paddle price.
+    const isUpgradeFlow = Boolean(upgrade) || serverDetectedUpgrade;
+    const isFirstDomain = pendingDomain ? userSitesCount === 0 : userSitesCount === 1;
+    const trialDays = isUpgradeFlow ? 0 : isFirstDomain ? 14 : 0;
+
     // Check if domain already has an active subscription
     if (site.subscription) {
       const status = site.subscription.status?.toLowerCase();
       const currentPlan = (site.subscription.plan || "").toLowerCase();
 
       // Upgrade: cancel current subscription (immediately), then proceed to create new one
-      if (upgrade && (status === "active" || status === "trial") && plan !== currentPlan) {
+      if (isUpgradeFlow && (status === "active" || status === "trial") && (plan !== currentPlan || String(site.subscription.billingInterval || "monthly").toLowerCase() !== targetInterval)) {
         if (site.subscription.paddleSubscriptionId) {
           try {
             await cancelPaddleSubscription(site.subscription.paddleSubscriptionId, false);
@@ -171,14 +193,6 @@ export async function POST(req) {
     }
 
     const amount = PLAN_PRICING[plan];
-
-    // Free trial only for user's first domain; upgrade + second domain = no trial (Paddle)
-    const userSitesCount = await prisma.site.count({ where: { userId: session.user.id } });
-    const isUpgradeFlow = Boolean(upgrade);
-    const isFirstDomain = pendingDomain
-      ? userSitesCount === 0
-      : userSitesCount === 1;
-    const trialDays = isUpgradeFlow ? 0 : (isFirstDomain ? 14 : 0);
 
     // Addon allowed in free trial too: same 14 days free, then plan + addon both charge.
     const addonRemoveBranding = Boolean(requestedAddonRemoveBranding);
@@ -385,6 +399,8 @@ export async function POST(req) {
           where: { siteId: site.id },
           data: {
             status: "pending",
+            plan,
+            billingInterval,
             paddleProductId: paddleProduct.id,
             paddlePriceId: paddlePrice.id,
             paddleCustomerId: paddleCustomer.id,
@@ -411,6 +427,12 @@ export async function POST(req) {
       return Response.json(
         { error: "Failed to save subscription. Please try again." },
         { status: 500 }
+      );
+    }
+
+    if (isUpgradeFlow && session.user.id) {
+      await clearUserTrialFields(session.user.id).catch((err) =>
+        console.warn("[Payment] clearUserTrialFields after upgrade checkout:", err?.message)
       );
     }
 

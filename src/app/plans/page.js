@@ -108,7 +108,11 @@ function PlansContent() {
       return;
     }
 
-    const isUpgrade = currentSubscription?.isActive && ["active", "trial"].includes(currentSubscription?.status) && currentSubscription?.plan !== planKey;
+    // Do not require `isActive`: trial-only access can still report `isActive: false` while `status` is `trial`, which would skip `upgrade` and create a 14-day trial Paddle price ("Due today €0").
+    const isUpgrade =
+      !!currentSubscription?.plan &&
+      ["active", "trial"].includes(currentSubscription?.status || "") &&
+      currentSubscription.plan !== planKey;
     setLoading(true);
     setSelectedPlan(planKey);
 
