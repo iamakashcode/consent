@@ -93,6 +93,15 @@ function DashboardContent() {
     }
   }, [status, router]);
 
+  // Overview aggregates all domains; drop siteId from URL so it is not confused with per-site pages.
+  useEffect(() => {
+    const siteId = searchParams?.get("siteId");
+    if (!siteId) return;
+    const payment = searchParams.get("payment");
+    const next = payment === "success" ? "/dashboard?payment=success" : "/dashboard";
+    router.replace(next);
+  }, [searchParams, router]);
+
   useEffect(() => {
     if (!session || hasRefreshed.current) return;
     hasRefreshed.current = true;

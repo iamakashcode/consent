@@ -33,6 +33,12 @@ function buildHrefWithSite(path, siteId) {
   return `${path}${sep}siteId=${encodeURIComponent(siteId)}`;
 }
 
+/** Workspace overview is all domains — never tie it to a single siteId in the URL. */
+function navHref(path, siteId) {
+  if (path === "/dashboard") return "/dashboard";
+  return buildHrefWithSite(path, siteId);
+}
+
 function siteIdFromManagePath(pathname) {
   if (!pathname) return null;
   const m = pathname.match(/^\/dashboard\/domains\/([^/]+)\/manage\/?$/);
@@ -57,10 +63,7 @@ function DashboardHeaderInner() {
     <header className="sticky top-0 z-40 w-full bg-white/80 backdrop-blur-xl border-b border-slate-200/60 shadow-sm transition-all duration-200">
       <div className="flex items-center justify-between h-16 w-full max-w-[1600px] mx-auto px-4 md:px-8">
         <div className="flex items-center gap-4 md:gap-8 min-w-0">
-          <Link
-            href={buildHrefWithSite("/dashboard", siteId)}
-            className="flex items-center gap-2.5 shrink-0 group"
-          >
+          <Link href="/dashboard" className="flex items-center gap-2.5 shrink-0 group">
             <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-500/20 group-hover:shadow-indigo-500/30 transition-shadow">
               <span className="text-white font-bold text-sm tracking-widest">CF</span>
             </div>
@@ -71,7 +74,7 @@ function DashboardHeaderInner() {
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.href);
-              const href = buildHrefWithSite(item.href, siteId);
+              const href = navHref(item.href, siteId);
               return (
                 <Link
                   key={item.href}
@@ -184,7 +187,7 @@ function DashboardHeaderInner() {
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.href);
-              const href = buildHrefWithSite(item.href, siteId);
+              const href = navHref(item.href, siteId);
               return (
                 <Link
                   key={item.href}
