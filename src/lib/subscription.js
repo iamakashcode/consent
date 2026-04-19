@@ -224,8 +224,8 @@ export async function checkPageViewLimit(siteId) {
       return { exceeded: true, currentViews: 0, limit: 0, reason: "No subscription" };
     }
 
-    const plan = subscription.plan || "basic";
-    const limit = PLAN_PAGE_VIEW_LIMITS[plan] || 100000;
+    const planKey = String(subscription.plan || "basic").toLowerCase();
+    const limit = PLAN_PAGE_VIEW_LIMITS[planKey] ?? 100000;
 
     // Unlimited plan
     if (limit === Infinity) {

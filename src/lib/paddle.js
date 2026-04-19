@@ -46,13 +46,6 @@ export const ADDON_BRANDING_PRICE_CENTS = 300; // EUR 3
 export const ADDON_BRANDING_PRICE_EUR = 3;
 export const ADDON_BRANDING_PRODUCT_NAME = "remove_branding";
 
-// Plan page view limits (per domain per month) – used by views API and can-customize
-export const PLAN_PAGE_VIEW_LIMITS = {
-  basic: 300000,   // 300,000 page views per month
-  starter: 700000, // 700,000 page views per month
-  pro: Infinity,   // Unlimited
-};
-
 // Single PLAN_DETAILS for display everywhere (plans, billing, start-trial, landing, pricing)
 export const PLAN_DETAILS = {
   basic: {
@@ -66,7 +59,7 @@ export const PLAN_DETAILS = {
     popular: false,
     features: [
       "1 domain",
-      "300,000 page views/month",
+      "10 page views/month",
       "Basic tracker detection",
       "Cookie consent banner",
       "Community support",
@@ -112,6 +105,13 @@ export const PLAN_DETAILS = {
       "14-day free trial (first domain only)",
     ],
   },
+};
+
+/** Enforced monthly caps — derived from `PLAN_DETAILS[*].pageViews` so billing UI and script limits stay aligned */
+export const PLAN_PAGE_VIEW_LIMITS = {
+  basic: PLAN_DETAILS.basic.pageViews,
+  starter: PLAN_DETAILS.starter.pageViews,
+  pro: PLAN_DETAILS.pro.pageViews,
 };
 
 /**
