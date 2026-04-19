@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Globe, CheckCircle2, Clock, XCircle, Pencil, Trash2, Plus, Copy, RefreshCw } from "lucide-react";
+import { Globe, CheckCircle2, Clock, XCircle, Pencil, Trash2, Plus, Copy, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Shared components
@@ -474,6 +474,12 @@ function DomainsContent() {
                         </TableCell>
                         <TableCell className="text-right px-6">
                           <div className="flex items-center justify-end gap-1.5 flex-wrap opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                            <Button size="sm" asChild className="h-8 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-colors">
+                              <Link href={`/dashboard/domains/${site.siteId}/manage`}>
+                                <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5" />
+                                Manage
+                              </Link>
+                            </Button>
                             {isActive && (
                               <>
                                 <Button variant="outline" size="sm" onClick={() => copyScript(site)} className="h-8 text-xs font-medium rounded-lg text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-colors">

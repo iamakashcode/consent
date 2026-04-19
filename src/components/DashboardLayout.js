@@ -33,6 +33,12 @@ function buildHrefWithSite(path, siteId) {
   return `${path}${sep}siteId=${encodeURIComponent(siteId)}`;
 }
 
+function siteIdFromManagePath(pathname) {
+  if (!pathname) return null;
+  const m = pathname.match(/^\/dashboard\/domains\/([^/]+)\/manage\/?$/);
+  return m?.[1] ?? null;
+}
+
 function DashboardHeaderInner() {
   const { data: session } = useSession();
   const pathname = usePathname();
@@ -40,7 +46,7 @@ function DashboardHeaderInner() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
-  const siteId = searchParams?.get("siteId") || null;
+  const siteId = searchParams?.get("siteId") || siteIdFromManagePath(pathname) || null;
 
   const isActive = (href) => {
     if (href === "/dashboard") return pathname === "/dashboard";
