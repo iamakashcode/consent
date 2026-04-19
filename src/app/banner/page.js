@@ -315,9 +315,17 @@ function BannerContent() {
       });
 
       if (response.ok) {
-        toast.success("Banner settings saved successfully!");
-        setSites((prev) => prev.map((s) => s.siteId === selectedSite.siteId ? { ...s, bannerConfig } : s));
-        setSelectedSite((prev) => (prev ? { ...prev, bannerConfig } : prev));
+        const data = await response.json().catch(() => ({}));
+        if (data?.regenerateError) {
+          toast.warning("Saved to database, but live script upload failed", {
+            description: data.regenerateError,
+          });
+        } else {
+          toast.success("Banner settings saved successfully!");
+        }
+        const savedConfig = data?.site?.bannerConfig ?? bannerConfig;
+        setSites((prev) => prev.map((s) => s.siteId === selectedSite.siteId ? { ...s, bannerConfig: savedConfig } : s));
+        setSelectedSite((prev) => (prev ? { ...prev, bannerConfig: savedConfig } : prev));
         if (selectedSite) loadPreviewOnce(selectedSite, config);
       } else {
         let msg = "Failed to save settings";

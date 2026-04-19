@@ -72,11 +72,23 @@ export async function PUT(req, { params }) {
       );
     }
 
+    // Merge with existing JSON so internal keys (e.g. _verification) are not wiped by the editor payload
+    const prev =
+      site.bannerConfig && typeof site.bannerConfig === "object" && !Array.isArray(site.bannerConfig)
+        ? site.bannerConfig
+        : {};
+    const incoming =
+      bannerConfig && typeof bannerConfig === "object" && !Array.isArray(bannerConfig) ? bannerConfig : {};
+    const merged = { ...prev, ...incoming };
+    for (const key of Object.keys(prev)) {
+      if (key.startsWith("_") && !(key in incoming)) merged[key] = prev[key];
+    }
+
     // Update banner configuration
     const updated = await prisma.site.update({
       where: { id: site.id },
       data: {
-        bannerConfig: bannerConfig,
+        bannerConfig: merged,
       },
     });
 

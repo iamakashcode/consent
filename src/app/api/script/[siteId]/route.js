@@ -1199,10 +1199,16 @@ export function generateMainScript(siteId, allowedDomain, isPreview, config, ban
   
   const escapeForTemplate = (str) => {
     if (!str) return '';
-    return String(str)
-      .replace(/\\/g, '\\\\')
-      .replace(/\`/g, '\\`')
-      .replace(/\$/g, '\\$');
+    let s = String(str);
+    // Line breaks / unicode line terminators break single-quoted JS segments in the emitted file
+    s = s.replace(/\r\n|\r|\n|\u2028|\u2029/g, " ");
+    // Safe inside innerHTML text nodes
+    s = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    // Escape for emitted JavaScript string literals
+    s = s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    // Do not break the server-side template literal that wraps this output
+    s = s.replace(/`/g, "\\`").replace(/\$/g, "\\$");
+    return s;
   };
   
   const safeTitle = escapeForTemplate(title);

@@ -50,9 +50,10 @@ export async function r2Upload(siteId, content, isPreview = false) {
         Key: k,
         Body: content,
         ContentType: "application/javascript; charset=utf-8",
+        // Production: avoid immutable forever — banner/config updates must reach browsers without stale JS.
         CacheControl: isPreview
           ? "no-cache, no-store, must-revalidate"
-          : "public, max-age=31536000, immutable",
+          : "public, max-age=0, must-revalidate",
       })
     );
     return k;
