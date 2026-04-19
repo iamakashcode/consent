@@ -125,7 +125,7 @@ function UsageContent() {
         const data = await subsRes.json();
         const map = {};
         (data.subscriptions || []).forEach((item) => {
-          map[item.siteId] = { ...item, userTrialActive: data.userTrialActive || false, userTrialDaysLeft: data.userTrialDaysLeft || null };
+          map[item.siteId] = { ...item };
         });
         setSubscriptions(map);
       }

@@ -32,12 +32,7 @@ function DashboardContent() {
         const subsMap = {};
         if (data.subscriptions) {
           data.subscriptions.forEach((item) => {
-            subsMap[item.siteId] = {
-              ...item,
-              userTrialActive: data.userTrialActive || false,
-              userTrialDaysLeft: data.userTrialDaysLeft || null,
-              userTrialEndAt: data.userTrialEndAt || null,
-            };
+            subsMap[item.siteId] = { ...item };
           });
         }
         setSubscriptions(subsMap);
@@ -147,7 +142,9 @@ function DashboardContent() {
   if (!session) return null;
 
   const activeCount = Object.values(subscriptions).filter((s) => s.isActive).length;
-  const trialCount = Object.values(subscriptions).filter((s) => (s.subscription?.status === "trial" || s.userTrialActive)).length;
+  const trialCount = Object.values(subscriptions).filter(
+    (s) => s.userTrialActive || (s.subscription?.status === "trial" && s.isFirstDomain)
+  ).length;
   const getViewsForSite = (site) => {
     const stats = siteStats[site.siteId];
     if (stats && typeof stats.totalViews === "number") return stats.totalViews;

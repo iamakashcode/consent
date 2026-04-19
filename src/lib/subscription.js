@@ -533,12 +533,18 @@ export async function getUserSubscriptions(userId) {
             isActive = true;
           }
         } else if (status === "trial") {
-          if (subscription.currentPeriodEnd && now < new Date(subscription.currentPeriodEnd)) {
+          // Only the first domain may use a trial-period window; additional domains must pay (Paddle trialDays=0).
+          if (
+            isFirstDomain &&
+            subscription.currentPeriodEnd &&
+            now < new Date(subscription.currentPeriodEnd)
+          ) {
             isActive = true;
           }
         }
 
         const trialDaysLeft = (userTrialInFuture && isFirstDomain) ? userTrialDaysLeft : null;
+        const userTrialAppliesToThisSite = Boolean(userTrialInFuture && isFirstDomain);
 
         return {
           siteId: site.siteId,
@@ -550,6 +556,8 @@ export async function getUserSubscriptions(userId) {
           isActive,
           isFirstDomain,
           trialDaysLeft,
+          userTrialActive: userTrialAppliesToThisSite,
+          userTrialDaysLeft: userTrialAppliesToThisSite ? userTrialDaysLeft : null,
         };
       });
 

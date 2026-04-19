@@ -92,11 +92,7 @@ export default function ManageDomainPage() {
       const data = await subsRes.json();
       const row = (data.subscriptions || []).find((item) => item.siteId === siteId);
       if (row) {
-        sub = {
-          ...row,
-          userTrialActive: data.userTrialActive || false,
-          userTrialDaysLeft: data.userTrialDaysLeft ?? null,
-        };
+        sub = { ...row };
       }
     }
 

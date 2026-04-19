@@ -178,7 +178,9 @@ function BillingContent() {
             const statusLower = subData.status?.toLowerCase() || sub.status?.toLowerCase();
             const planBase = subData.plan || "basic";
             const planName = PLAN_DETAILS[planBase]?.name || "Custom Plan";
-            const isTrial = statusLower === 'trial' || sub.userTrialActive;
+            const isTrial =
+              !!sub.userTrialActive ||
+              (statusLower === "trial" && !!sub.isFirstDomain);
 
             // Setup pill colors based on status
             let statusBadge = null;

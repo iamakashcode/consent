@@ -50,6 +50,10 @@ export async function GET(req) {
 
       const status = await isDomainActive(dbSubscription.site.id);
 
+      const userTrialActive =
+        !!(status.user?.trialEndAt && new Date() < new Date(status.user.trialEndAt)) &&
+        String(status.reason || "").includes("user_trial");
+
       return Response.json({
         siteId: dbSubscription.site.siteId,
         siteDbId: dbSubscription.site.id,
@@ -60,7 +64,7 @@ export async function GET(req) {
         isActive: status.isActive,
         reason: status.reason,
         trialDaysLeft: status.trialDaysLeft,
-        userTrialActive: status.user?.trialEndAt && new Date() < new Date(status.user.trialEndAt),
+        userTrialActive,
       });
     }
 
@@ -83,6 +87,10 @@ export async function GET(req) {
 
       const status = await isDomainActive(site.id);
 
+      const userTrialActive =
+        !!(status.user?.trialEndAt && new Date() < new Date(status.user.trialEndAt)) &&
+        String(status.reason || "").includes("user_trial");
+
       return Response.json({
         siteId: site.siteId,
         siteDbId: site.id,
@@ -93,7 +101,7 @@ export async function GET(req) {
         isActive: status.isActive,
         reason: status.reason,
         trialDaysLeft: status.trialDaysLeft,
-        userTrialActive: status.user?.trialEndAt && new Date() < new Date(status.user.trialEndAt),
+        userTrialActive,
       });
     }
 
