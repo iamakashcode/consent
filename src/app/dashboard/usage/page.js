@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, startTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -22,6 +22,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { SectionCard, SectionCardHeader } from "@/components/shared/SectionCard";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { inputClasses } from "@/components/shared/FormField";
 import { cn } from "@/lib/utils";
 
 function UsageContent() {
@@ -32,6 +33,7 @@ function UsageContent() {
   const [sites, setSites] = useState([]);
   const [subscriptions, setSubscriptions] = useState({});
   const [siteStats, setSiteStats] = useState({});
+  const [selectedSiteId, setSelectedSiteId] = useState("");
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -41,14 +43,32 @@ function UsageContent() {
     if (session) fetchData();
   }, [session]);
 
-  const focusSiteId = searchParams?.get("siteId");
   useEffect(() => {
-    if (!focusSiteId || sites.length === 0) return;
+    if (sites.length === 0) return;
+    const param = searchParams?.get("siteId");
+    const match = param && sites.find((s) => s.siteId === param || String(s.id) === param);
+    startTransition(() => {
+      if (match) {
+        setSelectedSiteId(match.siteId);
+        return;
+      }
+      if (param) {
+        const fallback = sites[0].siteId;
+        setSelectedSiteId(fallback);
+        router.replace(`/dashboard/usage?siteId=${encodeURIComponent(fallback)}`, { scroll: false });
+        return;
+      }
+      setSelectedSiteId((prev) => prev || sites[0].siteId);
+    });
+  }, [sites, searchParams, router]);
+
+  useEffect(() => {
+    if (!selectedSiteId || sites.length === 0) return;
     const t = requestAnimationFrame(() => {
-      document.getElementById(`usage-row-${focusSiteId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document.getElementById(`usage-row-${selectedSiteId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
     return () => cancelAnimationFrame(t);
-  }, [focusSiteId, sites.length]);
+  }, [selectedSiteId, sites.length]);
 
   // After payment success we redirect to Domains; if user lands here (e.g. Paddle or old link), send to domains
   useEffect(() => {
@@ -147,10 +167,20 @@ function UsageContent() {
     if (stats && typeof stats.totalViews === "number") return stats.totalViews;
     return site.pageViews || 0;
   };
-  const totalPageViews = sites.reduce((acc, site) => acc + getViewsForSite(site), 0);
-  const activeCount = Object.values(subscriptions).filter((s) => s.isActive).length;
+
+  const selectedSite = sites.find((s) => s.siteId === selectedSiteId);
+  const totalPageViews = selectedSite ? getViewsForSite(selectedSite) : 0;
+  const selectedStats = selectedSiteId ? siteStats[selectedSiteId] : null;
+  const selectedRecent = selectedStats?.recentViews ?? null;
+  const selectedUnique =
+    selectedStats && typeof selectedStats.totalUniquePages === "number"
+      ? selectedStats.totalUniquePages
+      : selectedSite?.uniquePages ?? 0;
+
   const success = searchParams.get("payment") === "success";
-  const viewsPerDomain = sites.map((site) => ({ domain: site.domain, views: getViewsForSite(site) }));
+  const viewsPerDomain = selectedSite
+    ? [{ domain: selectedSite.domain, views: getViewsForSite(selectedSite), siteId: selectedSite.siteId }]
+    : [];
   const maxViews = Math.max(1, ...viewsPerDomain.map((d) => d.views));
 
   return (
@@ -159,6 +189,48 @@ function UsageContent() {
         title="Usage Metrics"
         description="Monitor billable page views and traffic distribution across your infrastructure."
       />
+
+      {sites.length > 0 && (
+        <SectionCard hoverLift className="pb-6 border-b-0 rounded-b-none shadow-none border-t border-x mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1.5 w-full sm:w-80">
+              <label className="block text-[13px] font-semibold tracking-wide uppercase text-slate-500">Filter by Domain</label>
+              <div className="relative">
+                <select
+                  value={selectedSiteId}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setSelectedSiteId(next);
+                    router.replace(`/dashboard/usage?siteId=${encodeURIComponent(next)}`, { scroll: false });
+                  }}
+                  className={cn(inputClasses, "appearance-none pr-10 cursor-pointer")}
+                >
+                  <option value="" disabled>
+                    Select a workspace domain
+                  </option>
+                  {sites.map((site) => (
+                    <option key={site.id} value={site.siteId}>
+                      {site.domain}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+            {selectedSite && (
+              <div className="text-right shrink-0">
+                <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                  {selectedSite.domain}
+                </span>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+      )}
 
       {success && (
         <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50/80 px-5 py-4 text-[14px] font-medium text-emerald-800 shadow-sm animate-in fade-in slide-in-from-top-4">
@@ -171,23 +243,23 @@ function UsageContent() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8">
         <StatsCard
-          title="Total Page Views"
-          value={totalPageViews.toLocaleString()}
-          subtitle="All connected domains"
+          title="Page views"
+          value={selectedSite ? totalPageViews.toLocaleString() : "—"}
+          subtitle={selectedSite ? "Selected domain" : "Pick a domain above"}
           icon={BarChart3}
           color="indigo"
         />
         <StatsCard
-          title="Active Domains"
-          value={activeCount}
-          subtitle="Subscribed or in trial"
+          title="30-day requests"
+          value={selectedRecent != null ? selectedRecent.toLocaleString() : "—"}
+          subtitle={selectedSite ? "Rolling window" : "—"}
           icon={Activity}
           color="emerald"
         />
         <StatsCard
-          title="Tracked Assets"
-          value={sites.length}
-          subtitle="Projects configured"
+          title="Unique pages"
+          value={selectedSite ? selectedUnique.toLocaleString() : "—"}
+          subtitle={selectedSite ? "Tracked paths" : "—"}
           icon={Globe}
           color="violet"
         />
@@ -196,18 +268,18 @@ function UsageContent() {
       <div className="grid lg:grid-cols-2 gap-6">
         <SectionCard hoverLift>
           <SectionCardHeader
-            title="Traffic Density"
-            description="Normalized view volumes broken down by project origin."
+            title="Traffic density"
+            description={selectedSite ? `View volume for ${selectedSite.domain}.` : "Select a domain to see its traffic bar."}
             icon={BarChart3}
           />
           <div className="pt-2">
-            {viewsPerDomain.length === 0 ? (
+            {!selectedSiteId || viewsPerDomain.length === 0 ? (
               <div className="py-8 text-center bg-slate-50/50 rounded-xl border border-slate-100 border-dashed">
-                <p className="text-[14px] font-medium text-slate-500">No telemetry data. Install script to begin.</p>
+                <p className="text-[14px] font-medium text-slate-500">Select a domain above to load telemetry for that property.</p>
               </div>
             ) : (
               <div className="h-56 flex items-end gap-3 px-2 sm:px-6 mt-4">
-                {viewsPerDomain.map(({ domain, views }) => (
+                {viewsPerDomain.map(({ domain, views, siteId }) => (
                   <div key={domain} className="group relative flex-1 flex flex-col items-center justify-end h-full">
                     {/* Tooltip */}
                     <div className="opacity-0 group-hover:opacity-100 absolute -top-10 bg-slate-900 text-white text-[12px] font-semibold py-1.5 px-3 rounded-lg shadow-xl shadow-slate-900/20 whitespace-nowrap transition-opacity pointer-events-none z-10 hidden sm:block">
@@ -216,7 +288,10 @@ function UsageContent() {
                     </div>
                     {/* Bar */}
                     <div
-                      className="w-full max-w-[48px] bg-indigo-500 group-hover:bg-indigo-400 rounded-t-lg transition-all duration-500 ease-out flex-shrink-0 relative overflow-hidden ring-1 ring-inset ring-black/5"
+                      className={cn(
+                        "w-full max-w-[48px] bg-indigo-500 group-hover:bg-indigo-400 rounded-t-lg transition-all duration-500 ease-out flex-shrink-0 relative overflow-hidden ring-1 ring-inset ring-black/5",
+                        siteId === selectedSiteId && "ring-2 ring-indigo-400 ring-offset-2 ring-offset-white"
+                      )}
                       style={{ height: `${(views / maxViews) * 100}%`, minHeight: views > 0 ? "8px" : 0 }}
                     >
                       <div className="absolute inset-x-0 top-0 h-1 bg-white/20" />
@@ -253,7 +328,7 @@ function UsageContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sites.map((site) => {
+                  {(selectedSiteId ? sites.filter((s) => s.siteId === selectedSiteId) : sites).map((site) => {
                     const sub = subscriptions[site.siteId];
                     const isActive = sub?.isActive || false;
                     const status = sub?.subscription?.status?.toLowerCase();
@@ -263,7 +338,7 @@ function UsageContent() {
                     const views = getViewsForSite(site);
                     const stats = siteStats[site.siteId];
                     const recentViews = stats?.recentViews ?? null;
-                    const rowFocused = focusSiteId && site.siteId === focusSiteId;
+                    const rowFocused = selectedSiteId && site.siteId === selectedSiteId;
                     return (
                       <TableRow
                         key={site.id}
@@ -309,8 +384,8 @@ function UsageContent() {
               <Button variant="ghost" className="text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 w-full" asChild>
                 <Link
                   href={
-                    focusSiteId
-                      ? `/dashboard/domains?siteId=${encodeURIComponent(focusSiteId)}`
+                    selectedSiteId
+                      ? `/dashboard/domains?siteId=${encodeURIComponent(selectedSiteId)}`
                       : "/dashboard/domains"
                   }
                 >

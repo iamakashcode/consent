@@ -8,6 +8,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { inputClasses } from "@/components/shared/FormField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -259,24 +260,11 @@ function BannerContent() {
     let cancelled = false;
     const fetchSitesOnce = async () => {
       try {
-        const [sitesRes, subsRes] = await Promise.all([fetch("/api/sites"), fetch("/api/subscription")]);
+        const sitesRes = await fetch("/api/sites");
         if (cancelled || !sitesRes.ok) return;
         const sitesData = await sitesRes.json();
-        let activeSites = [];
-        if (subsRes.ok) {
-          const subsData = await subsRes.json();
-          const subscriptionsMap = {};
-          (subsData.subscriptions || []).forEach((item) => {
-            subscriptionsMap[item.siteId] = { ...item, userTrialActive: subsData.userTrialActive || false };
-          });
-          activeSites = sitesData.filter((site) => {
-            const subData = subscriptionsMap[site.siteId];
-            return subData?.isActive || subsData.userTrialActive;
-          });
-        } else {
-          activeSites = sitesData;
-        }
-        if (!cancelled) setSites(activeSites);
+        const list = Array.isArray(sitesData) ? sitesData : [];
+        if (!cancelled) setSites(list);
       } catch (err) {
         console.error("Error:", err);
       } finally {
@@ -451,6 +439,47 @@ function BannerContent() {
           </div>
         }
       />
+
+      {sites.length > 0 && (
+        <SectionCard hoverLift className="pb-6 border-b-0 rounded-b-none shadow-none border-t border-x mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1.5 w-full sm:w-80">
+              <label className="block text-[13px] font-semibold tracking-wide uppercase text-slate-500">Filter by Domain</label>
+              <div className="relative">
+                <select
+                  value={selectedSite?.siteId ?? ""}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    router.replace(`/banner?siteId=${encodeURIComponent(next)}`, { scroll: false });
+                  }}
+                  className={cn(inputClasses, "appearance-none pr-10 cursor-pointer")}
+                >
+                  <option value="" disabled>
+                    Select a workspace domain
+                  </option>
+                  {sites.map((s) => (
+                    <option key={s.id} value={s.siteId}>
+                      {s.domain}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+            {selectedSite && (
+              <div className="text-right shrink-0">
+                <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                  Editing {selectedSite.domain}
+                </span>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+      )}
 
       {sites.length === 0 ? (
         <SectionCard hoverLift>
