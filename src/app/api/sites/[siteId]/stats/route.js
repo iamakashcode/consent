@@ -25,6 +25,7 @@ export async function GET(req, { params }) {
       where: { siteId },
       select: {
         id: true,
+        siteId: true,
         userId: true,
         domain: true,
       },

@@ -106,21 +106,41 @@ export async function GET(req) {
       }
 
       // Add total page view count per site (from SiteViewCount; no per-view rows)
+      // and distinct page path count (from SitePathViewCount) so dashboard can show unique pages
+      // even when /api/sites/[id]/stats is skipped or fails.
       try {
+        const siteIds = sites.map((s) => s.id);
         const viewCounts = await prisma.siteViewCount.groupBy({
           by: ["siteId"],
-          where: { siteId: { in: sites.map((s) => s.id) } },
+          where: { siteId: { in: siteIds } },
           _sum: { count: true },
         });
         const countBySiteId = Object.fromEntries(
           viewCounts.map((row) => [row.siteId, row._sum?.count ?? 0])
         );
+
+        const uniqueSets = {};
+        try {
+          const pathRows = await prisma.sitePathViewCount.findMany({
+            where: { siteId: { in: siteIds } },
+            distinct: ["siteId", "pagePath"],
+            select: { siteId: true, pagePath: true },
+          });
+          for (const row of pathRows) {
+            if (!uniqueSets[row.siteId]) uniqueSets[row.siteId] = new Set();
+            uniqueSets[row.siteId].add(row.pagePath || "/");
+          }
+        } catch (pathAggErr) {
+          console.warn("[Sites API] Unique page path aggregation skipped:", pathAggErr?.message || pathAggErr);
+        }
+
         sites = sites.map((site) => ({
           ...site,
           pageViews: countBySiteId[site.id] ?? 0,
+          uniquePages: uniqueSets[site.id]?.size ?? 0,
         }));
       } catch (_) {
-        sites = sites.map((site) => ({ ...site, pageViews: 0 }));
+        sites = sites.map((site) => ({ ...site, pageViews: 0, uniquePages: 0 }));
       }
     } catch (error) {
       // If columns don't exist yet, fetch without them and add defaults

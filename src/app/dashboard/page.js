@@ -145,10 +145,12 @@ function DashboardContent() {
     return site.pageViews || 0;
   };
   const totalPageViews = sites.reduce((acc, site) => acc + getViewsForSite(site), 0);
-  const totalUniquePages = sites.reduce((acc, site) => {
+  const getUniquePagesForSite = (site) => {
     const stats = siteStats[site.siteId];
-    return acc + (stats?.totalUniquePages || 0);
-  }, 0);
+    if (stats && typeof stats.totalUniquePages === "number") return stats.totalUniquePages;
+    return site.uniquePages ?? 0;
+  };
+  const totalUniquePages = sites.reduce((acc, site) => acc + getUniquePagesForSite(site), 0);
   const verifiedCount = sites.filter((s) => s.isVerified).length;
   const paymentSuccess = searchParams?.get("payment") === "success";
 
