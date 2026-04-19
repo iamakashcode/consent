@@ -119,7 +119,6 @@ function BannerContent() {
   const [addonCheckoutLoading, setAddonCheckoutLoading] = useState(false);
   const [siteStats, setSiteStats] = useState({ totalViews: 0, totalUniquePages: 0 });
   const selectedSiteRef = useRef(null);
-  const hasFetchedRef = useRef(false);
   const customizeSectionRef = useRef(null);
 
   const fetchSiteStats = useCallback(async (siteId) => {
@@ -209,74 +208,96 @@ function BannerContent() {
     }
   }, [buildPreviewHtml, sanitizeDomain]);
 
-  useEffect(() => {
-    if (status !== "authenticated" || hasFetchedRef.current) return;
-    hasFetchedRef.current = true;
+  const checkVerificationStatus = useCallback(async (siteId) => {
+    if (!siteId) return;
+    try {
+      const res = await fetch(`/api/sites/${siteId}/verify`);
+      if (res.ok) {
+        const data = await res.json();
+        setIsVerified(data.isVerified || false);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
+  const initializeSiteWorkspace = useCallback(
+    (nextSite) => {
+      if (!nextSite?.siteId) return;
+      setSelectedSite(nextSite);
+      selectedSiteRef.current = nextSite;
+      fetchSiteStats(nextSite.siteId);
+      let initialConfig = DEFAULT_CONFIG;
+      if (nextSite?.bannerConfig) {
+        try {
+          const parsedConfig =
+            typeof nextSite.bannerConfig === "string"
+              ? JSON.parse(nextSite.bannerConfig)
+              : nextSite.bannerConfig;
+          initialConfig = normalizeEditorConfig(parsedConfig);
+        } catch {
+          initialConfig = DEFAULT_CONFIG;
+        }
+      }
+      setConfig(initialConfig);
+      setDebouncedConfig(initialConfig);
+      loadPreviewOnce(nextSite, initialConfig);
+      fetch(`/api/sites/${nextSite.siteId}/can-customize`)
+        .then((res) => (res.ok ? res.json() : { canCustomize: true }))
+        .then((data) => {
+          setCanCustomizeBanner(!!data.canCustomize);
+          setCannotCustomizeReason(data.reason || "");
+        })
+        .catch(() => {});
+      checkVerificationStatus(nextSite.siteId);
+    },
+    [checkVerificationStatus, fetchSiteStats, loadPreviewOnce]
+  );
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    let cancelled = false;
     const fetchSitesOnce = async () => {
       try {
-        const [sitesRes, subsRes] = await Promise.all([
-          fetch("/api/sites"),
-          fetch("/api/subscription"),
-        ]);
-
-        if (sitesRes.ok) {
-          const sitesData = await sitesRes.json();
-          let activeSites = [];
-
-          if (subsRes.ok) {
-            const subsData = await subsRes.json();
-            const subscriptionsMap = {};
-            (subsData.subscriptions || []).forEach((item) => {
-              subscriptionsMap[item.siteId] = { ...item, userTrialActive: subsData.userTrialActive || false };
-            });
-
-            activeSites = sitesData.filter(site => {
-              const subData = subscriptionsMap[site.siteId];
-              return subData?.isActive || subsData.userTrialActive;
-            });
-          } else {
-            activeSites = sitesData;
-          }
-
-          setSites(activeSites);
-          const siteIdParam = searchParams?.get("siteId");
-          let nextSite = activeSites.length > 0 ? activeSites.find(s => s.siteId === siteIdParam || s.id === siteIdParam) || activeSites[0] : null;
-
-          if (nextSite) {
-            setSelectedSite(nextSite);
-            selectedSiteRef.current = nextSite;
-            fetchSiteStats(nextSite.siteId);
-            let initialConfig = DEFAULT_CONFIG;
-            if (nextSite?.bannerConfig) {
-              try {
-                const parsedConfig = typeof nextSite.bannerConfig === "string" ? JSON.parse(nextSite.bannerConfig) : nextSite.bannerConfig;
-                initialConfig = normalizeEditorConfig(parsedConfig);
-              } catch {
-                initialConfig = DEFAULT_CONFIG;
-              }
-            }
-            setConfig(initialConfig);
-            setDebouncedConfig(initialConfig);
-            loadPreviewOnce(nextSite, initialConfig);
-            fetch(`/api/sites/${nextSite.siteId}/can-customize`)
-              .then((res) => res.ok ? res.json() : { canCustomize: true })
-              .then((data) => {
-                setCanCustomizeBanner(!!data.canCustomize);
-                setCannotCustomizeReason(data.reason || "");
-              }).catch(() => { });
-            checkVerificationStatus(nextSite.siteId);
-          }
+        const [sitesRes, subsRes] = await Promise.all([fetch("/api/sites"), fetch("/api/subscription")]);
+        if (cancelled || !sitesRes.ok) return;
+        const sitesData = await sitesRes.json();
+        let activeSites = [];
+        if (subsRes.ok) {
+          const subsData = await subsRes.json();
+          const subscriptionsMap = {};
+          (subsData.subscriptions || []).forEach((item) => {
+            subscriptionsMap[item.siteId] = { ...item, userTrialActive: subsData.userTrialActive || false };
+          });
+          activeSites = sitesData.filter((site) => {
+            const subData = subscriptionsMap[site.siteId];
+            return subData?.isActive || subsData.userTrialActive;
+          });
+        } else {
+          activeSites = sitesData;
         }
+        if (!cancelled) setSites(activeSites);
       } catch (err) {
         console.error("Error:", err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
-
     fetchSitesOnce();
-  }, [status, loadPreviewOnce, searchParams, fetchSiteStats]);
+    return () => {
+      cancelled = true;
+    };
+  }, [status]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || sites.length === 0) return;
+    const siteIdParam = searchParams?.get("siteId");
+    const nextSite =
+      (siteIdParam && sites.find((s) => s.siteId === siteIdParam || String(s.id) === siteIdParam)) || sites[0];
+    if (!nextSite) return;
+    if (selectedSite?.siteId === nextSite.siteId) return;
+    initializeSiteWorkspace(nextSite);
+  }, [status, sites, searchParams, selectedSite?.siteId, initializeSiteWorkspace]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -342,17 +363,6 @@ function BannerContent() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const checkVerificationStatus = async (siteId) => {
-    if (!siteId) return;
-    try {
-      const res = await fetch(`/api/sites/${siteId}/verify`);
-      if (res.ok) {
-        const data = await res.json();
-        setIsVerified(data.isVerified || false);
-      }
-    } catch (err) { }
   };
 
   const handleVerify = async () => {

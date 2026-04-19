@@ -41,6 +41,15 @@ function UsageContent() {
     if (session) fetchData();
   }, [session]);
 
+  const focusSiteId = searchParams?.get("siteId");
+  useEffect(() => {
+    if (!focusSiteId || sites.length === 0) return;
+    const t = requestAnimationFrame(() => {
+      document.getElementById(`usage-row-${focusSiteId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => cancelAnimationFrame(t);
+  }, [focusSiteId, sites.length]);
+
   // After payment success we redirect to Domains; if user lands here (e.g. Paddle or old link), send to domains
   useEffect(() => {
     if (searchParams?.get("payment") !== "success") return;
@@ -254,8 +263,16 @@ function UsageContent() {
                     const views = getViewsForSite(site);
                     const stats = siteStats[site.siteId];
                     const recentViews = stats?.recentViews ?? null;
+                    const rowFocused = focusSiteId && site.siteId === focusSiteId;
                     return (
-                      <TableRow key={site.id} className="hover:bg-slate-50/30 transition-colors border-slate-100">
+                      <TableRow
+                        key={site.id}
+                        id={`usage-row-${site.siteId}`}
+                        className={cn(
+                          "hover:bg-slate-50/30 transition-colors border-slate-100",
+                          rowFocused && "bg-indigo-50/80 ring-1 ring-inset ring-indigo-200/80"
+                        )}
+                      >
                         <TableCell className="px-6 py-4">
                           <div className="flex items-center justify-between xl:justify-start xl:gap-2 flex-wrap min-w-[140px]">
                             <span className="font-semibold text-slate-900 text-[14px] truncate">{site.domain}</span>
@@ -290,7 +307,15 @@ function UsageContent() {
           {sites.length > 0 && (
             <div className="p-4 bg-slate-50 border-t border-slate-100 rounded-b-2xl flex justify-center">
               <Button variant="ghost" className="text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 w-full" asChild>
-                <Link href="/dashboard/domains">Manage Infrastructure →</Link>
+                <Link
+                  href={
+                    focusSiteId
+                      ? `/dashboard/domains?siteId=${encodeURIComponent(focusSiteId)}`
+                      : "/dashboard/domains"
+                  }
+                >
+                  Manage Infrastructure →
+                </Link>
               </Button>
             </div>
           )}

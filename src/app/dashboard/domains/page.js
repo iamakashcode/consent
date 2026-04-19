@@ -64,6 +64,15 @@ function DomainsContent() {
     if (session) fetchData();
   }, [session]);
 
+  const focusSiteId = searchParams?.get("siteId");
+  useEffect(() => {
+    if (!focusSiteId || sites.length === 0) return;
+    const id = requestAnimationFrame(() => {
+      document.getElementById(`domains-row-${focusSiteId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [focusSiteId, sites.length]);
+
   useEffect(() => {
     if (!session || searchParams?.get("payment") !== "success") return;
     toast.success("Payment successful", {
@@ -419,8 +428,16 @@ function DomainsContent() {
                           ? "No plan chosen"
                           : "Inactive access";
 
+                    const rowFocused = focusSiteId && site.siteId === focusSiteId;
                     return (
-                      <TableRow key={site.id} className="hover:bg-slate-50/50 transition-colors border-b border-slate-100 group">
+                      <TableRow
+                        key={site.id}
+                        id={`domains-row-${site.siteId}`}
+                        className={cn(
+                          "hover:bg-slate-50/50 transition-colors border-b border-slate-100 group",
+                          rowFocused && "bg-indigo-50/80 ring-1 ring-inset ring-indigo-200/80"
+                        )}
+                      >
                         <TableCell className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <div className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200/50 flex items-center justify-center shrink-0 shadow-sm group-hover:bg-white group-hover:border-slate-300 transition-colors">

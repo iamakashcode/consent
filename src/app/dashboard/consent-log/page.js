@@ -1,8 +1,8 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, Suspense, startTransition } from "react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import { inputClasses } from "@/components/shared/FormField";
 function ConsentLogContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [sites, setSites] = useState([]);
   const [selectedSiteId, setSelectedSiteId] = useState("");
   const [consentData, setConsentData] = useState({
@@ -44,22 +45,40 @@ function ConsentLogContent() {
   }, [status, router]);
 
   useEffect(() => {
-    if (session) {
-      fetch("/api/sites")
-        .then((r) => r.json())
-        .then((data) => {
-          setSites(Array.isArray(data) ? data : []);
-          if (Array.isArray(data) && data.length > 0 && !selectedSiteId) {
-            setSelectedSiteId(data[0].siteId);
-          }
-        })
-        .catch(() => {
-          setSites([]);
-          toast.error("Failed to load domains");
-        })
-        .finally(() => setLoading(false));
-    }
+    if (!session) return;
+    fetch("/api/sites")
+      .then((r) => r.json())
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        setSites(list);
+      })
+      .catch(() => {
+        setSites([]);
+        toast.error("Failed to load domains");
+      })
+      .finally(() => setLoading(false));
   }, [session]);
+
+  useEffect(() => {
+    if (sites.length === 0) return;
+    const param = searchParams?.get("siteId");
+    const match =
+      param &&
+      sites.find((s) => s.siteId === param || String(s.id) === param);
+    startTransition(() => {
+      if (match) {
+        setSelectedSiteId(match.siteId);
+        return;
+      }
+      if (param) {
+        const fallback = sites[0].siteId;
+        setSelectedSiteId(fallback);
+        router.replace(`/dashboard/consent-log?siteId=${encodeURIComponent(fallback)}`, { scroll: false });
+        return;
+      }
+      setSelectedSiteId((prev) => prev || sites[0].siteId);
+    });
+  }, [sites, searchParams, router]);
 
   useEffect(() => {
     if (!selectedSiteId) {
@@ -135,8 +154,10 @@ function ConsentLogContent() {
               <select
                 value={selectedSiteId}
                 onChange={(e) => {
-                  setSelectedSiteId(e.target.value);
+                  const next = e.target.value;
+                  setSelectedSiteId(next);
                   setPage(1);
+                  router.replace(`/dashboard/consent-log?siteId=${encodeURIComponent(next)}`, { scroll: false });
                 }}
                 className={cn(inputClasses, "appearance-none pr-10 curser-pointer")}
               >
