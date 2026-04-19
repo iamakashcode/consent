@@ -1,4 +1,11 @@
-import { verifyPaddleWebhookSignature, fetchPaddleSubscription, inferPlanFromPaddleSubscription } from "@/lib/paddle";
+import {
+  verifyPaddleWebhookSignature,
+  fetchPaddleSubscription,
+  inferPlanFromPaddleSubscription,
+  inferPlanFromPaddlePriceById,
+  normalizePaddleTransactionCustomData,
+  resolvePlanAndBillingFromTransaction,
+} from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
 import { startUserTrial, clearUserTrialFields } from "@/lib/subscription";
 import { activatePendingDomain } from "@/lib/activate-pending-domain";
@@ -183,7 +190,10 @@ async function handleSubscriptionUpdated(event) {
       subscription.items?.length && subscription.items.some((i) => i.price?.unit_price?.amount != null)
         ? subscription
         : await fetchPaddleSubscription(subscriptionId);
-    const inferred = inferPlanFromPaddleSubscription(full);
+    let inferred = inferPlanFromPaddleSubscription(full);
+    if (!inferred && dbSubscription.paddlePriceId) {
+      inferred = await inferPlanFromPaddlePriceById(dbSubscription.paddlePriceId);
+    }
     if (inferred) {
       planUpdate = {
         plan: inferred.plan,
@@ -193,6 +203,17 @@ async function handleSubscriptionUpdated(event) {
     }
   } catch (e) {
     console.warn("[Webhook] subscription.updated: could not infer plan from Paddle:", e?.message);
+  }
+
+  if (Object.keys(planUpdate).length === 0 && dbSubscription.paddlePriceId) {
+    const inferred = await inferPlanFromPaddlePriceById(dbSubscription.paddlePriceId);
+    if (inferred) {
+      planUpdate = {
+        plan: inferred.plan,
+        billingInterval: inferred.billingInterval,
+        ...(inferred.paddlePriceId ? { paddlePriceId: inferred.paddlePriceId } : {}),
+      };
+    }
   }
 
   await prisma.subscription.update({
@@ -246,8 +267,8 @@ async function handleSubscriptionUpdated(event) {
 async function processPendingDomainPayment(event) {
   const transaction = event.data;
   const transactionId = transaction.id; // Paddle txn id (e.g. txn_01h...)
-  const subscriptionId = transaction.subscription_id;
-  const customData = transaction.custom_data || {};
+  const subscriptionId = transaction.subscription_id || transaction.subscriptionId;
+  const customData = normalizePaddleTransactionCustomData(transaction.custom_data);
 
   // 1) Reliable path: find PendingDomain by the Paddle transaction ID we stored at checkout (does not depend on custom_data)
   if (transactionId) {
@@ -262,14 +283,10 @@ async function processPendingDomainPayment(event) {
   }
 
   // 2) Fallback: custom_data (Paddle may not echo it in all environments)
-  const isPendingDomain =
-    customData.pendingDomain === true ||
-    customData.pendingDomain === "true" ||
-    customData.pending_domain === true ||
-    customData.pending_domain === "true";
-  const pendingDomainIdRaw = customData.pendingDomainId ?? customData.pending_domain_id;
+  const isPendingDomain = Boolean(customData.pendingDomain);
+  const pendingDomainIdRaw = customData.pendingDomainId;
   const pendingDomainId = pendingDomainIdRaw != null ? String(pendingDomainIdRaw).trim() : null;
-  const publicSiteId = customData.siteId ?? customData.site_id;
+  const publicSiteId = customData.siteId;
 
   if (!isPendingDomain || !pendingDomainId) return false;
 
@@ -315,7 +332,8 @@ async function createSiteFromPendingDomain(pending, transaction, subscriptionId)
 async function handleTransactionPaid(event) {
   const handled = await processPendingDomainPayment(event);
   if (handled) return;
-  console.log("[Webhook] transaction.paid: no pending-domain custom_data, skipping");
+  // Paddle often sends `transaction.paid` before `transaction.completed`; run the same main-subscription update so plan/status are not stuck until completed fires.
+  await handleTransactionCompleted(event);
 }
 
 /**
@@ -324,14 +342,14 @@ async function handleTransactionPaid(event) {
  */
 async function handleTransactionCompleted(event) {
   const transaction = event.data;
-  const subscriptionId = transaction.subscription_id;
-  const customData = transaction.custom_data || {};
+  const subscriptionId = transaction.subscription_id || transaction.subscriptionId;
+  const customData = normalizePaddleTransactionCustomData(transaction.custom_data);
 
   const handled = await processPendingDomainPayment(event);
   if (handled) return;
 
   // Bundled add-on with plan checkout (remove branding) – apply only after payment success
-  if ((customData.addonRemoveBranding === true || customData.addonRemoveBranding === "true") && customData.siteId) {
+  if (customData.addonRemoveBranding && customData.siteId) {
     try {
       await prisma.subscription.updateMany({
         where: { siteId: customData.siteId },
@@ -414,13 +432,14 @@ async function handleTransactionCompleted(event) {
     return;
   }
 
-  const isUpgrade = customData.upgrade === true || customData.upgrade === "true";
+  const resolved = await resolvePlanAndBillingFromTransaction(transaction, dbSubscription);
+  const isUpgrade = resolved.upgrade;
   if (!isUpgrade) {
     await startUserTrial(site.userId);
   }
 
-  const planFromPayment = customData.plan || dbSubscription.plan;
-  const billingIntervalFromPayment = customData.billingInterval || customData.billing_interval || dbSubscription.billingInterval;
+  const planFromPayment = resolved.plan;
+  const billingIntervalFromPayment = resolved.billingInterval;
 
   const currentStatus = dbSubscription.status?.toLowerCase();
   let newStatus = "active";
@@ -434,6 +453,18 @@ async function handleTransactionCompleted(event) {
     }
   }
 
+  const billingPeriod = transaction.billing_period || transaction.billingPeriod;
+  const periodStart = billingPeriod?.starts_at
+    ? new Date(billingPeriod.starts_at)
+    : new Date();
+  const periodEnd = billingPeriod?.ends_at
+    ? new Date(billingPeriod.ends_at)
+    : (() => {
+        const end = new Date();
+        end.setMonth(end.getMonth() + 1);
+        return end;
+      })();
+
   await prisma.subscription.update({
     where: { id: dbSubscription.id },
     data: {
@@ -442,16 +473,8 @@ async function handleTransactionCompleted(event) {
       paddleSubscriptionId: subscriptionId || dbSubscription.paddleSubscriptionId,
       paddleTransactionId: transaction.id,
       status: newStatus,
-      currentPeriodStart: transaction.billing_period?.starts_at
-        ? new Date(transaction.billing_period.starts_at)
-        : new Date(),
-      currentPeriodEnd: transaction.billing_period?.ends_at
-        ? new Date(transaction.billing_period.ends_at)
-        : (() => {
-          const end = new Date();
-          end.setMonth(end.getMonth() + 1);
-          return end;
-        })(),
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
       updatedAt: new Date(),
     },
   });

@@ -1,6 +1,11 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
-import { fetchPaddleSubscription, fetchPaddleTransaction, inferPlanFromPaddleSubscription } from "@/lib/paddle";
+import {
+  fetchPaddleSubscription,
+  fetchPaddleTransaction,
+  inferPlanFromPaddleSubscription,
+  inferPlanFromPaddlePriceById,
+} from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
 import { startUserTrial, clearUserTrialFields } from "@/lib/subscription";
 
@@ -158,7 +163,10 @@ export async function POST(req) {
         console.warn(`[Sync] Unknown Paddle status: ${paddleStatus}`);
     }
 
-    const inferred = inferPlanFromPaddleSubscription(paddleSub);
+    let inferred = inferPlanFromPaddleSubscription(paddleSub);
+    if (!inferred && dbSubscription.paddlePriceId) {
+      inferred = await inferPlanFromPaddlePriceById(dbSubscription.paddlePriceId);
+    }
     const periodStart =
       paddleSub.current_billing_period?.starts_at ||
       paddleSub.current_period_starts_at ||

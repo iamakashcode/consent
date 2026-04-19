@@ -488,35 +488,64 @@ export async function createPaddleSubscription(priceId, customerId, siteId, doma
  * Fetch Paddle transaction by ID (e.g. for confirming pending-domain payment on return)
  */
 export async function fetchPaddleTransaction(transactionId) {
+  const id = encodeURIComponent(transactionId);
   try {
-    const res = await paddleRequest("GET", `/transactions/${transactionId}`);
+    const res = await paddleRequest("GET", `/transactions/${id}?include=items`);
     return res.data;
   } catch (error) {
-    console.error("[Paddle] Error fetching transaction:", error);
-    throw error;
+    try {
+      const res = await paddleRequest("GET", `/transactions/${id}`);
+      return res.data;
+    } catch (e2) {
+      console.error("[Paddle] Error fetching transaction:", e2);
+      throw e2;
+    }
   }
 }
 
 /**
- * Infer local plan + billing interval from a Paddle subscription (API or webhook `data`).
- * Matches the main recurring line item by unit price (EUR cents); skips the remove-branding add-on price.
- * @param {object} paddleSub - Paddle subscription object with `items` array
+ * Normalize Paddle `custom_data` (webhooks may use snake_case keys).
+ * @param {object|null|undefined} raw
+ */
+export function normalizePaddleTransactionCustomData(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  const c = raw;
+  return {
+    siteId: c.siteId ?? c.site_id,
+    domain: c.domain,
+    plan: c.plan,
+    billingInterval: c.billingInterval ?? c.billing_interval,
+    upgrade: c.upgrade === true || c.upgrade === "true",
+    addonRemoveBranding:
+      c.addonRemoveBranding === true ||
+      c.addonRemoveBranding === "true" ||
+      c.addon_remove_branding === true ||
+      c.addon_remove_branding === "true",
+    addonType: c.addonType ?? c.addon_type,
+    pendingDomain: c.pendingDomain === true || c.pendingDomain === "true" || c.pending_domain === true || c.pending_domain === "true",
+    pendingDomainId: c.pendingDomainId ?? c.pending_domain_id,
+  };
+}
+
+function matchPlanFromAmount(amountCents, yearly) {
+  for (const plan of ["basic", "starter", "pro"]) {
+    const monthly = PLAN_PRICING[plan];
+    const yearlyAmt = Math.round(monthly * 10);
+    const expected = yearly ? yearlyAmt : monthly;
+    if (amountCents === expected) return plan;
+  }
+  return null;
+}
+
+/**
+ * Infer plan from Paddle `items`-shaped arrays (subscription items or transaction items).
+ * @param {Array<{ price?: object, price_id?: string, billing_cycle?: object }>} items
  * @returns {{ plan: string, billingInterval: string, paddlePriceId: string | null } | null}
  */
-export function inferPlanFromPaddleSubscription(paddleSub) {
-  if (!paddleSub?.items?.length) return null;
+export function inferPlanFromPaddleItems(items) {
+  if (!items?.length) return null;
 
-  const matchAmount = (amountCents, yearly) => {
-    for (const plan of ["basic", "starter", "pro"]) {
-      const monthly = PLAN_PRICING[plan];
-      const yearlyAmt = Math.round(monthly * 10);
-      const expected = yearly ? yearlyAmt : monthly;
-      if (amountCents === expected) return plan;
-    }
-    return null;
-  };
-
-  for (const item of paddleSub.items) {
+  for (const item of items) {
     const price = item.price || null;
     const amountRaw = price?.unit_price?.amount ?? null;
     const amount = amountRaw != null ? Number(amountRaw) : 0;
@@ -527,7 +556,7 @@ export function inferPlanFromPaddleSubscription(paddleSub) {
       item.billing_cycle?.interval ??
       null;
     const yearly = interval === "year";
-    const plan = matchAmount(amount, yearly);
+    const plan = matchPlanFromAmount(amount, yearly);
     if (plan) {
       return {
         plan,
@@ -540,15 +569,123 @@ export function inferPlanFromPaddleSubscription(paddleSub) {
 }
 
 /**
+ * Infer local plan + billing interval from a Paddle subscription (API or webhook `data`).
+ * Matches the main recurring line item by unit price (EUR cents); skips the remove-branding add-on price.
+ * @param {object} paddleSub - Paddle subscription object with `items` array
+ * @returns {{ plan: string, billingInterval: string, paddlePriceId: string | null } | null}
+ */
+export function inferPlanFromPaddleSubscription(paddleSub) {
+  return inferPlanFromPaddleItems(paddleSub?.items);
+}
+
+/**
+ * Infer plan from a transaction entity (webhook `data` or GET /transactions response).
+ */
+export function inferPlanFromPaddleTransaction(transaction) {
+  if (!transaction) return null;
+  let found = inferPlanFromPaddleItems(transaction.items);
+  if (found) return found;
+
+  const lineItems = transaction.details?.line_items;
+  if (lineItems?.length) {
+    const mapped = lineItems.map((li) => ({
+      price: li.price,
+      price_id: li.price_id,
+      billing_cycle: li.billing_cycle,
+    }));
+    found = inferPlanFromPaddleItems(mapped);
+  }
+  return found || null;
+}
+
+/**
+ * Fetch a Paddle price and infer plan (checkout stores `paddlePriceId` on Subscription while pending).
+ */
+export async function inferPlanFromPaddlePriceById(priceId) {
+  if (!priceId) return null;
+  try {
+    const res = await paddleRequest("GET", `/prices/${encodeURIComponent(priceId)}`);
+    const price = res.data;
+    return inferPlanFromPaddleItems([{ price }]);
+  } catch (e) {
+    console.warn("[Paddle] inferPlanFromPaddlePriceById failed:", e?.message);
+    return null;
+  }
+}
+
+/**
+ * Resolve plan + billing for a successful transaction: custom_data, line items, full transaction fetch,
+ * then `Subscription.paddlePriceId` from checkout (reliable when Paddle omits custom_data on webhooks).
+ * @param {object} transaction - Paddle transaction (event.data or API)
+ * @param {{ plan?: string, billingInterval?: string, paddlePriceId?: string | null }} dbSubscription
+ */
+export async function resolvePlanAndBillingFromTransaction(transaction, dbSubscription) {
+  const cd = normalizePaddleTransactionCustomData(transaction.custom_data);
+  let plan = cd.plan || null;
+  let billingInterval = cd.billingInterval || null;
+
+  let inferred = inferPlanFromPaddleTransaction(transaction);
+  if (inferred) {
+    plan = plan || inferred.plan;
+    billingInterval = billingInterval || inferred.billingInterval;
+  }
+
+  const txnId = transaction?.id;
+  if ((!plan || !billingInterval) && txnId) {
+    try {
+      const full = await fetchPaddleTransaction(txnId);
+      const i2 = inferPlanFromPaddleTransaction(full);
+      if (i2) {
+        plan = plan || i2.plan;
+        billingInterval = billingInterval || i2.billingInterval;
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  if ((!plan || !billingInterval) && dbSubscription?.paddlePriceId) {
+    const i3 = await inferPlanFromPaddlePriceById(dbSubscription.paddlePriceId);
+    if (i3) {
+      plan = plan || i3.plan;
+      billingInterval = billingInterval || i3.billingInterval;
+    }
+  }
+
+  const rawPlan = plan || dbSubscription?.plan || "basic";
+  const planKey = String(rawPlan).toLowerCase();
+  const fallbackPlanKey = String(dbSubscription?.plan || "basic").toLowerCase();
+  const safePlan = ["basic", "starter", "pro"].includes(planKey)
+    ? planKey
+    : (["basic", "starter", "pro"].includes(fallbackPlanKey) ? fallbackPlanKey : "basic");
+
+  const rawInterval = billingInterval || dbSubscription?.billingInterval || "monthly";
+  const intervalKey = String(rawInterval).toLowerCase();
+  const safeInterval = ["monthly", "yearly"].includes(intervalKey) ? intervalKey : "monthly";
+
+  return {
+    plan: safePlan,
+    billingInterval: safeInterval,
+    upgrade: cd.upgrade,
+  };
+}
+
+/**
  * Fetch Paddle subscription
  */
 export async function fetchPaddleSubscription(subscriptionId) {
+  const id = encodeURIComponent(subscriptionId);
   try {
-    const subscription = await paddleRequest("GET", `/subscriptions/${subscriptionId}`);
+    const subscription = await paddleRequest("GET", `/subscriptions/${id}?include=items`);
     return subscription.data;
   } catch (error) {
-    console.error("[Paddle] Error fetching subscription:", error);
-    throw error;
+    try {
+      const subscription = await paddleRequest("GET", `/subscriptions/${id}`);
+      return subscription.data;
+    } catch (e2) {
+      console.error("[Paddle] Error fetching subscription:", e2);
+      throw e2;
+    }
   }
 }
 
