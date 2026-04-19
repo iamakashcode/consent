@@ -12,6 +12,17 @@ import { uploadScript, getCdnUrl, uploadBlankScript } from "./cdn-service";
 // Import the generation functions from the script route
 // These are exported from the route file and can be imported
 import { generateInlineBlocker, generateMainScript } from "../app/api/script/[siteId]/route.js";
+import { normalizeDomainForConsentScript } from "@/lib/consent-domain";
+
+function getAppPublicBaseUrl() {
+  const fromEnv = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  const vercel = process.env.VERCEL_URL?.replace(/\/$/, "");
+  if (vercel) return `https://${vercel}`;
+  const auth = process.env.NEXTAUTH_URL?.replace(/\/$/, "");
+  if (auth) return auth;
+  return "";
+}
 
 /**
  * Generate and upload script to CDN for a site
@@ -44,12 +55,13 @@ export async function generateAndUploadScript(siteId, options = {}) {
       }
     }
 
-    const allowedDomain = site.domain;
-    
-    // Get base URL for API endpoints
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-                   process.env.NEXTAUTH_URL || 
-                   'https://consent-silk.vercel.app';
+    const allowedDomain = normalizeDomainForConsentScript(site.domain);
+
+    // Get base URL for API endpoints (avoid wrong NEXT_PUBLIC_BASE_URL breaking live installs)
+    const baseUrl =
+      getAppPublicBaseUrl() ||
+      process.env.NEXTAUTH_URL?.replace(/\/$/, "") ||
+      "https://consent-silk.vercel.app";
     
     // Extract hostname for consent API domain
     let consentApiHostname = "";

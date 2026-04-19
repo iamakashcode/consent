@@ -3,6 +3,7 @@ import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES, normalizeBannerConfig, bannerP
 import { hasVerificationColumns } from "@/lib/db-utils";
 import { isSubscriptionActive } from "@/lib/subscription";
 import { getScript, getCdnUrl } from "@/lib/cdn-service";
+import { escapeForSingleQuotedJs, normalizeDomainForConsentScript } from "@/lib/consent-domain";
 
 // Generate AGGRESSIVE pre-execution blocker with IMPROVEMENTS
 export function generateInlineBlocker(siteId, allowedDomain, isPreview, consentApiDomain) {
@@ -14,7 +15,7 @@ export function generateInlineBlocker(siteId, allowedDomain, isPreview, consentA
 /* ======================================================
    DOMAIN VALIDATION - CRITICAL: Must be FIRST before anything else
 ====================================================== */
-var ALLOWED_DOMAIN='${allowedDomain || ''}';
+var ALLOWED_DOMAIN='${escapeForSingleQuotedJs(allowedDomain || "")}';
 var IS_PREVIEW=${isPreview ? 'true' : 'false'};
 
 if(IS_PREVIEW!=='true'&&ALLOWED_DOMAIN){
@@ -1220,7 +1221,7 @@ export function generateMainScript(siteId, allowedDomain, isPreview, config, ban
 (function(){
 var CONSENT_KEY='${CONSENT_KEY}';
 var currentHost=location.hostname.toLowerCase().replace(/^www\\./,'');
-var allowedHost='${allowedDomain || ''}'.toLowerCase().replace(/^www\\./,'');
+var allowedHost='${escapeForSingleQuotedJs(allowedDomain || "")}'.toLowerCase().replace(/^www\\./,'');
 var isPreview=${isPreview ? 'true' : 'false'};
 
 if(!isPreview&&allowedHost&&currentHost!==allowedHost&&!currentHost.endsWith('.'+allowedHost)){
@@ -1509,20 +1510,25 @@ var maxVerificationAttempts=5;
   if(managePrefs){ managePrefs.onclick=function(e){ e.preventDefault(); if(typeof showPreferencesModal==='function')showPreferencesModal(banner); }; }
   
   function maybeShowFloatingButton(){ try{ if(typeof showFloatingButton==='function')showFloatingButton(); }catch(e){} }
-  document.getElementById('consentflow-accept').onclick=function(){
-    setConsent('accepted');
-    sendConsentLog('accepted');
-    banner.remove();
-    maybeShowFloatingButton();
-    console.log('[ConsentFlow] User accepted consent - enabling trackers');
-    if(window.__enableConsentTrackers){
-      try{ 
-        window.__enableConsentTrackers(); 
-      }catch(e){ 
-        console.error('[ConsentFlow] Enable trackers error:',e); 
+  var acceptEl=document.getElementById('consentflow-accept');
+  if(acceptEl){
+    acceptEl.onclick=function(){
+      setConsent('accepted');
+      sendConsentLog('accepted');
+      banner.remove();
+      maybeShowFloatingButton();
+      console.log('[ConsentFlow] User accepted consent - enabling trackers');
+      if(window.__enableConsentTrackers){
+        try{ 
+          window.__enableConsentTrackers(); 
+        }catch(e){ 
+          console.error('[ConsentFlow] Enable trackers error:',e); 
+        }
       }
-    }
-  };
+    };
+  } else {
+    console.error('[ConsentFlow] Banner markup missing accept button');
+  }
   
   ${showReject ? `var rejectBtn=document.getElementById('consentflow-reject');
   if(rejectBtn){
@@ -1630,7 +1636,7 @@ export async function GET(req, { params }) {
 
     // SECURITY: Always use domain from database, never from query parameter
     // This prevents domain spoofing attacks where someone could use ?domain=malicious.com
-    const allowedDomain = site.domain;
+    const allowedDomain = normalizeDomainForConsentScript(site.domain);
     
     const protocol = req.headers.get("x-forwarded-proto") || 
       (req.headers.get("host")?.includes("localhost") ? "http" : "https");

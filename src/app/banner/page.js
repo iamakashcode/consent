@@ -386,7 +386,11 @@ function BannerContent() {
 
   const getInstallCode = () => {
     if (!selectedSite) return "";
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "");
+    // Prefer current app origin so a mis-set NEXT_PUBLIC_BASE_URL never points customers at the wrong host.
+    const baseUrl =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : (process.env.NEXT_PUBLIC_BASE_URL || "").replace(/\/$/, "");
     const scriptSrc = `${baseUrl}/cdn/sites/${selectedSite.siteId}/script.js`;
     return [
       "<!-- Start Cookie Access banner -->",
