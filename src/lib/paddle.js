@@ -498,6 +498,48 @@ export async function fetchPaddleTransaction(transactionId) {
 }
 
 /**
+ * Infer local plan + billing interval from a Paddle subscription (API or webhook `data`).
+ * Matches the main recurring line item by unit price (EUR cents); skips the remove-branding add-on price.
+ * @param {object} paddleSub - Paddle subscription object with `items` array
+ * @returns {{ plan: string, billingInterval: string, paddlePriceId: string | null } | null}
+ */
+export function inferPlanFromPaddleSubscription(paddleSub) {
+  if (!paddleSub?.items?.length) return null;
+
+  const matchAmount = (amountCents, yearly) => {
+    for (const plan of ["basic", "starter", "pro"]) {
+      const monthly = PLAN_PRICING[plan];
+      const yearlyAmt = Math.round(monthly * 10);
+      const expected = yearly ? yearlyAmt : monthly;
+      if (amountCents === expected) return plan;
+    }
+    return null;
+  };
+
+  for (const item of paddleSub.items) {
+    const price = item.price || null;
+    const amountRaw = price?.unit_price?.amount ?? null;
+    const amount = amountRaw != null ? Number(amountRaw) : 0;
+    if (!amount || amount === ADDON_BRANDING_PRICE_CENTS) continue;
+
+    const interval =
+      price?.billing_cycle?.interval ??
+      item.billing_cycle?.interval ??
+      null;
+    const yearly = interval === "year";
+    const plan = matchAmount(amount, yearly);
+    if (plan) {
+      return {
+        plan,
+        billingInterval: yearly ? "yearly" : "monthly",
+        paddlePriceId: price?.id || item.price_id || null,
+      };
+    }
+  }
+  return null;
+}
+
+/**
  * Fetch Paddle subscription
  */
 export async function fetchPaddleSubscription(subscriptionId) {

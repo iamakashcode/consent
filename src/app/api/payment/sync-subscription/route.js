@@ -1,8 +1,8 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
-import { fetchPaddleSubscription, fetchPaddleTransaction } from "@/lib/paddle";
+import { fetchPaddleSubscription, fetchPaddleTransaction, inferPlanFromPaddleSubscription } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
-import { startUserTrial } from "@/lib/subscription";
+import { startUserTrial, clearUserTrialFields } from "@/lib/subscription";
 
 /**
  * Sync subscription status from Paddle
@@ -120,17 +120,17 @@ export async function POST(req) {
       );
     }
 
-    // First domain = only one site for this user (trial eligible); second+ = active only
-    const userSitesCount = await prisma.site.count({ where: { userId: site.userId } });
-    const isFirstDomain = userSitesCount === 1;
+    const firstSite = await prisma.site.findFirst({
+      where: { userId: site.userId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    const isFirstDomain = firstSite?.id === site.id;
 
     switch (paddleStatus) {
       case "active":
-        // If subscription is active in Paddle, check if user trial is active (first domain only)
-        if (site.user?.trialEndAt && new Date() < new Date(site.user.trialEndAt) && isFirstDomain) {
-          newStatus = "trial";
-          shouldStartTrial = false;
-        } else if (dbSubscription.status === "pending") {
+        // Do not map Paddle "active" back to DB "trial" just because user.trialEndAt is still set (post-upgrade bug).
+        if (dbSubscription.status === "pending") {
           // Payment just completed: first domain -> trial; second+ domain -> active
           if (isFirstDomain) {
             newStatus = "trial";
@@ -158,17 +158,29 @@ export async function POST(req) {
         console.warn(`[Sync] Unknown Paddle status: ${paddleStatus}`);
     }
 
-    // Update subscription in database
+    const inferred = inferPlanFromPaddleSubscription(paddleSub);
+    const periodStart =
+      paddleSub.current_billing_period?.starts_at ||
+      paddleSub.current_period_starts_at ||
+      null;
+    const periodEnd =
+      paddleSub.current_billing_period?.ends_at ||
+      paddleSub.current_period_ends_at ||
+      null;
+
     const updated = await prisma.subscription.update({
       where: { id: dbSubscription.id },
       data: {
         status: newStatus,
-        currentPeriodStart: paddleSub.current_period_starts_at
-          ? new Date(paddleSub.current_period_starts_at)
-          : null,
-        currentPeriodEnd: paddleSub.current_period_ends_at
-          ? new Date(paddleSub.current_period_ends_at)
-          : null,
+        currentPeriodStart: periodStart ? new Date(periodStart) : null,
+        currentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
+        ...(inferred
+          ? {
+              plan: inferred.plan,
+              billingInterval: inferred.billingInterval,
+              ...(inferred.paddlePriceId ? { paddlePriceId: inferred.paddlePriceId } : {}),
+            }
+          : {}),
         updatedAt: new Date(),
       },
     });
@@ -177,6 +189,12 @@ export async function POST(req) {
     if (shouldStartTrial) {
       await startUserTrial(site.userId);
       console.log(`[Sync] Started user trial for user ${site.userId}`);
+    }
+
+    if (newStatus === "active" && dbSubscription.status !== "pending") {
+      await clearUserTrialFields(site.userId).catch((err) =>
+        console.warn("[Sync] clearUserTrialFields:", err?.message)
+      );
     }
 
     return Response.json({

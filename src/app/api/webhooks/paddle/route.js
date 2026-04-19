@@ -1,6 +1,6 @@
-import { verifyPaddleWebhookSignature } from "@/lib/paddle";
+import { verifyPaddleWebhookSignature, fetchPaddleSubscription, inferPlanFromPaddleSubscription } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
-import { startUserTrial, activateSubscription } from "@/lib/subscription";
+import { startUserTrial, clearUserTrialFields } from "@/lib/subscription";
 import { activatePendingDomain } from "@/lib/activate-pending-domain";
 
 /**
@@ -168,19 +168,65 @@ async function handleSubscriptionUpdated(event) {
     newStatus = "cancelled";
   }
 
+  const periodStart =
+    subscription.current_billing_period?.starts_at ||
+    subscription.current_period_starts_at ||
+    null;
+  const periodEnd =
+    subscription.current_billing_period?.ends_at ||
+    subscription.current_period_ends_at ||
+    null;
+
+  let planUpdate = {};
+  try {
+    const full =
+      subscription.items?.length && subscription.items.some((i) => i.price?.unit_price?.amount != null)
+        ? subscription
+        : await fetchPaddleSubscription(subscriptionId);
+    const inferred = inferPlanFromPaddleSubscription(full);
+    if (inferred) {
+      planUpdate = {
+        plan: inferred.plan,
+        billingInterval: inferred.billingInterval,
+        ...(inferred.paddlePriceId ? { paddlePriceId: inferred.paddlePriceId } : {}),
+      };
+    }
+  } catch (e) {
+    console.warn("[Webhook] subscription.updated: could not infer plan from Paddle:", e?.message);
+  }
+
   await prisma.subscription.update({
     where: { id: dbSubscription.id },
     data: {
       status: newStatus,
-      currentPeriodStart: subscription.current_billing_period?.starts_at
-        ? new Date(subscription.current_billing_period.starts_at)
-        : null,
-      currentPeriodEnd: subscription.current_billing_period?.ends_at
-        ? new Date(subscription.current_billing_period.ends_at)
-        : null,
+      currentPeriodStart: periodStart ? new Date(periodStart) : null,
+      currentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
+      ...planUpdate,
       updatedAt: new Date(),
     },
   });
+
+  if (newStatus === "active" && dbSubscription.site?.userId) {
+    const firstSite = await prisma.site.findFirst({
+      where: { userId: dbSubscription.site.userId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    const isFirstDomain = firstSite?.id === dbSubscription.siteId;
+    const inferredPlan = planUpdate.plan;
+    const planChanged = Boolean(inferredPlan && inferredPlan !== dbSubscription.plan);
+    const shouldClearUserTrial =
+      planChanged ||
+      dbSubscription.status === "trial" ||
+      dbSubscription.status === "payment_failed" ||
+      (dbSubscription.status === "pending" && !isFirstDomain);
+
+    if (shouldClearUserTrial) {
+      await clearUserTrialFields(dbSubscription.site.userId).catch((err) =>
+        console.warn("[Webhook] clearUserTrialFields on subscription.updated:", err?.message)
+      );
+    }
+  }
 
   // Sync CDN script: real script when active/trial, blank when cancelled/failed
   const siteId = dbSubscription.site?.siteId;
@@ -409,6 +455,12 @@ async function handleTransactionCompleted(event) {
       updatedAt: new Date(),
     },
   });
+
+  if (isUpgrade && site.userId) {
+    await clearUserTrialFields(site.userId).catch((err) =>
+      console.warn("[Webhook] clearUserTrialFields after upgrade:", err?.message)
+    );
+  }
 
   // Sync CDN script so real script is uploaded (subscription restored/paid)
   const siteId = site.siteId;

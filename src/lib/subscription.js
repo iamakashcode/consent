@@ -37,10 +37,8 @@ export async function isDomainActive(siteId) {
     const user = site.user;
     const now = new Date();
 
-    // User trial applies only to the user's first domain (oldest site by createdAt)
-    const userTrialActive = user?.trialEndAt && now < new Date(user.trialEndAt);
     let isFirstDomain = false;
-    if (userTrialActive && user?.id) {
+    if (user?.id) {
       const firstSite = await prisma.site.findFirst({
         where: { userId: user.id },
         orderBy: { createdAt: "asc" },
@@ -49,8 +47,45 @@ export async function isDomainActive(siteId) {
       isFirstDomain = firstSite?.id === site.id;
     }
 
-    // Check user-level trial only for first domain (14 days for new users)
-    if (userTrialActive && isFirstDomain) {
+    const userTrialActive = user?.trialEndAt && now < new Date(user.trialEndAt);
+
+    // No subscription row
+    if (!subscription) {
+      if (userTrialActive && isFirstDomain) {
+        const trialEnd = new Date(user.trialEndAt);
+        const daysLeft = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
+        return {
+          isActive: true,
+          reason: "user_trial",
+          site,
+          subscription: null,
+          user,
+          trialDaysLeft: daysLeft,
+          trialEndAt: user.trialEndAt,
+        };
+      }
+      return { isActive: false, reason: "No subscription", site, user };
+    }
+
+    // Check subscription status
+    const status = subscription.status?.toLowerCase();
+
+    // Paid active subscription wins over user-level trial dates (upgrade can leave trialEndAt set until cleared)
+    if (status === "active") {
+      if (subscription.currentPeriodEnd && now > new Date(subscription.currentPeriodEnd)) {
+        return { isActive: false, reason: "Period expired", site, subscription, user };
+      }
+      return { isActive: true, reason: "active", site, subscription, user };
+    }
+
+    // User-level trial for first domain (not when subscription is cancelled / failed / expired)
+    if (
+      userTrialActive &&
+      isFirstDomain &&
+      status !== "cancelled" &&
+      status !== "expired" &&
+      status !== "payment_failed"
+    ) {
       const trialEnd = new Date(user.trialEndAt);
       const daysLeft = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
       return {
@@ -63,14 +98,6 @@ export async function isDomainActive(siteId) {
         trialEndAt: user.trialEndAt,
       };
     }
-
-    // No subscription at all
-    if (!subscription) {
-      return { isActive: false, reason: "No subscription", site, user };
-    }
-
-    // Check subscription status
-    const status = subscription.status?.toLowerCase();
 
     // Pending - payment method not yet added
     // BUT: Allow access if user trial is active for this (first) domain OR if payment was recently completed (within last 5 minutes)
@@ -124,14 +151,6 @@ export async function isDomainActive(siteId) {
     // Payment failed
     if (status === "payment_failed") {
       return { isActive: false, reason: "Payment failed", site, subscription, user };
-    }
-
-    // Active subscription - check period
-    if (status === "active") {
-      if (subscription.currentPeriodEnd && now > new Date(subscription.currentPeriodEnd)) {
-        return { isActive: false, reason: "Period expired", site, subscription, user };
-      }
-      return { isActive: true, reason: "active", site, subscription, user };
     }
 
     // Trial status (for backward compatibility, but user trial only for first domain)
@@ -249,7 +268,7 @@ export async function checkPageViewLimit(siteId) {
       currentViews,
       limit,
       remaining: Math.max(0, limit - currentViews),
-      plan,
+      plan: planKey,
     };
   } catch (error) {
     console.error("Error checking page view limit:", error);
@@ -303,6 +322,15 @@ export async function startUserTrial(userId) {
     console.error("Error starting user trial:", error);
     throw error;
   }
+}
+
+/** Clear account-level trial dates after a paid subscription is active (avoids Domains UI still showing "Trial active"). */
+export async function clearUserTrialFields(userId) {
+  if (!userId) return;
+  await prisma.user.update({
+    where: { id: userId },
+    data: { trialEndAt: null, trialStartedAt: null },
+  });
 }
 
 /**
@@ -540,8 +568,12 @@ export async function getUserSubscriptions(userId) {
           }
         }
 
-        const trialDaysLeft = (userTrialInFuture && isFirstDomain) ? userTrialDaysLeft : null;
-        const userTrialAppliesToThisSite = Boolean(userTrialInFuture && isFirstDomain);
+        const paidActive = status === "active";
+        const trialDaysLeft =
+          userTrialInFuture && isFirstDomain && !paidActive ? userTrialDaysLeft : null;
+        const userTrialAppliesToThisSite = Boolean(
+          userTrialInFuture && isFirstDomain && !paidActive
+        );
 
         return {
           siteId: site.siteId,
@@ -558,12 +590,17 @@ export async function getUserSubscriptions(userId) {
         };
       });
 
-    // Only show user trial on billing when first domain has an active subscription – no plan = no trial banner
+    const firstDomainSub = subscriptions.find((s) => s.siteDbId === firstSiteId);
+    const firstDomainPaidActive =
+      firstDomainSub?.subscription?.status?.toLowerCase() === "active";
+
+    // Aggregate trial banner: not when first domain is already on a paid active subscription
     const firstDomainHasActiveTrial =
+      !firstDomainPaidActive &&
       firstSiteId &&
       user?.trialEndAt &&
       now < new Date(user.trialEndAt) &&
-      subscriptions.some(s => s.siteDbId === firstSiteId && s.isActive);
+      subscriptions.some((s) => s.siteDbId === firstSiteId && s.isActive);
     const userTrialActive = Boolean(firstDomainHasActiveTrial);
     const userTrialEndAt = userTrialActive ? user.trialEndAt : null;
     // userTrialDaysLeft already computed above (before subscriptions map)
