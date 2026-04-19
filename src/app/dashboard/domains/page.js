@@ -410,17 +410,20 @@ function DomainsContent() {
                     const isActive = sub?.isActive;
                     const isPending = statusLower === "pending";
                     const isTrial =
-                      !!sub?.userTrialActive ||
-                      (statusLower === "trial" && !!sub?.isFirstDomain);
+                      !isPending &&
+                      (!!sub?.userTrialActive ||
+                        (statusLower === "trial" && !!sub?.isFirstDomain));
                     const trialNotStarted = !sub?.subscription && !sub?.userTrialActive;
                     const scriptInstalled = scriptStatus[site.siteId]?.scriptInstalled ?? false;
                     const planLabel = subscription?.plan
                       ? subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)
                       : "No active plan";
-                    const statusText = isActive
-                      ? (isTrial ? "Trial active" : "Active plan")
-                      : isPending
-                        ? "Payment required"
+                    const statusText = isPending
+                      ? "Complete payment"
+                      : isActive
+                        ? isTrial
+                          ? "Trial active"
+                          : "Active plan"
                         : trialNotStarted
                           ? "No plan chosen"
                           : "Inactive access";

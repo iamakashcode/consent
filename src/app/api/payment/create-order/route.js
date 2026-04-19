@@ -16,7 +16,6 @@ import {
   getOrCreatePaddleAddonPrice,
 } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
-import { clearUserTrialFields } from "@/lib/subscription";
 
 
 /**
@@ -399,8 +398,7 @@ export async function POST(req) {
           where: { siteId: site.id },
           data: {
             status: "pending",
-            plan,
-            billingInterval,
+            // Do not set plan/billingInterval until payment succeeds (webhook); avoids "upgraded" UI after abandoning checkout.
             paddleProductId: paddleProduct.id,
             paddlePriceId: paddlePrice.id,
             paddleCustomerId: paddleCustomer.id,
@@ -427,12 +425,6 @@ export async function POST(req) {
       return Response.json(
         { error: "Failed to save subscription. Please try again." },
         { status: 500 }
-      );
-    }
-
-    if (isUpgradeFlow && session.user.id) {
-      await clearUserTrialFields(session.user.id).catch((err) =>
-        console.warn("[Payment] clearUserTrialFields after upgrade checkout:", err?.message)
       );
     }
 

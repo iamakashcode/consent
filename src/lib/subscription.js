@@ -550,13 +550,13 @@ export async function getUserSubscriptions(userId) {
         const isFirstDomain = site.id === firstSiteId;
 
         let isActive = false;
-        // User trial counts as active only for the first domain
-        if (userTrialInFuture && isFirstDomain) {
-          isActive = true;
-        } else if (status === "active") {
-          if (subscription.currentPeriodEnd && now < new Date(subscription.currentPeriodEnd)) {
+        // Paid active must win over account-level trial dates, otherwise Domains shows "Trial active" after upgrade.
+        if (status === "active") {
+          if (!subscription.currentPeriodEnd || now < new Date(subscription.currentPeriodEnd)) {
             isActive = true;
           }
+        } else if (userTrialInFuture && isFirstDomain) {
+          isActive = true;
         } else if (status === "trial") {
           // Only the first domain may use a trial-period window; additional domains must pay (Paddle trialDays=0).
           if (
@@ -569,10 +569,11 @@ export async function getUserSubscriptions(userId) {
         }
 
         const paidActive = status === "active";
+        const pendingPayment = status === "pending";
         const trialDaysLeft =
-          userTrialInFuture && isFirstDomain && !paidActive ? userTrialDaysLeft : null;
+          userTrialInFuture && isFirstDomain && !paidActive && !pendingPayment ? userTrialDaysLeft : null;
         const userTrialAppliesToThisSite = Boolean(
-          userTrialInFuture && isFirstDomain && !paidActive
+          userTrialInFuture && isFirstDomain && !paidActive && !pendingPayment
         );
 
         return {
