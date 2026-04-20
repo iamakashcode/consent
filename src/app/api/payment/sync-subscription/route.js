@@ -32,17 +32,30 @@ export async function POST(req) {
 
     // Find subscription by siteId, Paddle subscription ID, or Paddle transaction ID (return URL may have any of these)
     let dbSubscription = null;
+    let siteFromSiteLookup = null;
     if (siteId) {
       const site = await prisma.site.findFirst({
         where: {
           OR: [{ siteId: siteId }, { id: siteId }],
           userId: session.user.id,
         },
-        include: { subscription: true },
+        include: {
+          subscription: true,
+          user: { select: { trialEndAt: true, trialStartedAt: true } },
+        },
       });
 
       if (site?.subscription) {
-        dbSubscription = site.subscription;
+        siteFromSiteLookup = site;
+        dbSubscription = {
+          ...site.subscription,
+          site: {
+            id: site.id,
+            userId: site.userId,
+            siteId: site.siteId,
+            domain: site.domain,
+          },
+        };
       }
     }
 
@@ -66,7 +79,7 @@ export async function POST(req) {
     }
 
     // Verify user owns this subscription
-    if (dbSubscription.site.userId !== session.user.id) {
+    if (dbSubscription.site?.userId !== session.user.id) {
       return Response.json(
         { error: "Unauthorized" },
         { status: 403 }
@@ -113,10 +126,12 @@ export async function POST(req) {
     let shouldStartTrial = false;
 
     // Get site and user info first
-    const site = await prisma.site.findUnique({
-      where: { id: dbSubscription.siteId },
-      include: { user: { select: { trialEndAt: true, trialStartedAt: true } } },
-    });
+    const site = siteFromSiteLookup
+      ? siteFromSiteLookup
+      : await prisma.site.findUnique({
+          where: { id: dbSubscription.siteId },
+          include: { user: { select: { trialEndAt: true, trialStartedAt: true } } },
+        });
 
     if (!site) {
       return Response.json(

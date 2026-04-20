@@ -662,11 +662,17 @@ export async function resolvePlanAndBillingFromTransaction(transaction, dbSubscr
   const rawInterval = billingInterval || dbSubscription?.billingInterval || "monthly";
   const intervalKey = String(rawInterval).toLowerCase();
   const safeInterval = ["monthly", "yearly"].includes(intervalKey) ? intervalKey : "monthly";
+  const dbPlan = String(dbSubscription?.plan || "").toLowerCase();
+  const dbInterval = String(dbSubscription?.billingInterval || "").toLowerCase();
+  const inferredUpgradeFromDiff =
+    !!dbPlan &&
+    !!dbInterval &&
+    (safePlan !== dbPlan || safeInterval !== dbInterval);
 
   return {
     plan: safePlan,
     billingInterval: safeInterval,
-    upgrade: cd.upgrade,
+    upgrade: cd.upgrade || inferredUpgradeFromDiff,
   };
 }
 
