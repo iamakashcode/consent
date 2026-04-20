@@ -109,6 +109,50 @@ function DomainsContent() {
         (data.subscriptions || []).forEach((item) => {
           map[item.siteId] = { ...item };
         });
+        const syncCandidates = (data.subscriptions || []).filter((item) => {
+          const sub = item?.subscription;
+          if (!sub) return false;
+          const status = String(sub.status || "").toLowerCase();
+          const plan = String(sub.plan || "").toLowerCase();
+          // Self-heal stale post-upgrade state (e.g. Pro plan still marked trial).
+          return (
+            status === "trial" ||
+            (["starter", "pro"].includes(plan) && (status === "pending" || item.userTrialActive))
+          );
+        });
+        if (syncCandidates.length > 0) {
+          await Promise.all(
+            syncCandidates.map(async (item) => {
+              const syncId =
+                item.subscription?.paddleSubscriptionId ||
+                item.subscription?.paddleTransactionId;
+              if (!syncId) return;
+              try {
+                const syncRes = await fetch("/api/payment/sync-subscription", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ subscriptionId: syncId, siteId: item.siteId }),
+                });
+                if (syncRes.ok) {
+                  const syncData = await syncRes.json();
+                  if (syncData?.subscription) {
+                    map[item.siteId] = {
+                      ...map[item.siteId],
+                      subscription: syncData.subscription,
+                      isActive: ["active", "trial"].includes(
+                        String(syncData.subscription.status || "").toLowerCase()
+                      ),
+                      userTrialActive:
+                        String(syncData.subscription.status || "").toLowerCase() === "trial",
+                    };
+                  }
+                }
+              } catch (e) {
+                console.warn("[Domains] background subscription sync failed:", e);
+              }
+            })
+          );
+        }
         setSubscriptions(map);
       }
       if (sitesData.length > 0) {

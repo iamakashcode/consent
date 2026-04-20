@@ -9,6 +9,7 @@ import {
 } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
 import { clearUserTrialFields, startUserTrial } from "@/lib/subscription";
+import { syncSiteScriptWithSubscription } from "@/lib/script-generator";
 
 /**
  * Sync subscription status from Paddle
@@ -189,6 +190,9 @@ export async function POST(req) {
               console.warn("[Sync] Failed to clear user trial after upgrade fallback:", e?.message)
             );
           }
+          await syncSiteScriptWithSubscription(site.siteId).catch((e) =>
+            console.warn("[Sync] Failed to sync site script after transaction fallback:", e?.message)
+          );
 
           return Response.json({
             success: true,
@@ -212,6 +216,19 @@ export async function POST(req) {
       );
     }
 
+    let inferred = inferPlanFromPaddleSubscription(paddleSub);
+    if (!inferred && dbSubscription.paddlePriceId) {
+      inferred = await inferPlanFromPaddlePriceById(dbSubscription.paddlePriceId);
+    }
+    const currentPlan = String(dbSubscription.plan || "").toLowerCase();
+    const currentInterval = String(dbSubscription.billingInterval || "").toLowerCase();
+    const incomingPlan = String(inferred?.plan || "").toLowerCase();
+    const incomingInterval = String(inferred?.billingInterval || "").toLowerCase();
+    const planChangedOnPaidSync =
+      !!incomingPlan &&
+      !!currentPlan &&
+      (incomingPlan !== currentPlan || (incomingInterval && incomingInterval !== currentInterval));
+
     // Map Paddle status to our status
     let newStatus = dbSubscription.status;
     let shouldStartTrial = false;
@@ -219,7 +236,7 @@ export async function POST(req) {
     switch (paddleStatus) {
       case "active":
         // Do not map Paddle "active" back to DB "trial" just because user.trialEndAt is still set (post-upgrade bug).
-        if (dbSubscription.status === "pending") {
+        if (dbSubscription.status === "pending" && !planChangedOnPaidSync) {
           // Payment just completed: first domain -> trial; second+ domain -> active
           if (isFirstDomain) {
             newStatus = "trial";
@@ -247,10 +264,6 @@ export async function POST(req) {
         console.warn(`[Sync] Unknown Paddle status: ${paddleStatus}`);
     }
 
-    let inferred = inferPlanFromPaddleSubscription(paddleSub);
-    if (!inferred && dbSubscription.paddlePriceId) {
-      inferred = await inferPlanFromPaddlePriceById(dbSubscription.paddlePriceId);
-    }
     const periodStart =
       paddleSub.current_billing_period?.starts_at ||
       paddleSub.current_period_starts_at ||
@@ -282,6 +295,14 @@ export async function POST(req) {
       await startUserTrial(site.userId);
       console.log(`[Sync] Started user trial for user ${site.userId}`);
     }
+    if (site.userId && (newStatus === "active" || planChangedOnPaidSync)) {
+      await clearUserTrialFields(site.userId).catch((err) =>
+        console.warn("[Sync] Failed to clear user trial fields:", err?.message)
+      );
+    }
+    await syncSiteScriptWithSubscription(site.siteId).catch((err) =>
+      console.warn("[Sync] Failed to sync site script:", err?.message)
+    );
 
     return Response.json({
       success: true,
