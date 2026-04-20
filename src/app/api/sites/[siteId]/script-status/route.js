@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { hasVerificationColumns } from "@/lib/db-utils";
+import { isSubscriptionActive, checkPageViewLimit } from "@/lib/subscription";
 
 /**
  * GET /api/sites/[siteId]/script-status
@@ -59,12 +60,37 @@ export async function GET(req, { params }) {
     const scriptInstalled =
       isVerified && lastSeenAt && new Date(lastSeenAt) >= fortyEightHoursAgo;
 
+    const [subscriptionStatus, viewLimit] = await Promise.all([
+      isSubscriptionActive(site.id),
+      checkPageViewLimit(site.id),
+    ]);
+
+    let serveState = "not_installed";
+    let servingReason = "Script not detected on the website yet.";
+    if (!subscriptionStatus.isActive) {
+      serveState = "inactive_subscription";
+      servingReason = "Subscription is inactive or expired.";
+    } else if (viewLimit.exceeded) {
+      serveState = "limit_reached";
+      servingReason = "Page view limit reached for this billing period.";
+    } else if (scriptInstalled) {
+      serveState = "serving";
+      servingReason = "Consent script is active and serving.";
+    }
+    const isServingScript = serveState === "serving";
+
     return Response.json({
       siteId: site.siteId,
       domain: site.domain,
       scriptInstalled,
+      isServingScript,
+      serveState,
+      servingReason,
       isVerified,
       lastSeenAt: lastSeenAt ? new Date(lastSeenAt).toISOString() : null,
+      viewLimit,
+      subscriptionActive: subscriptionStatus.isActive,
+      subscriptionReason: subscriptionStatus.reason,
     });
   } catch (error) {
     console.error("[script-status] Error:", error);

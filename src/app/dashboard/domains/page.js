@@ -458,12 +458,20 @@ function DomainsContent() {
                       (!!sub?.userTrialActive ||
                         (statusLower === "trial" && !!sub?.isFirstDomain));
                     const trialNotStarted = !sub?.subscription && !sub?.userTrialActive;
-                    const scriptInstalled = scriptStatus[site.siteId]?.scriptInstalled ?? false;
+                    const siteScriptStatus = scriptStatus[site.siteId] || {};
+                    const scriptInstalled = siteScriptStatus?.scriptInstalled ?? false;
+                    const serveState = siteScriptStatus?.serveState || "not_installed";
+                    const limitReached = serveState === "limit_reached";
+                    const inactiveSubscription = serveState === "inactive_subscription";
                     const planLabel = subscription?.plan
                       ? subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)
                       : "No active plan";
                     const statusText = isPending
                       ? "Complete payment"
+                      : limitReached
+                        ? "Limit reached - upgrade"
+                        : inactiveSubscription
+                          ? "Plan inactive"
                       : isActive
                         ? isTrial
                           ? "Trial active"
@@ -494,7 +502,15 @@ function DomainsContent() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {scriptInstalled ? (
+                          {limitReached ? (
+                            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-rose-700 bg-rose-50 border border-rose-100 px-2 py-1 rounded-md">
+                              <XCircle className="h-3.5 w-3.5 text-rose-500" /> Limit reached
+                            </span>
+                          ) : inactiveSubscription ? (
+                            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-rose-700 bg-rose-50 border border-rose-100 px-2 py-1 rounded-md">
+                              <XCircle className="h-3.5 w-3.5 text-rose-500" /> Not serving
+                            </span>
+                          ) : scriptInstalled ? (
                             <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-md">
                               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Active
                             </span>
@@ -506,7 +522,9 @@ function DomainsContent() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            {isActive ? (
+                            {limitReached || inactiveSubscription ? (
+                              <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                            ) : isActive ? (
                               <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                             ) : isPending ? (
                               <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
@@ -524,7 +542,7 @@ function DomainsContent() {
                                 Manage
                               </Link>
                             </Button>
-                            {isActive && (
+                            {isActive && !limitReached && !inactiveSubscription && (
                               <>
                                 <Button variant="outline" size="sm" onClick={() => copyScript(site)} className="h-8 text-xs font-medium rounded-lg text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-colors">
                                   <Copy className="h-3.5 w-3.5 mr-1.5" />
@@ -535,7 +553,7 @@ function DomainsContent() {
                                 </Button>
                               </>
                             )}
-                            {!isActive && (
+                            {(!isActive || limitReached || inactiveSubscription) && (
                               <Button size="sm" asChild className="h-8 text-xs font-medium rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 transition-colors">
                                 <Link href={`/plans?siteId=${site.siteId}&domain=${encodeURIComponent(site.domain)}`}>Review Plan</Link>
                               </Button>
