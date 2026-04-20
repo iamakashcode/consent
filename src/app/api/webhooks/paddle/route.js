@@ -332,9 +332,9 @@ async function createSiteFromPendingDomain(pending, transaction, subscriptionId)
 async function handleTransactionPaid(event) {
   const handled = await processPendingDomainPayment(event);
   if (handled) return;
-  // Do not call `handleTransactionCompleted` from here: `transaction.paid` can arrive before checkout finishes and
-  // would clear account trial when `custom_data.upgrade` is set, without a completed payment.
-  console.log("[Webhook] transaction.paid: no pending-domain handler; subscription rows update on transaction.completed");
+  // Some Paddle setups deliver `transaction.paid` earlier/more reliably than `transaction.completed`.
+  // Finalize subscription state here as well (idempotent with `transaction.completed` handler).
+  await handleTransactionCompleted(event);
 }
 
 /**

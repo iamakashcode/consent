@@ -5,9 +5,10 @@ import {
   fetchPaddleTransaction,
   inferPlanFromPaddleSubscription,
   inferPlanFromPaddlePriceById,
+  resolvePlanAndBillingFromTransaction,
 } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
-import { startUserTrial } from "@/lib/subscription";
+import { clearUserTrialFields, startUserTrial } from "@/lib/subscription";
 
 /**
  * Sync subscription status from Paddle
@@ -86,11 +87,35 @@ export async function POST(req) {
       );
     }
 
+    // Get site and user info first
+    const site = siteFromSiteLookup
+      ? siteFromSiteLookup
+      : await prisma.site.findUnique({
+          where: { id: dbSubscription.siteId },
+          include: { user: { select: { trialEndAt: true, trialStartedAt: true } } },
+        });
+
+    if (!site) {
+      return Response.json(
+        { error: "Site not found" },
+        { status: 404 }
+      );
+    }
+
+    const firstSite = await prisma.site.findFirst({
+      where: { userId: site.userId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    const isFirstDomain = firstSite?.id === site.id;
+
     // Resolve Paddle subscription: we may have been given a transaction ID (return URL)
     let paddleSubId = dbSubscription.paddleSubscriptionId;
+    let transactionForFallback = null;
     if (!paddleSubId) {
       try {
         const txn = await fetchPaddleTransaction(subscriptionId);
+        transactionForFallback = txn;
         paddleSubId = txn.subscription_id || txn.subscriptionId;
         if (paddleSubId && !dbSubscription.paddleSubscriptionId) {
           await prisma.subscription.update({
@@ -114,6 +139,72 @@ export async function POST(req) {
       paddleStatus = paddleSub.status;
       console.log(`[Sync] Paddle subscription ${paddleSubId} status: ${paddleStatus}`);
     } catch (error) {
+      // Fallback path for successful payments where subscription propagation lags:
+      // use transaction details to finalize DB plan/status immediately.
+      try {
+        const txn =
+          transactionForFallback ||
+          await fetchPaddleTransaction(subscriptionId).catch(() => null) ||
+          await fetchPaddleTransaction(paddleSubId).catch(() => null);
+        const txnStatus = String(txn?.status || "").toLowerCase();
+        const txnIsFinal = ["completed", "billed", "paid"].includes(txnStatus);
+        if (txn && txnIsFinal) {
+          const resolved = await resolvePlanAndBillingFromTransaction(txn, dbSubscription);
+          const billingPeriod = txn.billing_period || txn.billingPeriod;
+          const periodStart = billingPeriod?.starts_at
+            ? new Date(billingPeriod.starts_at)
+            : new Date();
+          const periodEnd = billingPeriod?.ends_at
+            ? new Date(billingPeriod.ends_at)
+            : (() => {
+                const end = new Date();
+                end.setMonth(end.getMonth() + 1);
+                return end;
+              })();
+
+          let newStatus = "active";
+          if (!resolved.upgrade && isFirstDomain && dbSubscription.status === "pending") {
+            newStatus = "trial";
+          }
+
+          const updated = await prisma.subscription.update({
+            where: { id: dbSubscription.id },
+            data: {
+              plan: resolved.plan,
+              billingInterval: resolved.billingInterval,
+              status: newStatus,
+              paddleSubscriptionId:
+                txn.subscription_id || txn.subscriptionId || dbSubscription.paddleSubscriptionId,
+              paddleTransactionId: txn.id || dbSubscription.paddleTransactionId,
+              currentPeriodStart: periodStart,
+              currentPeriodEnd: periodEnd,
+              updatedAt: new Date(),
+            },
+          });
+
+          if (newStatus === "trial") {
+            await startUserTrial(site.userId);
+          } else if (resolved.upgrade && site.userId) {
+            await clearUserTrialFields(site.userId).catch((e) =>
+              console.warn("[Sync] Failed to clear user trial after upgrade fallback:", e?.message)
+            );
+          }
+
+          return Response.json({
+            success: true,
+            subscription: updated,
+            site: {
+              siteId: site.siteId,
+              domain: site.domain,
+            },
+            paddleStatus: txn.status,
+            message: `Subscription synced from transaction. Status: ${newStatus}`,
+          });
+        }
+      } catch (fallbackError) {
+        console.warn("[Sync] Transaction fallback failed:", fallbackError?.message);
+      }
+
       console.error("[Sync] Error fetching from Paddle:", error);
       return Response.json(
         { error: "Could not fetch subscription from Paddle" },
@@ -124,28 +215,6 @@ export async function POST(req) {
     // Map Paddle status to our status
     let newStatus = dbSubscription.status;
     let shouldStartTrial = false;
-
-    // Get site and user info first
-    const site = siteFromSiteLookup
-      ? siteFromSiteLookup
-      : await prisma.site.findUnique({
-          where: { id: dbSubscription.siteId },
-          include: { user: { select: { trialEndAt: true, trialStartedAt: true } } },
-        });
-
-    if (!site) {
-      return Response.json(
-        { error: "Site not found" },
-        { status: 404 }
-      );
-    }
-
-    const firstSite = await prisma.site.findFirst({
-      where: { userId: site.userId },
-      orderBy: { createdAt: "asc" },
-      select: { id: true },
-    });
-    const isFirstDomain = firstSite?.id === site.id;
 
     switch (paddleStatus) {
       case "active":

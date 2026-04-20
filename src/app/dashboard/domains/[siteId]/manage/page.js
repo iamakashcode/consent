@@ -93,6 +93,30 @@ export default function ManageDomainPage() {
       const row = (data.subscriptions || []).find((item) => item.siteId === siteId);
       if (row) {
         sub = { ...row };
+        const syncId = row.subscription?.paddleSubscriptionId || row.subscription?.paddleTransactionId;
+        if (syncId) {
+          try {
+            const syncRes = await fetch("/api/payment/sync-subscription", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ subscriptionId: syncId, siteId }),
+            });
+            if (syncRes.ok) {
+              const syncData = await syncRes.json();
+              if (syncData?.subscription) {
+                sub = {
+                  ...sub,
+                  subscription: syncData.subscription,
+                  isActive: ["active", "trial"].includes(
+                    String(syncData.subscription.status || "").toLowerCase()
+                  ),
+                };
+              }
+            }
+          } catch (e) {
+            console.warn("[Manage] subscription sync failed:", e);
+          }
+        }
       }
     }
 
