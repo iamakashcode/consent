@@ -97,17 +97,26 @@ export const BANNER_TEMPLATES = {
 // Alias so script can use BANNER_TEMPLATES.default
 BANNER_TEMPLATES.default = BANNER_TEMPLATES.minimal;
 
-// Default banner configuration – must match banner page DEFAULT_CONFIG so first-time script matches preview
+// Default banner configuration – must match banner page defaults so first-time live script matches preview.
 export const DEFAULT_BANNER_CONFIG = {
-  template: "minimal",
+  template: "light",
   position: "bottom",
   title: "We value your privacy",
-  message: "This site uses tracking cookies to enhance your browsing experience and analyze site traffic.",
+  message:
+    "We use cookies to enhance your browsing experience, serve personalized ads or content, and analyze our traffic. By clicking 'Accept All', you consent to our use of cookies.",
+  acceptText: "Accept All",
+  rejectText: "Reject All",
+  customizeText: "Customize Settings",
+  // Keep legacy keys too, since older saved configs may still rely on these names.
   acceptButtonText: "Accept All",
   rejectButtonText: "Reject All",
-  customizeButtonText: "Customize",
+  customizeButtonText: "Customize Settings",
   showRejectButton: true,
   showCustomizeButton: true,
+  backgroundColor: "#ffffff",
+  textColor: "#0f172a",
+  buttonColor: "#0f172a",
+  buttonTextColor: "#ffffff",
   customStyle: null,
 };
 
@@ -135,27 +144,28 @@ export function bannerPlacementCss(position) {
  */
 export function normalizeBannerConfig(config) {
   if (!config || typeof config !== "object") {
-    const t = BANNER_TEMPLATES.minimal;
+    const t = BANNER_TEMPLATES.light;
     return {
-      title: "We value your privacy",
-      message: "This site uses tracking cookies to enhance your browsing experience and analyze site traffic.",
-      acceptText: "Accept All",
-      rejectText: "Reject All",
-      customizeText: "Customize",
+      title: DEFAULT_BANNER_CONFIG.title,
+      message: DEFAULT_BANNER_CONFIG.message,
+      acceptText: DEFAULT_BANNER_CONFIG.acceptText,
+      rejectText: DEFAULT_BANNER_CONFIG.rejectText,
+      customizeText: DEFAULT_BANNER_CONFIG.customizeText,
       showReject: true,
-      position: "bottom",
-      style: t?.style || {
-        backgroundColor: "#1f2937",
-        textColor: "#ffffff",
-        buttonColor: "#4F46E5",
-        buttonTextColor: "#ffffff",
-        padding: "20px",
-        fontSize: "14px",
-        borderRadius: "8px",
+      position: DEFAULT_BANNER_CONFIG.position,
+      style: {
+        ...(t?.style || {}),
+        backgroundColor: DEFAULT_BANNER_CONFIG.backgroundColor,
+        textColor: DEFAULT_BANNER_CONFIG.textColor,
+        buttonColor: DEFAULT_BANNER_CONFIG.buttonColor,
+        buttonTextColor: DEFAULT_BANNER_CONFIG.buttonTextColor,
+        padding: (t?.style?.padding || "20px"),
+        fontSize: (t?.style?.fontSize || "14px"),
+        borderRadius: (t?.style?.borderRadius || "8px"),
       },
     };
   }
-  const template = BANNER_TEMPLATES[config.template] || BANNER_TEMPLATES.minimal;
+  const template = BANNER_TEMPLATES[config.template] || BANNER_TEMPLATES.light;
   const templateStyle = template?.style || {};
   const customStyle = config.customStyle || (config.backgroundColor || config.textColor || config.buttonColor
     ? {
@@ -172,13 +182,13 @@ export function normalizeBannerConfig(config) {
     : null);
   const style = customStyle || templateStyle;
   return {
-    title: config.title ?? "We value your privacy",
-    message: config.message ?? config.description ?? "This site uses tracking cookies to enhance your browsing experience and analyze site traffic.",
-    acceptText: config.acceptText ?? config.acceptButtonText ?? "Accept All",
-    rejectText: config.rejectText ?? config.rejectButtonText ?? "Reject All",
-    customizeText: config.customizeText ?? config.customizeButtonText ?? "Customize",
+    title: config.title ?? DEFAULT_BANNER_CONFIG.title,
+    message: config.message ?? config.description ?? DEFAULT_BANNER_CONFIG.message,
+    acceptText: config.acceptText ?? config.acceptButtonText ?? DEFAULT_BANNER_CONFIG.acceptText,
+    rejectText: config.rejectText ?? config.rejectButtonText ?? DEFAULT_BANNER_CONFIG.rejectText,
+    customizeText: config.customizeText ?? config.customizeButtonText ?? DEFAULT_BANNER_CONFIG.customizeText,
     showReject: config.showReject !== false && config.showRejectButton !== false,
-    position: config.position ?? "bottom",
+    position: config.position ?? DEFAULT_BANNER_CONFIG.position,
     style,
   };
 }
