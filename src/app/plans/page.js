@@ -8,6 +8,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { ADDON_BRANDING_PRICE_EUR, PLAN_DETAILS, PLAN_CURRENCY } from "@/lib/paddle";
 import { Check, ArrowRight, ShieldCheck, Zap, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // Shared components
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -161,7 +162,9 @@ function PlansContent() {
 
         if (addonData.success && addonData.addonActivated) {
           setCurrentSubscription((prev) => (prev ? { ...prev, removeBrandingAddon: true } : prev));
-          alert(addonData.message || "White-label addon activated.");
+          toast.success("White-label addon activated", {
+            description: addonData.message || "Branding is now removed for this domain.",
+          });
           setLoading(false);
           setSelectedPlan(null);
           return;

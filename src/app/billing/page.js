@@ -74,6 +74,7 @@ function BillingContent() {
           allSubs.push({
             ...sub,
             domain: activeDomainsMap[sub.siteId] || sub.domain || 'Unknown Domain',
+            removeBrandingAddon: !!(sub?.subscription?.removeBrandingAddon || sub?.removeBrandingAddon),
             isPlaceholder: false
           });
         });
@@ -88,6 +89,7 @@ function BillingContent() {
             domain: activeDomainsMap[siteId],
             status: 'none',
             isActive: false,
+            removeBrandingAddon: false,
             isPlaceholder: true,
             subscription: null
           });
@@ -271,7 +273,7 @@ function BillingContent() {
                       <div>
                         <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Plan Add-ons</p>
                         <div className="flex flex-col gap-1 mt-1">
-                          {sub.removeBrandingAddon ? (
+                          {(sub.removeBrandingAddon || subData.removeBrandingAddon) ? (
                             <span className="inline-flex items-center gap-1.5 text-[13px] text-slate-700">
                               <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500" />
                               White-label UI
