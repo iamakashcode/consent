@@ -5,6 +5,7 @@ import {
   inferPlanFromPaddlePriceById,
   normalizePaddleTransactionCustomData,
   resolvePlanAndBillingFromTransaction,
+  cancelPaddleSubscription,
 } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
 import { startUserTrial, clearUserTrialFields } from "@/lib/subscription";
@@ -443,6 +444,7 @@ async function handleTransactionCompleted(event) {
 
   const resolved = await resolvePlanAndBillingFromTransaction(transaction, dbSubscription);
   const isUpgrade = resolved.upgrade;
+  const previousPaddleSubscriptionId = dbSubscription.paddleSubscriptionId || null;
   if (!isUpgrade) {
     await startUserTrial(site.userId);
   }
@@ -487,6 +489,26 @@ async function handleTransactionCompleted(event) {
       updatedAt: new Date(),
     },
   });
+
+  // Upgrade safety: cancel old Paddle subscription only after replacement payment is confirmed.
+  if (
+    isUpgrade &&
+    previousPaddleSubscriptionId &&
+    subscriptionId &&
+    previousPaddleSubscriptionId !== subscriptionId
+  ) {
+    try {
+      await cancelPaddleSubscription(previousPaddleSubscriptionId, false);
+      console.log(
+        `[Webhook] Upgrade: canceled previous Paddle subscription ${previousPaddleSubscriptionId}`
+      );
+    } catch (err) {
+      console.error(
+        `[Webhook] Upgrade: failed to cancel previous Paddle subscription ${previousPaddleSubscriptionId}:`,
+        err
+      );
+    }
+  }
 
   if (isUpgrade && site.userId && newStatus === "active") {
     await clearUserTrialFields(site.userId).catch((err) =>

@@ -149,6 +149,46 @@ export async function POST(req) {
           await fetchPaddleTransaction(paddleSubId).catch(() => null);
         const txnStatus = String(txn?.status || "").toLowerCase();
         const txnIsFinal = ["completed", "billed", "paid"].includes(txnStatus);
+        const customData = txn?.custom_data || {};
+        const upgradeFlagRaw =
+          customData?.upgrade ??
+          customData?.isUpgrade ??
+          customData?.upgradeFlow;
+        const isUpgradeAttempt =
+          upgradeFlagRaw === true ||
+          String(upgradeFlagRaw || "").toLowerCase() === "true" ||
+          String(upgradeFlagRaw || "") === "1";
+
+        // Abandoned upgrade checkout: keep user's current domain serving instead of leaving it stuck in pending.
+        // This is safe because transaction is not in a paid/final state and the previous plan remains in DB.
+        if (txn && !txnIsFinal && dbSubscription.status === "pending" && isUpgradeAttempt) {
+          const userTrialStillValid =
+            isFirstDomain &&
+            !!(site.user?.trialEndAt && new Date() < new Date(site.user.trialEndAt));
+          const restoredStatus = userTrialStillValid ? "trial" : "active";
+          const restored = await prisma.subscription.update({
+            where: { id: dbSubscription.id },
+            data: {
+              status: restoredStatus,
+              paddleTransactionId: null,
+              updatedAt: new Date(),
+            },
+          });
+          await syncSiteScriptWithSubscription(site.siteId).catch((e) =>
+            console.warn("[Sync] Failed to sync site script after abandoned-upgrade restore:", e?.message)
+          );
+          return Response.json({
+            success: true,
+            subscription: restored,
+            site: {
+              siteId: site.siteId,
+              domain: site.domain,
+            },
+            paddleStatus: txn.status,
+            message: "Abandoned upgrade checkout detected; restored current active subscription.",
+          });
+        }
+
         if (txn && txnIsFinal) {
           const resolved = await resolvePlanAndBillingFromTransaction(txn, dbSubscription);
           const billingPeriod = txn.billing_period || txn.billingPeriod;

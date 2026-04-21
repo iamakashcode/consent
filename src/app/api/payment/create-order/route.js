@@ -11,7 +11,6 @@ import {
   createPaddleTransactionForPendingDomain,
   fetchPaddleSubscription,
   getSubscriptionCheckoutUrl,
-  cancelPaddleSubscription,
   getOrCreatePaddleAddonProduct,
   getOrCreatePaddleAddonPrice,
 } from "@/lib/paddle";
@@ -123,28 +122,9 @@ export async function POST(req) {
       const status = site.subscription.status?.toLowerCase();
       const currentPlan = (site.subscription.plan || "").toLowerCase();
 
-      // Upgrade: cancel current subscription (immediately), then proceed to create new one
-      if (isUpgradeFlow && (status === "active" || status === "trial") && (plan !== currentPlan || String(site.subscription.billingInterval || "monthly").toLowerCase() !== targetInterval)) {
-        if (site.subscription.paddleSubscriptionId) {
-          try {
-            await cancelPaddleSubscription(site.subscription.paddleSubscriptionId, false);
-          } catch (err) {
-            console.error("[Payment] Upgrade: Paddle cancel failed", err);
-          }
-        }
-        await prisma.subscription.update({
-          where: { siteId: site.id },
-          data: {
-            status: "cancelled",
-            cancelAtPeriodEnd: false,
-            currentPeriodEnd: new Date(),
-            paddleSubscriptionId: null,
-            paddleTransactionId: null,
-            updatedAt: new Date(),
-          },
-        });
-        site.subscription = { ...site.subscription, status: "cancelled" };
-      } else if (status === "pending") {
+      // Upgrade safety: keep existing subscription active/trial until the new checkout is paid.
+      // We only switch/cancel in webhook after confirmed payment success.
+      if (status === "pending") {
         // Check if we have an existing Paddle subscription or transaction
         if (site.subscription.paddleSubscriptionId || site.subscription.paddleTransactionId) {
           try {
@@ -395,10 +375,13 @@ export async function POST(req) {
     // Do NOT set plan/billingInterval here for existing subscription - only webhook sets them after payment success
     try {
       if (site.subscription) {
+        const existingStatus = String(site.subscription.status || "").toLowerCase();
+        const preserveCurrentAccessDuringUpgrade =
+          isUpgradeFlow && ["active", "trial"].includes(existingStatus);
         await prisma.subscription.update({
           where: { siteId: site.id },
           data: {
-            status: "pending",
+            status: preserveCurrentAccessDuringUpgrade ? site.subscription.status : "pending",
             // Do not set plan/billingInterval until payment succeeds (webhook); avoids "upgraded" UI after abandoning checkout.
             paddleProductId: paddleProduct.id,
             paddlePriceId: paddlePrice.id,
