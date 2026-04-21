@@ -114,10 +114,12 @@ function DomainsContent() {
           if (!sub) return false;
           const status = String(sub.status || "").toLowerCase();
           const plan = String(sub.plan || "").toLowerCase();
+          const hasPaddleTransactionId = Boolean(sub.paddleTransactionId);
           // Self-heal stale post-upgrade state (e.g. Pro plan still marked trial).
           return (
             status === "trial" ||
-            (["starter", "pro"].includes(plan) && (status === "pending" || item.userTrialActive))
+            (["starter", "pro"].includes(plan) && (status === "pending" || item.userTrialActive)) ||
+            hasPaddleTransactionId
           );
         });
         if (syncCandidates.length > 0) {

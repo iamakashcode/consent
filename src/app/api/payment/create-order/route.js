@@ -184,9 +184,6 @@ export async function POST(req) {
 
     const amount = PLAN_PRICING[plan];
 
-    // Addon allowed in free trial too: same 14 days free, then plan + addon both charge.
-    const addonRemoveBranding = Boolean(requestedAddonRemoveBranding);
-
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { name: true, email: true },
@@ -215,9 +212,15 @@ export async function POST(req) {
       );
     }
 
-    // Optional add-on (remove branding) – only when user explicitly checked the box; never add by default
+    // Keep existing white-label add-on on plan changes unless user explicitly removes it elsewhere.
+    const carryForwardAddonOnPlanChange = Boolean(
+      isUpgradeFlow && site.subscription?.removeBrandingAddon
+    );
+    const includeAddonInCheckout = Boolean(requestedAddonRemoveBranding || carryForwardAddonOnPlanChange);
+
+    // Optional add-on (remove branding)
     let addonPrice = null;
-    if (addonRemoveBranding) {
+    if (includeAddonInCheckout) {
       try {
         const addonProduct = await getOrCreatePaddleAddonProduct(ADDON_BRANDING_PRODUCT_NAME);
         addonPrice = await getOrCreatePaddleAddonPrice(addonProduct.id, ADDON_BRANDING_PRICE_CENTS, billingInterval, { trialDays });
@@ -257,7 +260,7 @@ export async function POST(req) {
       }
       let paddleTransaction;
       try {
-        const addonOptions = requestedAddonRemoveBranding && addonPrice?.id
+        const addonOptions = includeAddonInCheckout && addonPrice?.id
           ? { addonPriceId: addonPrice.id, addonRemoveBranding: true }
           : {};
         paddleTransaction = await createPaddleTransactionForPendingDomain(
@@ -315,7 +318,7 @@ export async function POST(req) {
     // Pass plan/billingInterval in custom_data so webhook updates subscription only after payment success
     let paddleTransaction;
     try {
-      const addonOpts = requestedAddonRemoveBranding && addonPrice?.id
+      const addonOpts = includeAddonInCheckout && addonPrice?.id
         ? { addonPriceId: addonPrice.id, addonRemoveBranding: true }
         : {};
       paddleTransaction = await createPaddleTransaction(

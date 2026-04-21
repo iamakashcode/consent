@@ -6,7 +6,7 @@ import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import DashboardLayout from "@/components/DashboardLayout";
-import { PLAN_DETAILS } from "@/lib/paddle";
+import { ADDON_BRANDING_PRICE_EUR, PLAN_CURRENCY, PLAN_DETAILS } from "@/lib/paddle";
 import { toast } from "sonner";
 import { Receipt, CheckCircle2, XCircle, CreditCard, } from "lucide-react";
 
@@ -180,6 +180,15 @@ function BillingContent() {
             const statusLower = subData.status?.toLowerCase() || sub.status?.toLowerCase();
             const planBase = subData.plan || "basic";
             const planName = PLAN_DETAILS[planBase]?.name || "Custom Plan";
+            const billingInterval = String(subData.billingInterval || "monthly").toLowerCase();
+            const addonActive = Boolean(sub.removeBrandingAddon || subData.removeBrandingAddon);
+            const planAmount =
+              PLAN_DETAILS[planBase]?.[billingInterval === "yearly" ? "yearly" : "monthly"] ?? 0;
+            const addonAmount =
+              addonActive
+                ? (billingInterval === "yearly" ? ADDON_BRANDING_PRICE_EUR * 10 : ADDON_BRANDING_PRICE_EUR)
+                : 0;
+            const totalAmount = planAmount + addonAmount;
             const isTrial =
               !!sub.userTrialActive ||
               (statusLower === "trial" && !!sub.isFirstDomain);
@@ -249,7 +258,7 @@ function BillingContent() {
 
                 {!sub.isPlaceholder && (
                   <div className="mt-6 border-t border-slate-100 bg-slate-50/50 p-5 sm:p-6">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
                       <div>
                         <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Billing Period</p>
                         <p className="text-[14px] font-medium text-slate-900 capitalize">
@@ -273,7 +282,7 @@ function BillingContent() {
                       <div>
                         <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Plan Add-ons</p>
                         <div className="flex flex-col gap-1 mt-1">
-                          {(sub.removeBrandingAddon || subData.removeBrandingAddon) ? (
+                          {addonActive ? (
                             <span className="inline-flex items-center gap-1.5 text-[13px] text-slate-700">
                               <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500" />
                               White-label UI
@@ -282,6 +291,13 @@ function BillingContent() {
                             <span className="text-[13px] text-slate-500">—</span>
                           )}
                         </div>
+                      </div>
+
+                      <div>
+                        <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Current Amount</p>
+                        <p className="text-[14px] font-medium text-slate-900">
+                          {PLAN_CURRENCY}{totalAmount}/{billingInterval === "yearly" ? "year" : "month"}
+                        </p>
                       </div>
 
                       <div>
