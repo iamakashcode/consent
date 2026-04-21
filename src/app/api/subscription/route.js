@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { getUserSubscriptions, isDomainActive } from "@/lib/subscription";
-import { cancelPaddleSubscription } from "@/lib/paddle";
+import { cancelPaddleSubscription, removeBrandingAddonFromSubscription } from "@/lib/paddle";
 import { syncSiteScriptWithSubscription } from "@/lib/script-generator";
 
 /**
@@ -266,7 +266,17 @@ async function handleCancelAddon(site) {
     );
   }
 
-  if (subscription.paddleAddonSubscriptionId) {
+  if (subscription.paddleSubscriptionId) {
+    try {
+      await removeBrandingAddonFromSubscription(subscription.paddleSubscriptionId);
+    } catch (err) {
+      console.error("[Subscription] Error removing addon item from Paddle subscription:", err);
+      return Response.json(
+        { error: "Failed to remove add-on from active subscription. Please try again." },
+        { status: 502 }
+      );
+    }
+  } else if (subscription.paddleAddonSubscriptionId) {
     try {
       await cancelPaddleSubscription(subscription.paddleAddonSubscriptionId, true);
     } catch (err) {

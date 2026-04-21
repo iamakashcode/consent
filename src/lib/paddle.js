@@ -475,6 +475,64 @@ export async function createPaddleAddonTransaction(priceId, customerId, siteId, 
   }
 }
 
+function isBrandingAddonLineItem(item) {
+  const amount = Number(item?.price?.unit_price?.amount || 0);
+  // EUR 3 monthly or EUR 30 yearly (10x yearly pricing convention in this app)
+  return amount === ADDON_BRANDING_PRICE_CENTS || amount === ADDON_BRANDING_PRICE_CENTS * 10;
+}
+
+function mapSubscriptionItemForUpdate(item) {
+  const priceId = item?.price?.id || item?.price_id;
+  const quantity = Number(item?.quantity || 1);
+  if (!priceId) return null;
+  return { price_id: priceId, quantity };
+}
+
+/**
+ * Add remove-branding addon as an item on an existing Paddle subscription.
+ * This keeps billing co-termed with the same subscription cycle.
+ */
+export async function addBrandingAddonToSubscription(subscriptionId, addonPriceId) {
+  const full = await fetchPaddleSubscription(subscriptionId);
+  const existingItems = Array.isArray(full?.items) ? full.items : [];
+  const hasAddonAlready = existingItems.some((item) => {
+    const itemPriceId = item?.price?.id || item?.price_id;
+    return itemPriceId === addonPriceId || isBrandingAddonLineItem(item);
+  });
+  if (hasAddonAlready) return full;
+
+  const nextItems = existingItems
+    .map(mapSubscriptionItemForUpdate)
+    .filter(Boolean);
+  nextItems.push({ price_id: addonPriceId, quantity: 1 });
+
+  const updated = await paddleRequest("PATCH", `/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    items: nextItems,
+    proration_billing_mode: "prorated_immediately",
+  });
+  return updated.data;
+}
+
+/**
+ * Remove remove-branding addon from an existing Paddle subscription.
+ */
+export async function removeBrandingAddonFromSubscription(subscriptionId) {
+  const full = await fetchPaddleSubscription(subscriptionId);
+  const existingItems = Array.isArray(full?.items) ? full.items : [];
+  const filteredItems = existingItems.filter((item) => !isBrandingAddonLineItem(item));
+  if (filteredItems.length === existingItems.length) return full;
+
+  const nextItems = filteredItems
+    .map(mapSubscriptionItemForUpdate)
+    .filter(Boolean);
+
+  const updated = await paddleRequest("PATCH", `/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    items: nextItems,
+    proration_billing_mode: "prorated_immediately",
+  });
+  return updated.data;
+}
+
 /**
  * Create Paddle subscription (legacy - use createPaddleTransaction instead)
  * Note: Subscriptions are created automatically by Paddle when transaction is paid

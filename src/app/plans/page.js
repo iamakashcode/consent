@@ -158,6 +158,14 @@ function PlansContent() {
           setSelectedPlan(null);
           return;
         }
+
+        if (addonData.success && addonData.addonActivated) {
+          setCurrentSubscription((prev) => (prev ? { ...prev, removeBrandingAddon: true } : prev));
+          alert(addonData.message || "White-label addon activated.");
+          setLoading(false);
+          setSelectedPlan(null);
+          return;
+        }
       }
 
       const response = await fetch("/api/payment/create-order", {

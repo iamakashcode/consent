@@ -5,8 +5,7 @@ import {
   ADDON_BRANDING_PRODUCT_NAME,
   getOrCreatePaddleAddonProduct,
   getOrCreatePaddleAddonPrice,
-  getOrCreatePaddleCustomer,
-  createPaddleAddonTransaction,
+  addBrandingAddonToSubscription,
 } from "@/lib/paddle";
 import { prisma } from "@/lib/prisma";
 
@@ -65,42 +64,45 @@ export async function POST(req) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { name: true, email: true },
+    const paddleProduct = await getOrCreatePaddleAddonProduct(ADDON_BRANDING_PRODUCT_NAME);
+    const billingInterval = String(site.subscription.billingInterval || "monthly").toLowerCase();
+    const paddlePrice = await getOrCreatePaddleAddonPrice(
+      paddleProduct.id,
+      ADDON_BRANDING_PRICE_CENTS,
+      billingInterval === "yearly" ? "yearly" : "monthly"
+    );
+
+    if (!site.subscription.paddleSubscriptionId) {
+      return Response.json(
+        { error: "Primary Paddle subscription not ready yet for this domain. Please try again in a moment." },
+        { status: 409 }
+      );
+    }
+
+    await addBrandingAddonToSubscription(site.subscription.paddleSubscriptionId, paddlePrice.id);
+
+    await prisma.subscription.update({
+      where: { siteId: site.id },
+      data: {
+        removeBrandingAddon: true,
+        // No separate addon subscription now; addon is attached to the main subscription for co-termed billing.
+        paddleAddonSubscriptionId: null,
+        updatedAt: new Date(),
+      },
     });
 
-    const paddleProduct = await getOrCreatePaddleAddonProduct(ADDON_BRANDING_PRODUCT_NAME);
-    const paddlePrice = await getOrCreatePaddleAddonPrice(paddleProduct.id, ADDON_BRANDING_PRICE_CENTS);
-    const paddleCustomer = await getOrCreatePaddleCustomer(
-      user?.email || session.user.email,
-      user?.name || "User"
-    );
-
-    const transaction = await createPaddleAddonTransaction(
-      paddlePrice.id,
-      paddleCustomer.id,
-      site.id,
-      addonType
-    );
-
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || req.headers.get("origin") || `http://${req.headers.get("host")}`;
-    const redirectTarget = `/banner?siteId=${site.siteId}&addon=success`;
-    // Use our checkout page so Paddle overlay opens and we control success redirect (payment/return?addon=remove_branding)
-    const checkoutUrl =
-      transaction.checkout?.url && !transaction.checkout.url.includes(baseUrl)
-        ? transaction.checkout.url
-        : `${baseUrl}/checkout?_ptxn=${transaction.id}&siteId=${encodeURIComponent(site.siteId)}&addon=remove_branding&redirect=${encodeURIComponent(redirectTarget)}`;
-
-    const returnUrl = `${baseUrl}/payment/return?transaction_id=${transaction.id}&siteId=${site.siteId}&addon=remove_branding&redirect=${encodeURIComponent(redirectTarget)}`;
+    try {
+      const { syncSiteScriptWithSubscription } = await import("@/lib/script-generator");
+      await syncSiteScriptWithSubscription(site.siteId);
+    } catch (err) {
+      console.error("[Create Addon Checkout] CDN sync after addon:", err);
+    }
 
     return Response.json({
       success: true,
-      checkoutUrl,
-      returnUrl,
-      transactionId: transaction.id,
+      addonActivated: true,
       siteId: site.siteId,
-      message: "Complete payment to hide branding on your consent banner.",
+      message: "White-label addon activated on your current subscription cycle.",
     });
   } catch (error) {
     console.error("[Create Addon Checkout] Error:", error);
