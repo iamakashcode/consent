@@ -118,6 +118,48 @@ function PlansContent() {
     setSelectedPlan(planKey);
 
     try {
+      const isCurrentPlanSelection = currentSubscription?.plan === planKey;
+      const addonRequested = addonChoiceByPlan?.[planKey] === true;
+      const addonAlreadyActive = !!currentSubscription?.removeBrandingAddon;
+      const addonEligibleStatus = ["active", "trial"].includes(currentSubscription?.status || "");
+
+      // Current-plan add-on purchase path (no plan switch).
+      if (isCurrentPlanSelection && addonRequested && !addonAlreadyActive) {
+        if (!addonEligibleStatus) {
+          alert("Your subscription must be active (or in trial) to add the white-label addon.");
+          setLoading(false);
+          setSelectedPlan(null);
+          return;
+        }
+
+        const addonResponse = await fetch("/api/payment/create-addon-checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            siteId,
+            addonType: "remove_branding",
+          }),
+        });
+        const addonData = await addonResponse.json();
+
+        if (!addonResponse.ok) {
+          alert(addonData.error || "Failed to set up add-on checkout. Please try again.");
+          setLoading(false);
+          setSelectedPlan(null);
+          return;
+        }
+
+        const addonCheckoutUrl = addonData.checkoutUrl;
+        if (addonCheckoutUrl) {
+          if (addonData.transactionId) sessionStorage.setItem("paddle_transaction_id", addonData.transactionId);
+          sessionStorage.setItem("paddle_site_id", siteId);
+          window.location.assign(addonCheckoutUrl);
+          setLoading(false);
+          setSelectedPlan(null);
+          return;
+        }
+      }
+
       const response = await fetch("/api/payment/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -272,13 +314,27 @@ function PlansContent() {
         {Object.entries(PLAN_DETAILS).map(([planKey, plan]) => {
           const price = tab === "monthly" ? plan.monthly : plan.yearly;
           const period = tab === "monthly" ? "/month" : "/year";
-          const addonSelected = addonChoiceByPlan?.[planKey] === true;
           const isCurrentPlan = currentSubscription?.plan === planKey;
+          const currentPlanAddonActive = isCurrentPlan && !!currentSubscription?.removeBrandingAddon;
+          const addonSelected = currentPlanAddonActive ? true : addonChoiceByPlan?.[planKey] === true;
           const canUpgrade = currentSubscription?.isActive && ["active", "trial"].includes(currentSubscription?.status) && !isCurrentPlan;
+          const canBuyAddonOnCurrentPlan =
+            isCurrentPlan &&
+            currentSubscription?.isActive &&
+            ["active", "trial"].includes(currentSubscription?.status || "") &&
+            !currentPlanAddonActive;
           const isNewSubscription = !currentSubscription?.plan || !currentSubscription?.isActive;
-          const disabled = !siteId || loading || isCurrentPlan;
+          const disabled =
+            !siteId ||
+            loading ||
+            (isCurrentPlan
+              ? currentPlanAddonActive || (canBuyAddonOnCurrentPlan && !addonSelected) || !canBuyAddonOnCurrentPlan
+              : false);
 
           let buttonLabel = !siteId ? "Add Domain First" : isCurrentPlan ? "Current Plan Active" : canUpgrade ? `Switch to ${plan.name}` : `Subscribe for ${PLAN_CURRENCY} ${price}${period}`;
+          if (canBuyAddonOnCurrentPlan && addonSelected) buttonLabel = "Add White-label Addon";
+          if (currentPlanAddonActive) buttonLabel = "White-label Active";
+          if (canBuyAddonOnCurrentPlan && !addonSelected) buttonLabel = "Select Addon to Continue";
           if (isFirstDomain && isNewSubscription && siteId) buttonLabel = "Start 14-day Free Trial";
 
           return (
@@ -366,7 +422,7 @@ function PlansContent() {
                         className="sr-only"
                         checked={addonSelected}
                         onChange={(e) => setAddonChoiceByPlan((prev) => ({ ...(prev || {}), [planKey]: e.target.checked }))}
-                        disabled={disabled}
+                        disabled={!siteId || loading || currentPlanAddonActive}
                       />
                     </div>
                     <div>
