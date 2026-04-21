@@ -121,6 +121,11 @@ export async function POST(req) {
     if (site.subscription) {
       const status = site.subscription.status?.toLowerCase();
       const currentPlan = (site.subscription.plan || "").toLowerCase();
+      const currentInterval = String(site.subscription.billingInterval || "monthly").toLowerCase();
+      const requestedPlan = String(plan || "").toLowerCase();
+      const requestedInterval = String(targetInterval || "monthly").toLowerCase();
+      const isPlanOrIntervalChange =
+        requestedPlan !== currentPlan || requestedInterval !== currentInterval;
 
       // Upgrade safety: keep existing subscription active/trial until the new checkout is paid.
       // We only switch/cancel in webhook after confirmed payment success.
@@ -155,10 +160,15 @@ export async function POST(req) {
           }
         }
       } else if (status === "active" || status === "trial") {
+        // Allow upgrade/downgrade checkout when user is changing plan or billing interval.
+        if (isUpgradeFlow && isPlanOrIntervalChange) {
+          // Continue to create a new checkout while keeping current access intact until payment success.
+        } else {
         return Response.json(
           { error: `This domain already has an active ${site.subscription.plan} subscription. Use "Upgrade" to change plan.` },
           { status: 400 }
         );
+        }
       } else if (site.subscription && status === "cancelled" && site.subscription.currentPeriodEnd) {
         const periodEnd = new Date(site.subscription.currentPeriodEnd);
         if (new Date() < periodEnd) {
