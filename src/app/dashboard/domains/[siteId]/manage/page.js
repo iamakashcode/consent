@@ -93,7 +93,7 @@ export default function ManageDomainPage() {
       const row = (data.subscriptions || []).find((item) => item.siteId === siteId);
       if (row) {
         sub = { ...row };
-        const syncId = row.subscription?.paddleSubscriptionId || row.subscription?.paddleTransactionId;
+        const syncId = row.subscription?.paddleTransactionId || row.subscription?.paddleSubscriptionId;
         if (syncId) {
           try {
             const syncRes = await fetch("/api/payment/sync-subscription", {

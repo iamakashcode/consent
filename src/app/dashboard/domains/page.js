@@ -124,8 +124,8 @@ function DomainsContent() {
           await Promise.all(
             syncCandidates.map(async (item) => {
               const syncId =
-                item.subscription?.paddleSubscriptionId ||
-                item.subscription?.paddleTransactionId;
+                item.subscription?.paddleTransactionId ||
+                item.subscription?.paddleSubscriptionId;
               if (!syncId) return;
               try {
                 const syncRes = await fetch("/api/payment/sync-subscription", {

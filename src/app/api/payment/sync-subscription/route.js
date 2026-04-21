@@ -110,12 +110,89 @@ export async function POST(req) {
     });
     const isFirstDomain = firstSite?.id === site.id;
 
+    async function finalizeFromPaidTransaction(txn) {
+      const resolved = await resolvePlanAndBillingFromTransaction(txn, dbSubscription);
+      const billingPeriod = txn.billing_period || txn.billingPeriod;
+      const periodStart = billingPeriod?.starts_at
+        ? new Date(billingPeriod.starts_at)
+        : new Date();
+      const periodEnd = billingPeriod?.ends_at
+        ? new Date(billingPeriod.ends_at)
+        : (() => {
+            const end = new Date();
+            end.setMonth(end.getMonth() + 1);
+            return end;
+          })();
+
+      let newStatus = "active";
+      if (!resolved.upgrade && isFirstDomain && dbSubscription.status === "pending") {
+        newStatus = "trial";
+      }
+
+      const updated = await prisma.subscription.update({
+        where: { id: dbSubscription.id },
+        data: {
+          plan: resolved.plan,
+          billingInterval: resolved.billingInterval,
+          status: newStatus,
+          paddleSubscriptionId:
+            txn.subscription_id || txn.subscriptionId || dbSubscription.paddleSubscriptionId,
+          paddleTransactionId: txn.id || dbSubscription.paddleTransactionId,
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: periodEnd,
+          updatedAt: new Date(),
+        },
+      });
+
+      if (newStatus === "trial") {
+        await startUserTrial(site.userId);
+      } else if (resolved.upgrade && site.userId) {
+        await clearUserTrialFields(site.userId).catch((e) =>
+          console.warn("[Sync] Failed to clear user trial after upgrade fallback:", e?.message)
+        );
+      }
+      await syncSiteScriptWithSubscription(site.siteId).catch((e) =>
+        console.warn("[Sync] Failed to sync site script after transaction fallback:", e?.message)
+      );
+
+      return updated;
+    }
+
     // Resolve Paddle subscription: we may have been given a transaction ID (return URL)
-    let paddleSubId = dbSubscription.paddleSubscriptionId;
     let transactionForFallback = null;
+    const incomingLookupId = String(subscriptionId || "").trim();
+    const incomingLooksLikeTransactionId =
+      incomingLookupId.startsWith("txn_") || incomingLookupId === dbSubscription.paddleTransactionId;
+
+    // IMPORTANT: For upgrade flows we now keep old paddleSubscriptionId until payment succeeds.
+    // So if return payload contains transaction_id, prefer transaction data first.
+    if (incomingLooksLikeTransactionId) {
+      try {
+        transactionForFallback = await fetchPaddleTransaction(incomingLookupId);
+        const txnStatus = String(transactionForFallback?.status || "").toLowerCase();
+        const txnIsFinal = ["completed", "billed", "paid"].includes(txnStatus);
+        if (txnIsFinal) {
+          const updated = await finalizeFromPaidTransaction(transactionForFallback);
+          return Response.json({
+            success: true,
+            subscription: updated,
+            site: {
+              siteId: site.siteId,
+              domain: site.domain,
+            },
+            paddleStatus: transactionForFallback.status,
+            message: `Subscription synced from transaction. Status: ${updated.status}`,
+          });
+        }
+      } catch (e) {
+        console.warn("[Sync] Could not fetch incoming transaction before subscription sync:", e.message);
+      }
+    }
+
+    let paddleSubId = dbSubscription.paddleSubscriptionId;
     if (!paddleSubId) {
       try {
-        const txn = await fetchPaddleTransaction(subscriptionId);
+        const txn = transactionForFallback || await fetchPaddleTransaction(subscriptionId);
         transactionForFallback = txn;
         paddleSubId = txn.subscription_id || txn.subscriptionId;
         if (paddleSubId && !dbSubscription.paddleSubscriptionId) {
@@ -190,49 +267,7 @@ export async function POST(req) {
         }
 
         if (txn && txnIsFinal) {
-          const resolved = await resolvePlanAndBillingFromTransaction(txn, dbSubscription);
-          const billingPeriod = txn.billing_period || txn.billingPeriod;
-          const periodStart = billingPeriod?.starts_at
-            ? new Date(billingPeriod.starts_at)
-            : new Date();
-          const periodEnd = billingPeriod?.ends_at
-            ? new Date(billingPeriod.ends_at)
-            : (() => {
-                const end = new Date();
-                end.setMonth(end.getMonth() + 1);
-                return end;
-              })();
-
-          let newStatus = "active";
-          if (!resolved.upgrade && isFirstDomain && dbSubscription.status === "pending") {
-            newStatus = "trial";
-          }
-
-          const updated = await prisma.subscription.update({
-            where: { id: dbSubscription.id },
-            data: {
-              plan: resolved.plan,
-              billingInterval: resolved.billingInterval,
-              status: newStatus,
-              paddleSubscriptionId:
-                txn.subscription_id || txn.subscriptionId || dbSubscription.paddleSubscriptionId,
-              paddleTransactionId: txn.id || dbSubscription.paddleTransactionId,
-              currentPeriodStart: periodStart,
-              currentPeriodEnd: periodEnd,
-              updatedAt: new Date(),
-            },
-          });
-
-          if (newStatus === "trial") {
-            await startUserTrial(site.userId);
-          } else if (resolved.upgrade && site.userId) {
-            await clearUserTrialFields(site.userId).catch((e) =>
-              console.warn("[Sync] Failed to clear user trial after upgrade fallback:", e?.message)
-            );
-          }
-          await syncSiteScriptWithSubscription(site.siteId).catch((e) =>
-            console.warn("[Sync] Failed to sync site script after transaction fallback:", e?.message)
-          );
+          const updated = await finalizeFromPaidTransaction(txn);
 
           return Response.json({
             success: true,
