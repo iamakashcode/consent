@@ -43,6 +43,14 @@ export async function GET(req) {
             select: {
               plan: true,
               status: true,
+              billingInterval: true,
+              currentPeriodStart: true,
+              currentPeriodEnd: true,
+              cancelAtPeriodEnd: true,
+              removeBrandingAddon: true,
+              paddleCustomerId: true,
+              paddleSubscriptionId: true,
+              paddleTransactionId: true,
             },
           },
           siteViewCounts: {

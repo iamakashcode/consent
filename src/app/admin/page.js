@@ -37,6 +37,19 @@ const ArrowUpIcon = () => (
   </svg>
 );
 
+function formatDate(value) {
+  if (!value) return "—";
+  const dt = new Date(value);
+  return Number.isNaN(dt.getTime()) ? "—" : dt.toLocaleDateString();
+}
+
+function shortenRef(value) {
+  if (!value) return "—";
+  const text = String(value);
+  if (text.length <= 18) return text;
+  return `${text.slice(0, 8)}...${text.slice(-6)}`;
+}
+
 function AdminContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -287,6 +300,18 @@ function AdminContent() {
                     Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Billing
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Renewal
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Add-ons
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Paddle Refs
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Page Views
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -335,6 +360,44 @@ function AdminContent() {
                           No Sub
                         </span>
                       )}
+                      {site.subscription?.cancelAtPeriodEnd && (
+                        <div className="mt-1">
+                          <span className="px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700 rounded">
+                            Cancels at period end
+                          </span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 capitalize">
+                      {site.subscription?.billingInterval || "—"}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {formatDate(site.subscription?.currentPeriodEnd)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {site.subscription?.removeBrandingAddon ? (
+                        <span className="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded">
+                          White-label
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
+                          —
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-xs text-gray-600">
+                      <div title={site.subscription?.paddleSubscriptionId || ""}>
+                        <span className="font-semibold text-gray-500">Sub:</span>{" "}
+                        <span className="font-mono">{shortenRef(site.subscription?.paddleSubscriptionId)}</span>
+                      </div>
+                      <div title={site.subscription?.paddleCustomerId || ""}>
+                        <span className="font-semibold text-gray-500">Cus:</span>{" "}
+                        <span className="font-mono">{shortenRef(site.subscription?.paddleCustomerId)}</span>
+                      </div>
+                      <div title={site.subscription?.paddleTransactionId || ""}>
+                        <span className="font-semibold text-gray-500">Txn:</span>{" "}
+                        <span className="font-mono">{shortenRef(site.subscription?.paddleTransactionId)}</span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {(site._count?.pageViews || 0).toLocaleString()}
@@ -346,7 +409,7 @@ function AdminContent() {
                 ))}
                 {sites.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan={10} className="px-6 py-12 text-center text-gray-500">
                       No domains found
                     </td>
                   </tr>
