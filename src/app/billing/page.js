@@ -25,6 +25,7 @@ function BillingContent() {
   const [subscriptions, setSubscriptions] = useState([]);
   const [portalUrls, setPortalUrls] = useState({});
   const [urlLoading, setUrlLoading] = useState({});
+  const [addonActionLoading, setAddonActionLoading] = useState({});
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -131,6 +132,48 @@ function BillingContent() {
       toast.error("Failed to communicate with billing system");
     } finally {
       setUrlLoading(prev => ({ ...prev, [txId || customerId]: false }));
+    }
+  };
+
+  const removeAddon = async (siteId, domain) => {
+    if (!siteId) return;
+    try {
+      setAddonActionLoading(prev => ({ ...prev, [siteId]: true }));
+      const res = await fetch("/api/subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "cancelAddon",
+          siteId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        toast.error(data.error || "Failed to remove white-label add-on.");
+        return;
+      }
+
+      setSubscriptions(prev =>
+        prev.map(sub =>
+          sub.siteId === siteId
+            ? {
+                ...sub,
+                removeBrandingAddon: false,
+                subscription: sub.subscription
+                  ? { ...sub.subscription, removeBrandingAddon: false }
+                  : sub.subscription,
+              }
+            : sub
+        )
+      );
+      toast.success("White-label add-on removed", {
+        description: data.message || `Branding is now restored for ${domain || "this domain"}.`,
+      });
+    } catch (e) {
+      toast.error("Failed to remove white-label add-on.");
+    } finally {
+      setAddonActionLoading(prev => ({ ...prev, [siteId]: false }));
     }
   };
 
@@ -283,10 +326,21 @@ function BillingContent() {
                         <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Plan Add-ons</p>
                         <div className="flex flex-col gap-1 mt-1">
                           {addonActive ? (
-                            <span className="inline-flex items-center gap-1.5 text-[13px] text-slate-700">
-                              <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500" />
-                              White-label UI
-                            </span>
+                            <>
+                              <span className="inline-flex items-center gap-1.5 text-[13px] text-slate-700">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500" />
+                                White-label UI
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => removeAddon(sub.siteId, sub.domain)}
+                                disabled={addonActionLoading[sub.siteId]}
+                                className="w-fit h-7 px-2.5 text-[11px] rounded-md border-slate-200"
+                              >
+                                {addonActionLoading[sub.siteId] ? "Removing..." : "Remove Add-on"}
+                              </Button>
+                            </>
                           ) : (
                             <span className="text-[13px] text-slate-500">—</span>
                           )}

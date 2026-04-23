@@ -18,6 +18,7 @@ function PlansContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
+  const [removingAddon, setRemovingAddon] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [tab, setTab] = useState("monthly");
   const [addonChoiceByPlan, setAddonChoiceByPlan] = useState({});
@@ -244,6 +245,40 @@ function PlansContent() {
     }
   };
 
+  const handleRemoveAddon = async () => {
+    if (!siteId || !currentSubscription?.removeBrandingAddon || removingAddon) return;
+    setRemovingAddon(true);
+    try {
+      const res = await fetch("/api/subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "cancelAddon",
+          siteId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Failed to remove white-label addon.");
+        return;
+      }
+      setCurrentSubscription((prev) =>
+        prev ? { ...prev, removeBrandingAddon: false } : prev
+      );
+      setAddonChoiceByPlan((prev) => ({
+        ...(prev || {}),
+        [currentSubscription.plan]: false,
+      }));
+      toast.success("White-label addon removed", {
+        description: data.message || "Your base plan and other features are unchanged.",
+      });
+    } catch (err) {
+      toast.error("Failed to remove white-label addon.");
+    } finally {
+      setRemovingAddon(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       <PageHeader
@@ -281,6 +316,20 @@ function PlansContent() {
           <Link href="/billing" className="text-[13px] font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm transition-colors hover:bg-slate-50">
             Manage Subscription <ArrowRight className="h-3.5 w-3.5" />
           </Link>
+          {currentSubscription.removeBrandingAddon && (
+            <button
+              onClick={handleRemoveAddon}
+              disabled={removingAddon}
+              className={cn(
+                "text-[13px] font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg border shadow-sm transition-colors",
+                removingAddon
+                  ? "bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed"
+                  : "bg-white text-rose-600 hover:text-rose-700 border-rose-200 hover:bg-rose-50"
+              )}
+            >
+              {removingAddon ? "Removing..." : "Remove White-label Addon"}
+            </button>
+          )}
         </div>
       )}
 
