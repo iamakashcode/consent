@@ -49,6 +49,14 @@ function formatDate(value) {
   return Number.isNaN(dt.getTime()) ? "—" : dt.toLocaleDateString();
 }
 
+function formatMoney(amount, currency = "EUR") {
+  const numeric = Number(amount || 0);
+  return `${String(currency || "EUR").toUpperCase()} ${numeric.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 function AdminContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -56,6 +64,7 @@ function AdminContent() {
   const [stats, setStats] = useState({ users: 0, sites: 0, subscriptions: 0, pageViews: 0, thisMonthRevenue: 0 });
   const [users, setUsers] = useState([]);
   const [sites, setSites] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [activeTab, setActiveTab] = useState("users");
 
   useEffect(() => {
@@ -74,10 +83,11 @@ function AdminContent() {
 
   const fetchData = async () => {
     try {
-      const [statsRes, usersRes, sitesRes] = await Promise.all([
+      const [statsRes, usersRes, sitesRes, paymentsRes] = await Promise.all([
         fetch("/api/admin/stats"),
         fetch("/api/admin/users"),
         fetch("/api/admin/sites"),
+        fetch("/api/admin/payments?limit=200"),
       ]);
 
       if (statsRes.ok) {
@@ -93,6 +103,11 @@ function AdminContent() {
       if (sitesRes.ok) {
         const data = await sitesRes.json();
         setSites(data.sites || []);
+      }
+
+      if (paymentsRes.ok) {
+        const data = await paymentsRes.json();
+        setPayments(data.payments || []);
       }
     } catch (err) {
       console.error("Error fetching admin data:", err);
@@ -198,6 +213,7 @@ function AdminContent() {
             {[
               { id: "users", label: "Users", count: users.length },
               { id: "domains", label: "Domains", count: sites.length },
+              { id: "payments", label: "Payments", count: payments.length },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -404,6 +420,83 @@ function AdminContent() {
                   <tr>
                     <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
                       No domains found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Payments Table */}
+        {activeTab === "payments" && (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Transaction
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Domain
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Customer
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Amount
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Date
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {payments.map((payment) => {
+                  const status = String(payment.status || "").toLowerCase();
+                  const isPaid = ["paid", "completed", "billed", "ready"].includes(status);
+                  return (
+                    <tr key={payment.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span className="font-mono text-gray-700">{payment.id}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {payment.domain || "—"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {payment.customerEmail || payment.customerId || "—"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded capitalize">
+                          {payment.paymentType || "subscription"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-medium rounded capitalize ${
+                          isPaid ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                        }`}>
+                          {status || "unknown"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">
+                        {formatMoney(payment.amount, payment.currency)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(payment.billedAt || payment.createdAt)}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {payments.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                      No payments found
                     </td>
                   </tr>
                 )}

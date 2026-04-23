@@ -562,6 +562,22 @@ export async function fetchPaddleTransaction(transactionId) {
 }
 
 /**
+ * Fetch recent Paddle transactions for admin reporting.
+ * @param {number} limit
+ */
+export async function fetchRecentPaddleTransactions(limit = 100) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const query = `/transactions?include=address,business,customer,discount,items&per_page=${safeLimit}`;
+  try {
+    const res = await paddleRequest("GET", query);
+    return Array.isArray(res?.data) ? res.data : [];
+  } catch (error) {
+    console.error("[Paddle] Error fetching recent transactions:", error);
+    throw error;
+  }
+}
+
+/**
  * Normalize Paddle `custom_data` (webhooks may use snake_case keys).
  * @param {object|null|undefined} raw
  */
