@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
+import { ADDON_BRANDING_PRICE_CENTS, PLAN_PRICING } from "@/lib/paddle";
 
 export async function GET(req) {
   try {
@@ -80,7 +81,13 @@ export async function GET(req) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const [usersLast30Days, sitesLast30Days, totalPageViews] = await Promise.all([
+    const monthStart = new Date();
+    monthStart.setUTCDate(1);
+    monthStart.setUTCHours(0, 0, 0, 0);
+    const nextMonthStart = new Date(monthStart);
+    nextMonthStart.setUTCMonth(nextMonthStart.getUTCMonth() + 1);
+
+    const [usersLast30Days, sitesLast30Days, totalPageViews, subscriptionsBilledThisMonth] = await Promise.all([
       prisma.user.count({
         where: {
           createdAt: {
@@ -99,7 +106,34 @@ export async function GET(req) {
         .aggregate({ _sum: { count: true } })
         .then((r) => r._sum?.count ?? 0)
         .catch(() => 0),
+      prisma.subscription.findMany({
+        where: {
+          currentPeriodStart: {
+            gte: monthStart,
+            lt: nextMonthStart,
+          },
+          status: {
+            in: ["active", "cancelled", "expired"],
+          },
+        },
+        select: {
+          plan: true,
+          billingInterval: true,
+          removeBrandingAddon: true,
+        },
+      }),
     ]);
+
+    const thisMonthRevenueCents = subscriptionsBilledThisMonth.reduce((sum, sub) => {
+      const planKey = String(sub.plan || "basic").toLowerCase();
+      const intervalKey = String(sub.billingInterval || "monthly").toLowerCase();
+      const intervalMultiplier = intervalKey === "yearly" ? 10 : 1;
+      const basePlanCents = (PLAN_PRICING[planKey] ?? PLAN_PRICING.basic) * intervalMultiplier;
+      const addonCents = sub.removeBrandingAddon
+        ? ADDON_BRANDING_PRICE_CENTS * intervalMultiplier
+        : 0;
+      return sum + basePlanCents + addonCents;
+    }, 0);
 
     return Response.json({
       overview: {
@@ -113,6 +147,7 @@ export async function GET(req) {
       sites: totalSites,
       subscriptions: totalSubscriptions,
       pageViews: totalPageViews,
+      thisMonthRevenue: Number((thisMonthRevenueCents / 100).toFixed(2)),
       planDistribution,
       recentUsers,
       recentSites,

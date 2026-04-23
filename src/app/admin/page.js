@@ -31,6 +31,12 @@ const ChartIcon = () => (
   </svg>
 );
 
+const RevenueIcon = () => (
+  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-2.21 0-4 1.343-4 3s1.79 3 4 3 4 1.343 4 3-1.79 3-4 3m0-12c1.832 0 3.376.922 3.87 2.182M12 8V6m0 2v12m0 0v-2m0 2c-1.832 0-3.376-.922-3.87-2.182" />
+  </svg>
+);
+
 const ArrowUpIcon = () => (
   <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
@@ -54,7 +60,7 @@ function AdminContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ users: 0, sites: 0, subscriptions: 0, pageViews: 0 });
+  const [stats, setStats] = useState({ users: 0, sites: 0, subscriptions: 0, pageViews: 0, thisMonthRevenue: 0 });
   const [users, setUsers] = useState([]);
   const [sites, setSites] = useState([]);
   const [activeTab, setActiveTab] = useState("users");
@@ -126,7 +132,7 @@ function AdminContent() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-medium text-gray-500">Total Users</span>
@@ -178,6 +184,17 @@ function AdminContent() {
             <ArrowUpIcon />
             <span className="text-sm text-green-600">+24% this month</span>
           </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium text-gray-500">This Month Revenue</span>
+            <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600">
+              <RevenueIcon />
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-gray-900">EUR {(stats.thisMonthRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          <p className="text-sm text-gray-500 mt-1">From monthly billed subscriptions</p>
         </div>
       </div>
 
