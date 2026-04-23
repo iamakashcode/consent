@@ -49,13 +49,6 @@ function formatDate(value) {
   return Number.isNaN(dt.getTime()) ? "—" : dt.toLocaleDateString();
 }
 
-function shortenRef(value) {
-  if (!value) return "—";
-  const text = String(value);
-  if (text.length <= 18) return text;
-  return `${text.slice(0, 8)}...${text.slice(-6)}`;
-}
-
 function AdminContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -326,9 +319,6 @@ function AdminContent() {
                     Add-ons
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Paddle Refs
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Page Views
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -402,20 +392,6 @@ function AdminContent() {
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-xs text-gray-600">
-                      <div title={site.subscription?.paddleSubscriptionId || ""}>
-                        <span className="font-semibold text-gray-500">Sub:</span>{" "}
-                        <span className="font-mono">{shortenRef(site.subscription?.paddleSubscriptionId)}</span>
-                      </div>
-                      <div title={site.subscription?.paddleCustomerId || ""}>
-                        <span className="font-semibold text-gray-500">Cus:</span>{" "}
-                        <span className="font-mono">{shortenRef(site.subscription?.paddleCustomerId)}</span>
-                      </div>
-                      <div title={site.subscription?.paddleTransactionId || ""}>
-                        <span className="font-semibold text-gray-500">Txn:</span>{" "}
-                        <span className="font-mono">{shortenRef(site.subscription?.paddleTransactionId)}</span>
-                      </div>
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {(site._count?.pageViews || 0).toLocaleString()}
                     </td>
@@ -426,7 +402,7 @@ function AdminContent() {
                 ))}
                 {sites.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
                       No domains found
                     </td>
                   </tr>
