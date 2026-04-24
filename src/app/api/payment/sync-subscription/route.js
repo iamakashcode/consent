@@ -277,7 +277,7 @@ export async function POST(req) {
               domain: site.domain,
             },
             paddleStatus: txn.status,
-            message: `Subscription synced from transaction. Status: ${newStatus}`,
+            message: `Subscription synced from transaction. Status: ${updated.status}`,
           });
         }
       } catch (fallbackError) {

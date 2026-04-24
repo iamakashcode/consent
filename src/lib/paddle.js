@@ -777,8 +777,9 @@ export async function cancelPaddleSubscription(subscriptionId, cancelAtPeriodEnd
   try {
     // Use POST /subscriptions/{id}/cancel endpoint
     // For cancel at period end, we need to use scheduled_change via PATCH
+    const encodedId = encodeURIComponent(subscriptionId);
     if (cancelAtPeriodEnd) {
-      const subscription = await paddleRequest("PATCH", `/subscriptions/${subscriptionId}`, {
+      const subscription = await paddleRequest("PATCH", `/subscriptions/${encodedId}`, {
         scheduled_change: {
           action: "cancel",
           effective_at: "next_billing_period",
@@ -787,7 +788,7 @@ export async function cancelPaddleSubscription(subscriptionId, cancelAtPeriodEnd
       return subscription.data;
     } else {
       // Cancel immediately
-      const subscription = await paddleRequest("POST", `/subscriptions/${subscriptionId}/cancel`);
+      const subscription = await paddleRequest("POST", `/subscriptions/${encodedId}/cancel`, {});
       return subscription.data;
     }
   } catch (error) {
@@ -835,26 +836,54 @@ export async function getSubscriptionCheckoutUrl(subscriptionId) {
 }
 
 /**
- * Verify webhook signature (Paddle uses HMAC SHA256)
+ * Verify Paddle Billing webhook signature.
+ * Paddle sends a structured header: "ts=<timestamp>;h1=<hmac>"
+ * The signed payload is "<timestamp>:<raw_body>".
+ * Docs: https://developer.paddle.com/webhooks/signature-verification
  */
 export function verifyPaddleWebhookSignature(body, signature) {
   const crypto = require("crypto");
-  const secret = process.env.PADDLE_WEBHOOK_SECRET || PADDLE_API_TOKEN;
+  const secret = process.env.PADDLE_WEBHOOK_SECRET;
 
   if (!secret) {
-    console.warn("PADDLE_WEBHOOK_SECRET not set, skipping verification");
-    return true; // Allow in development
+    console.warn("[Paddle] PADDLE_WEBHOOK_SECRET not set, skipping signature verification");
+    return true; // Allow in development when secret is not configured
+  }
+
+  if (!signature) {
+    console.warn("[Paddle] Missing Paddle-Signature header");
+    return false;
   }
 
   try {
-    const expectedSignature = crypto
+    // Parse "ts=<timestamp>;h1=<hmac>" format
+    const parts = {};
+    for (const part of signature.split(";")) {
+      const [key, value] = part.split("=");
+      if (key && value) parts[key.trim()] = value.trim();
+    }
+
+    const ts = parts["ts"];
+    const h1 = parts["h1"];
+
+    if (!ts || !h1) {
+      console.warn("[Paddle] Malformed Paddle-Signature header (missing ts or h1):", signature);
+      return false;
+    }
+
+    // Signed payload = "<timestamp>:<raw_body>"
+    const signedPayload = `${ts}:${body}`;
+    const expectedHmac = crypto
       .createHmac("sha256", secret)
-      .update(body)
+      .update(signedPayload)
       .digest("hex");
 
-    return signature === expectedSignature;
+    return crypto.timingSafeEqual(
+      Buffer.from(expectedHmac, "hex"),
+      Buffer.from(h1, "hex")
+    );
   } catch (error) {
-    console.error("Error verifying Paddle webhook signature:", error);
+    console.error("[Paddle] Error verifying webhook signature:", error);
     return false;
   }
 }

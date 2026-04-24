@@ -114,16 +114,30 @@ async function handleSubscriptionActivated(event) {
     return;
   }
 
-  // Start user-level trial (14 days) if not already started
   const userId = dbSubscription.site.userId;
-  const { startUserTrial } = await import("@/lib/subscription");
-  await startUserTrial(userId);
 
-  // Update subscription status to trial
+  // Determine if this is the user's first domain (only first domain gets a trial)
+  const firstSite = await prisma.site.findFirst({
+    where: { userId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  const isFirstDomain = firstSite?.id === dbSubscription.siteId;
+
+  // Only start user-level trial for the first domain
+  if (isFirstDomain) {
+    const { startUserTrial } = await import("@/lib/subscription");
+    await startUserTrial(userId);
+  }
+
+  // First domain uses trial status; second+ domains go straight to active
+  const newStatus = isFirstDomain ? "trial" : "active";
+
+  // Update subscription status
   await prisma.subscription.update({
     where: { id: dbSubscription.id },
     data: {
-      status: "trial",
+      status: newStatus,
       currentPeriodStart: subscription.current_billing_period?.starts_at
         ? new Date(subscription.current_billing_period.starts_at)
         : null,
@@ -142,7 +156,7 @@ async function handleSubscriptionActivated(event) {
       .catch((err) => console.error("[Webhook] CDN sync failed:", err));
   }
 
-  console.log(`[Webhook] Subscription ${subscriptionId} activated and user trial started`);
+  console.log(`[Webhook] Subscription ${subscriptionId} activated, status: ${newStatus}, isFirstDomain: ${isFirstDomain}`);
 }
 
 /**
@@ -445,7 +459,17 @@ async function handleTransactionCompleted(event) {
   const resolved = await resolvePlanAndBillingFromTransaction(transaction, dbSubscription);
   const isUpgrade = resolved.upgrade;
   const previousPaddleSubscriptionId = dbSubscription.paddleSubscriptionId || null;
-  if (!isUpgrade) {
+
+  // Determine first-domain status (trial is only for the first domain)
+  const firstSiteForTxn = await prisma.site.findFirst({
+    where: { userId: site.userId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  const isFirstDomainForTxn = firstSiteForTxn?.id === site.id;
+
+  // Only start user-level trial for first domain on non-upgrade payments
+  if (!isUpgrade && isFirstDomainForTxn) {
     await startUserTrial(site.userId);
   }
 
@@ -454,7 +478,8 @@ async function handleTransactionCompleted(event) {
 
   const currentStatus = dbSubscription.status?.toLowerCase();
   let newStatus = "active";
-  if (!isUpgrade && (currentStatus === "trial" || currentStatus === "pending")) {
+  // Only set trial status for the first domain
+  if (!isUpgrade && isFirstDomainForTxn && (currentStatus === "trial" || currentStatus === "pending")) {
     const user = await prisma.user.findUnique({
       where: { id: site.userId },
       select: { trialEndAt: true },

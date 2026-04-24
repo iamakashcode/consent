@@ -67,6 +67,15 @@ export async function POST(req) {
       );
     }
 
+    // Free trial is only for a user's FIRST domain. Block if user already has any site.
+    const existingSitesCount = await prisma.site.count({ where: { userId } });
+    if (existingSitesCount > 0) {
+      return Response.json(
+        { error: "Free trial is only available for your first domain. Please select a paid plan." },
+        { status: 403 }
+      );
+    }
+
     const existingSite = await prisma.site.findFirst({
       where: { userId, domain: cleanDomain },
       include: { subscription: true },
