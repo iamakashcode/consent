@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { startUserTrial } from "@/lib/subscription";
+import { normalizeDomainForConsentScript } from "@/lib/consent-domain";
 
 /**
  * Create Site + Subscription from a PendingDomain and delete the pending record.
@@ -9,6 +10,19 @@ import { startUserTrial } from "@/lib/subscription";
  * @returns {{ site: object, subscription: object } | null} - Created site and subscription, or null on error
  */
 export async function activatePendingDomain(pending, transaction) {
+  const normalizedPendingDomain = normalizeDomainForConsentScript(pending.domain);
+  const verifiedByAnotherUser = await prisma.site.findFirst({
+    where: {
+      domain: normalizedPendingDomain,
+      isVerified: true,
+      NOT: { userId: pending.userId },
+    },
+    select: { id: true },
+  });
+  if (verifiedByAnotherUser) {
+    throw new Error("This domain is already verified by another account and cannot be activated.");
+  }
+
   const subscriptionId = transaction.subscription_id ?? transaction.subscriptionId ?? null;
   const plan = transaction.custom_data?.plan ?? pending.plan;
   const billingInterval =
@@ -77,6 +91,19 @@ export async function activatePendingDomain(pending, transaction) {
  * Creates Site + Subscription (trial), deletes PendingDomain. Use when user chooses "Start 14-day free trial" with 0 payment.
  */
 export async function activatePendingDomainForFreeTrial(pending, options = {}) {
+  const normalizedPendingDomain = normalizeDomainForConsentScript(pending.domain);
+  const verifiedByAnotherUser = await prisma.site.findFirst({
+    where: {
+      domain: normalizedPendingDomain,
+      isVerified: true,
+      NOT: { userId: pending.userId },
+    },
+    select: { id: true },
+  });
+  if (verifiedByAnotherUser) {
+    throw new Error("This domain is already verified by another account and cannot be activated.");
+  }
+
   const plan = options.plan ?? pending.plan ?? "basic";
   const billingInterval = options.billingInterval ?? pending.billingInterval ?? "monthly";
 

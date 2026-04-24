@@ -3,6 +3,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { generateSiteId } from "@/lib/store";
 import { startUserTrial } from "@/lib/subscription";
+import { normalizeDomainForConsentScript } from "@/lib/consent-domain";
 
 /**
  * POST /api/auth/start-free-trial
@@ -35,7 +36,7 @@ export async function POST(req) {
       );
     }
 
-    let cleanDomain = domain.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].split("?")[0];
+    const cleanDomain = normalizeDomainForConsentScript(domain);
     if (!cleanDomain) {
       return Response.json({ error: "Invalid domain" }, { status: 400 });
     }
@@ -45,6 +46,24 @@ export async function POST(req) {
       return Response.json(
         { error: "Invalid domain format (e.g. example.com)" },
         { status: 400 }
+      );
+    }
+
+    const verifiedByAnotherUser = await prisma.site.findFirst({
+      where: {
+        domain: cleanDomain,
+        isVerified: true,
+        NOT: { userId },
+      },
+      select: { id: true },
+    });
+    if (verifiedByAnotherUser) {
+      return Response.json(
+        {
+          error:
+            "This domain is already verified by another account and cannot be added.",
+        },
+        { status: 409 }
       );
     }
 

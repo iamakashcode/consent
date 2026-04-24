@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { hasVerificationColumns, hasBannerConfigColumn } from "@/lib/db-utils";
 import { isSubscriptionActive } from "@/lib/subscription";
+import { normalizeDomainForConsentScript } from "@/lib/consent-domain";
 
 /**
  * Verification callback endpoint - called by the consent script when it loads
@@ -136,15 +137,9 @@ export async function GET(req, { params }) {
       console.warn(`[Verify Callback] Subscription inactive for site ${site.id}: ${subscriptionStatus.reason} - allowing verification`);
     }
 
-    const normalizeDomain = (domain) =>
-      (domain || "")
-        .toLowerCase()
-        .replace(/^www\./, "")
-        .split("/")[0];
-
     // Clean the stored domain for comparison
-    const storedDomain = normalizeDomain(site.domain);
-    const requestDomainNormalized = normalizeDomain(requestDomain) || storedDomain;
+    const storedDomain = normalizeDomainForConsentScript(site.domain);
+    const requestDomainNormalized = normalizeDomainForConsentScript(requestDomain) || storedDomain;
 
     // Verify the domain matches
     console.log(`[Verify Callback] Comparing domains - Request: "${requestDomainNormalized}", Stored: "${storedDomain}"`);
@@ -197,6 +192,34 @@ export async function GET(req, { params }) {
           "Access-Control-Allow-Headers": "Content-Type",
         },
       });
+    }
+
+    const alreadyVerifiedByAnotherUser = await prisma.site.findFirst({
+      where: {
+        domain: storedDomain,
+        isVerified: true,
+        NOT: { userId: site.userId },
+      },
+      select: { id: true },
+    });
+    if (alreadyVerifiedByAnotherUser) {
+      return new Response(
+        JSON.stringify({
+          connected: false,
+          error: "Domain already verified by another account",
+          message:
+            "This domain has already been verified on another account and cannot be verified here.",
+        }),
+        {
+          status: 409,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+        }
+      );
     }
 
     // Check if lastSeenAt column exists
