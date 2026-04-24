@@ -1197,6 +1197,7 @@ const DEFAULT_BRANDING_TEXT = 'Powered by Cookie Access';
 export function generateMainScript(siteId, allowedDomain, isPreview, config, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl, consentLogUrl, templateStyle, showBranding = true) {
   const CONSENT_KEY = `cookie_consent_${siteId}`;
   const bannerSize = config?.bannerSize || "standard";
+  const bannerPosition = position || "bottom";
   
   const escapeForTemplate = (str) => {
     if (!str) return '';
@@ -1219,6 +1220,7 @@ export function generateMainScript(siteId, allowedDomain, isPreview, config, ban
   const safeBranding = escapeForTemplate(DEFAULT_BRANDING_TEXT);
   const safeCustomize = escapeForTemplate(config?.customizeText || "Customize");
   const safeBannerSize = escapeForTemplate(bannerSize);
+  const safeBannerPosition = escapeForTemplate(bannerPosition);
   const placementCss = bannerPlacementCss(position);
 
   return `
@@ -1503,31 +1505,38 @@ var maxVerificationAttempts=5;
   var customizeBtnStyle='background:'+(templateStyleObj.backgroundColor||'#000')+';color:'+(templateStyleObj.buttonColor||'#fff')+';border:2px solid '+(templateStyleObj.buttonColor||'#fff')+';padding:10px 18px;text-decoration:none;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
   
   var compactMode='${safeBannerSize}'==='compact';
-  if(compactMode){
-    banner.style.justifyContent='flex-start';
-    banner.style.alignItems='stretch';
-    banner.style.gap='12px';
-  }
+  var cornerMode='${safeBannerPosition}'==='bottom-left'||'${safeBannerPosition}'==='bottom-right';
+  var fullMode='${safeBannerSize}'==='full';
+  var narrowScreen=(window.innerWidth||0)<900;
+  var useStackedLayout=compactMode||cornerMode||narrowScreen;
+  var useWideBarLayout=fullMode&&!cornerMode&&!compactMode&&!narrowScreen;
 
-  var bannerContentStyle=compactMode
-    ? 'width:100%;max-width:none;'
-    : 'flex:1;max-width:700px;';
-  var bannerActionsStyle=compactMode
-    ? 'display:flex;gap:8px;flex-wrap:wrap;width:100%;'
-    : 'display:flex;gap:10px;flex-wrap:wrap;';
-  var actionBtnCompactStyle=compactMode ? 'flex:1;min-width:120px;text-align:center;' : '';
+  banner.style.justifyContent=useWideBarLayout?'space-between':'flex-start';
+  banner.style.alignItems=useWideBarLayout?'center':'stretch';
+  banner.style.gap=useWideBarLayout?'15px':'12px';
+
+  var bannerContentStyle=useWideBarLayout
+    ? 'flex:1;max-width:700px;'
+    : 'width:100%;max-width:none;';
+  var bannerActionsStyle=useWideBarLayout
+    ? 'display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;'
+    : 'display:flex;gap:8px;flex-wrap:wrap;width:100%;';
+  var actionBtnAdaptiveStyle=(useStackedLayout||!useWideBarLayout) ? 'flex:1;min-width:120px;text-align:center;' : '';
+  var compactTextScale=compactMode?'font-size:13px;line-height:1.45;':'';
+  var compactTitleScale=compactMode?'font-size:15px;':'font-size:16px;';
 
   banner.innerHTML=
     '<div style="'+bannerContentStyle+'">'+
-    '<strong style="font-size:16px;display:block;margin-bottom:6px;">${safeTitle || 'We value your privacy'}</strong>'+
-    '<p style="margin:0;font-size:14px;opacity:0.9;line-height:1.5;">${safeMessage || 'This site uses tracking cookies to enhance your browsing experience and analyze site traffic.'}</p>'+
+    '<strong style="'+compactTitleScale+'display:block;margin-bottom:6px;">${safeTitle || 'We value your privacy'}</strong>'+
+    '<p style="margin:0;opacity:0.9;'+compactTextScale+'">'+
+    '${safeMessage || 'This site uses tracking cookies to enhance your browsing experience and analyze site traffic.'}</p>'+
     
     ${showBranding ? `'<p style="margin:8px 0 0 0;font-size:11px;opacity:0.7;">${safeBranding}</p>'+` : ''}
     '</div>'+
     '<div style="'+bannerActionsStyle+'">'+
-    '<a href="#" id="consentflow-manage-prefs" style="'+customizeBtnStyle+actionBtnCompactStyle+'">${safeCustomize || 'Customize'}</a>'+
-    '<button id="consentflow-accept" style="'+acceptBtnStyle+actionBtnCompactStyle+'">${safeAccept || 'Accept All'}</button>'+
-    ${showReject ? `'<button id="consentflow-reject" style="'+rejectBtnStyle+actionBtnCompactStyle+'">${safeReject || 'Reject All'}</button>'+` : ''}
+    '<a href="#" id="consentflow-manage-prefs" style="'+customizeBtnStyle+actionBtnAdaptiveStyle+'">${safeCustomize || 'Customize'}</a>'+
+    '<button id="consentflow-accept" style="'+acceptBtnStyle+actionBtnAdaptiveStyle+'">${safeAccept || 'Accept All'}</button>'+
+    ${showReject ? `'<button id="consentflow-reject" style="'+rejectBtnStyle+actionBtnAdaptiveStyle+'">${safeReject || 'Reject All'}</button>'+` : ''}
     '</div>';
   
   document.body.appendChild(banner);
