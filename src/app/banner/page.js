@@ -104,13 +104,17 @@ const DEFAULT_CONFIG = {
 
 const normalizeEditorConfig = (rawConfig) => {
   if (!rawConfig || typeof rawConfig !== "object") return DEFAULT_CONFIG;
+  const resolvedCustomizeText =
+    rawConfig.customizeText ?? rawConfig.customizeButtonText ?? DEFAULT_CONFIG.customizeText;
+  const normalizedCustomizeText =
+    resolvedCustomizeText === "Customize Settings" ? "Customize" : resolvedCustomizeText;
   return {
     ...DEFAULT_CONFIG,
     ...rawConfig,
     description: rawConfig.description ?? rawConfig.message ?? DEFAULT_CONFIG.description,
     acceptText: rawConfig.acceptText ?? rawConfig.acceptButtonText ?? DEFAULT_CONFIG.acceptText,
     rejectText: rawConfig.rejectText ?? rawConfig.rejectButtonText ?? DEFAULT_CONFIG.rejectText,
-    customizeText: rawConfig.customizeText ?? rawConfig.customizeButtonText ?? DEFAULT_CONFIG.customizeText,
+    customizeText: normalizedCustomizeText,
     showRejectButton: rawConfig.showRejectButton ?? rawConfig.showReject ?? DEFAULT_CONFIG.showRejectButton,
     showCustomizeButton: rawConfig.showCustomizeButton ?? DEFAULT_CONFIG.showCustomizeButton,
     bannerSize: rawConfig.bannerSize ?? DEFAULT_CONFIG.bannerSize,

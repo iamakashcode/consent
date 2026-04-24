@@ -193,6 +193,10 @@ export function normalizeBannerConfig(config) {
   }
   const template = BANNER_TEMPLATES[config.template] || BANNER_TEMPLATES.light;
   const templateStyle = template?.style || {};
+  const resolvedCustomizeText =
+    config.customizeText ?? config.customizeButtonText ?? DEFAULT_BANNER_CONFIG.customizeText;
+  const normalizedCustomizeText =
+    resolvedCustomizeText === "Customize Settings" ? "Customize" : resolvedCustomizeText;
   const customStyle = config.customStyle || (config.backgroundColor || config.textColor || config.buttonColor
     ? {
         backgroundColor: config.backgroundColor || templateStyle.backgroundColor || "#1f2937",
@@ -212,7 +216,7 @@ export function normalizeBannerConfig(config) {
     message: config.message ?? config.description ?? DEFAULT_BANNER_CONFIG.message,
     acceptText: config.acceptText ?? config.acceptButtonText ?? DEFAULT_BANNER_CONFIG.acceptText,
     rejectText: config.rejectText ?? config.rejectButtonText ?? DEFAULT_BANNER_CONFIG.rejectText,
-    customizeText: config.customizeText ?? config.customizeButtonText ?? DEFAULT_BANNER_CONFIG.customizeText,
+    customizeText: normalizedCustomizeText,
     showReject: config.showReject !== false && config.showRejectButton !== false,
     position: config.position ?? DEFAULT_BANNER_CONFIG.position,
     bannerSize: config.bannerSize ?? DEFAULT_BANNER_CONFIG.bannerSize,
