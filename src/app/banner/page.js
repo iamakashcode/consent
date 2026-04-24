@@ -97,7 +97,7 @@ const DEFAULT_CONFIG = {
   description: "We use cookies to enhance your browsing experience, serve personalized ads or content, and analyze our traffic. By clicking 'Accept All', you consent to our use of cookies.",
   acceptText: "Accept All",
   rejectText: "Reject All",
-  customizeText: "Customize Settings",
+  customizeText: "Customize",
   showRejectButton: true,
   showCustomizeButton: true,
 };

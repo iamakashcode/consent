@@ -107,11 +107,11 @@ export const DEFAULT_BANNER_CONFIG = {
     "We use cookies to enhance your browsing experience, serve personalized ads or content, and analyze our traffic. By clicking 'Accept All', you consent to our use of cookies.",
   acceptText: "Accept All",
   rejectText: "Reject All",
-  customizeText: "Customize Settings",
+  customizeText: "Customize",
   // Keep legacy keys too, since older saved configs may still rely on these names.
   acceptButtonText: "Accept All",
   rejectButtonText: "Reject All",
-  customizeButtonText: "Customize Settings",
+  customizeButtonText: "Customize",
   showRejectButton: true,
   showCustomizeButton: true,
   backgroundColor: "#ffffff",
