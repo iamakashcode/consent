@@ -26,6 +26,7 @@ function BillingContent() {
   const [portalUrls, setPortalUrls] = useState({});
   const [urlLoading, setUrlLoading] = useState({});
   const [addonActionLoading, setAddonActionLoading] = useState({});
+  const [cancelLoading, setCancelLoading] = useState({});
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -177,6 +178,52 @@ function BillingContent() {
     }
   };
 
+  const cancelPlan = async (siteId, domain) => {
+    if (!siteId) return;
+    const confirmed = window.confirm(
+      `Cancel the subscription for ${domain || "this domain"} now?\n\nThis will immediately cancel billing in Paddle so no future payment is charged.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setCancelLoading((prev) => ({ ...prev, [siteId]: true }));
+      const res = await fetch("/api/subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "cancel",
+          siteId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Failed to cancel subscription.");
+        return;
+      }
+
+      setSubscriptions((prev) =>
+        prev.map((sub) =>
+          sub.siteId === siteId
+            ? {
+                ...sub,
+                isActive: false,
+                subscription: sub.subscription
+                  ? { ...sub.subscription, status: "cancelled", cancelAtPeriodEnd: false }
+                  : sub.subscription,
+              }
+            : sub
+        )
+      );
+      toast.success("Subscription cancelled", {
+        description: data.message || "Billing was stopped immediately in Paddle.",
+      });
+    } catch (e) {
+      toast.error("Failed to cancel subscription.");
+    } finally {
+      setCancelLoading((prev) => ({ ...prev, [siteId]: false }));
+    }
+  };
+
   if (status === "loading" || loading) {
     return (
       <DashboardLayout>
@@ -272,6 +319,15 @@ function BillingContent() {
                     <div className="flex items-center gap-2">
                       {!sub.isPlaceholder && (
                         <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => cancelPlan(sub.siteId, sub.domain)}
+                            disabled={cancelLoading[sub.siteId]}
+                            className="rounded-lg h-9 text-[13px] font-medium text-rose-600 border-rose-200 bg-white hover:bg-rose-50"
+                          >
+                            {cancelLoading[sub.siteId] ? "Cancelling..." : "Cancel Plan"}
+                          </Button>
                           {(sub.customerId || subData.customerId) && (
                             <Button
                               variant="outline"

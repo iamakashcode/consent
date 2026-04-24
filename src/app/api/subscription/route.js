@@ -131,7 +131,7 @@ export async function POST(req) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { action, siteId, cancelAtPeriodEnd = true } = await req.json();
+    const { action, siteId } = await req.json();
 
     if (!siteId) {
       return Response.json({ error: "Site ID is required" }, { status: 400 });
@@ -159,7 +159,7 @@ export async function POST(req) {
 
     switch (action) {
       case "cancel":
-        return await handleCancel(site, cancelAtPeriodEnd);
+        return await handleCancel(site);
 
       case "cancelAddon":
         return await handleCancelAddon(site);
@@ -183,47 +183,63 @@ export async function POST(req) {
 /**
  * Handle subscription cancellation
  */
-async function handleCancel(site, cancelAtPeriodEnd) {
+async function handleCancel(site) {
   const subscription = site.subscription;
 
-  // Cancel in Paddle if we have a subscription ID
+  // Always enforce immediate cancellation to prevent any further charges.
+  // If Paddle cancellation fails, abort local status change so user is never given false confidence.
   if (subscription.paddleSubscriptionId) {
     try {
-      await cancelPaddleSubscription(subscription.paddleSubscriptionId, cancelAtPeriodEnd);
+      await cancelPaddleSubscription(subscription.paddleSubscriptionId, false);
     } catch (error) {
       console.error("[Subscription] Error cancelling in Paddle:", error);
-      // Continue with local cancellation even if Paddle fails
+      return Response.json(
+        {
+          error:
+            "Could not cancel in Paddle. Subscription remains active to avoid billing mismatch. Please try again.",
+        },
+        { status: 502 }
+      );
     }
   }
 
-  // Update database
-  if (cancelAtPeriodEnd) {
-    await prisma.subscription.update({
-      where: { siteId: site.id },
-      data: { cancelAtPeriodEnd: true },
-    });
-
-    return Response.json({
-      success: true,
-      message: `Subscription will be cancelled at the end of the current period (${new Date(subscription.currentPeriodEnd).toLocaleDateString()}).`,
-      cancelAtPeriodEnd: true,
-      currentPeriodEnd: subscription.currentPeriodEnd,
-    });
-  } else {
-    await prisma.subscription.update({
-      where: { siteId: site.id },
-      data: {
-        status: "cancelled",
-        cancelAtPeriodEnd: false,
-      },
-    });
-
-    return Response.json({
-      success: true,
-      message: "Subscription cancelled immediately.",
-      status: "cancelled",
-    });
+  if (subscription.paddleAddonSubscriptionId) {
+    try {
+      await cancelPaddleSubscription(subscription.paddleAddonSubscriptionId, false);
+    } catch (error) {
+      console.error("[Subscription] Error cancelling add-on subscription in Paddle:", error);
+      return Response.json(
+        {
+          error:
+            "Main plan cancelled, but add-on cancellation failed in Paddle. Please contact support immediately.",
+        },
+        { status: 502 }
+      );
+    }
   }
+
+  await prisma.subscription.update({
+    where: { siteId: site.id },
+    data: {
+      status: "cancelled",
+      cancelAtPeriodEnd: false,
+      removeBrandingAddon: false,
+      paddleAddonSubscriptionId: null,
+      updatedAt: new Date(),
+    },
+  });
+
+  try {
+    await syncSiteScriptWithSubscription(site.siteId);
+  } catch (err) {
+    console.error("[Subscription] Script sync after cancellation:", err);
+  }
+
+  return Response.json({
+    success: true,
+    message: "Subscription cancelled immediately in Paddle. No further payments will be charged.",
+    status: "cancelled",
+  });
 }
 
 /**

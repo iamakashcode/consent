@@ -3,6 +3,7 @@ import { authOptions } from "../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { hasVerificationColumns, hasBannerConfigColumn } from "@/lib/db-utils";
 import { deleteScript } from "@/lib/cdn-service";
+import { cancelPaddleSubscription } from "@/lib/paddle";
 
 export async function GET(req) {
   try {
@@ -255,13 +256,44 @@ export async function DELETE(req) {
         id,
         userId: session.user.id,
       },
-      select: { id: true, siteId: true },
+      select: {
+        id: true,
+        siteId: true,
+        subscription: {
+          select: {
+            paddleSubscriptionId: true,
+            paddleAddonSubscriptionId: true,
+          },
+        },
+      },
     });
 
     if (!site) {
       return Response.json(
         { error: "Site not found or access denied" },
         { status: 404 }
+      );
+    }
+
+    // Cancel Paddle billing before deleting the domain, so no future charges continue.
+    try {
+      if (site.subscription?.paddleSubscriptionId) {
+        await cancelPaddleSubscription(site.subscription.paddleSubscriptionId, false);
+      }
+      if (
+        site.subscription?.paddleAddonSubscriptionId &&
+        site.subscription.paddleAddonSubscriptionId !== site.subscription?.paddleSubscriptionId
+      ) {
+        await cancelPaddleSubscription(site.subscription.paddleAddonSubscriptionId, false);
+      }
+    } catch (cancelErr) {
+      console.error("[Sites DELETE] Paddle cancellation failed:", cancelErr);
+      return Response.json(
+        {
+          error:
+            "Could not cancel Paddle subscription for this domain. Domain was not deleted to prevent billing mismatch.",
+        },
+        { status: 502 }
       );
     }
 
