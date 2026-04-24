@@ -29,6 +29,24 @@ const POSITIONS = [
   { id: "bottom-right", label: "Bottom Right", icon: <LayoutTemplate className="w-4 h-4 rotate-180" /> },
 ];
 
+const BANNER_LAYOUTS = [
+  {
+    id: "full",
+    label: "Full width",
+    description: "Edge-to-edge bar",
+  },
+  {
+    id: "standard",
+    label: "Standard",
+    description: "Balanced default width",
+  },
+  {
+    id: "compact",
+    label: "Small banner",
+    description: "Compact card style",
+  },
+];
+
 const DESIGN_PRESETS = [
   {
     id: "minimal",
@@ -74,6 +92,7 @@ const DEFAULT_CONFIG = {
   buttonColor: "#0f172a",
   buttonTextColor: "#ffffff",
   position: "bottom",
+  bannerSize: "standard",
   title: "We value your privacy",
   description: "We use cookies to enhance your browsing experience, serve personalized ads or content, and analyze our traffic. By clicking 'Accept All', you consent to our use of cookies.",
   acceptText: "Accept All",
@@ -94,6 +113,7 @@ const normalizeEditorConfig = (rawConfig) => {
     customizeText: rawConfig.customizeText ?? rawConfig.customizeButtonText ?? DEFAULT_CONFIG.customizeText,
     showRejectButton: rawConfig.showRejectButton ?? rawConfig.showReject ?? DEFAULT_CONFIG.showRejectButton,
     showCustomizeButton: rawConfig.showCustomizeButton ?? DEFAULT_CONFIG.showCustomizeButton,
+    bannerSize: rawConfig.bannerSize ?? DEFAULT_CONFIG.bannerSize,
   };
 };
 
@@ -589,6 +609,27 @@ function BannerContent() {
                   <div className="h-px bg-slate-100" />
 
                   <div>
+                    <p className="text-[12px] font-bold uppercase tracking-widest text-slate-400 mb-3">Banner Size</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {BANNER_LAYOUTS.map((layout) => (
+                        <button
+                          key={layout.id}
+                          onClick={() => setConfig({ ...config, bannerSize: layout.id })}
+                          className={cn(
+                            "p-3 rounded-xl border text-left transition-all",
+                            config.bannerSize === layout.id
+                              ? "border-indigo-600 bg-indigo-50 text-indigo-800 ring-1 ring-indigo-600/20 shadow-sm"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                          )}
+                        >
+                          <span className="block text-[13px] font-semibold">{layout.label}</span>
+                          <span className="block text-[11px] text-slate-500 mt-1">{layout.description}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
                     <p className="text-[12px] font-bold uppercase tracking-widest text-slate-400 mb-3">Placement</p>
                     <div className="flex flex-wrap gap-2">
                       {POSITIONS.map((pos) => (
@@ -749,6 +790,13 @@ function BannerContent() {
                       config.position === "bottom" ? "bottom-4 left-4 right-4 max-w-none mx-auto w-[calc(100%-32px)]" :
                         config.position === "top" ? "top-4 left-4 right-4 max-w-none mx-auto w-[calc(100%-32px)]" :
                           config.position === "bottom-left" ? "bottom-4 left-4" : "bottom-4 right-4"
+                    ,
+                      config.bannerSize === "full" && (config.position === "bottom" || config.position === "top")
+                        ? "left-0 right-0 w-full rounded-none"
+                        : "",
+                      config.bannerSize === "compact"
+                        ? "max-w-[380px] p-4"
+                        : ""
                     )} style={{ backgroundColor: config.backgroundColor, color: config.textColor }}>
                       <p className="font-bold text-[14px] mb-1.5">{config.title}</p>
                       <p className="font-medium text-[12px] opacity-80 mb-4 leading-relaxed">{config.description}</p>

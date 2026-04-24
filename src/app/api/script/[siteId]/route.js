@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES, normalizeBannerConfig, bannerPlacementCss } from "@/lib/banner-templates";
+import { DEFAULT_BANNER_CONFIG, BANNER_TEMPLATES, normalizeBannerConfig, bannerPlacementCss, bannerLayoutCss } from "@/lib/banner-templates";
 import { hasVerificationColumns } from "@/lib/db-utils";
 import { isSubscriptionActive, checkPageViewLimit } from "@/lib/subscription";
 import { getScript, getCdnUrl, BLANK_SCRIPT } from "@/lib/cdn-service";
@@ -1712,14 +1712,22 @@ export async function GET(req, { params }) {
       }
     }
     const normalized = normalizeBannerConfig(rawConfig);
-    const { title, message, acceptText, rejectText, showReject, position, style: normStyle } = normalized;
+    const { title, message, acceptText, rejectText, showReject, position, bannerSize, style: normStyle } = normalized;
     const style = normStyle || {};
     const posStyle = bannerPlacementCss(position);
+    const layoutStyle = bannerLayoutCss(bannerSize, position);
+    const sizePadding =
+      bannerSize === "compact"
+        ? "padding:12px 14px;"
+        : bannerSize === "full"
+          ? "padding:20px 28px;"
+          : `padding:${style.padding || "20px"};`;
     const bannerStyle =
       `position:fixed;${posStyle}` +
+      `${layoutStyle}` +
       `background:${style.backgroundColor || '#1f2937'};` +
       `color:${style.textColor || '#ffffff'};` +
-      `padding:${style.padding || '20px'};` +
+      sizePadding +
       `z-index:2147483647;` +
       `display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap;` +
       `font-family:system-ui,-apple-system,sans-serif;` +

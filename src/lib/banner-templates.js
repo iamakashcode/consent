@@ -101,6 +101,7 @@ BANNER_TEMPLATES.default = BANNER_TEMPLATES.minimal;
 export const DEFAULT_BANNER_CONFIG = {
   template: "light",
   position: "bottom",
+  bannerSize: "standard",
   title: "We value your privacy",
   message:
     "We use cookies to enhance your browsing experience, serve personalized ads or content, and analyze our traffic. By clicking 'Accept All', you consent to our use of cookies.",
@@ -137,6 +138,30 @@ export function bannerPlacementCss(position) {
 }
 
 /**
+ * Banner size/layout variants that layer on top of placement.
+ * - full: edge-to-edge bar
+ * - standard: existing behavior
+ * - compact: smaller centered/card style
+ */
+export function bannerLayoutCss(size, position) {
+  const variant = size || "standard";
+  const p = position || "bottom";
+
+  if (variant === "full") {
+    return "left:0;right:0;width:100%;max-width:none;transform:none;border-radius:0;";
+  }
+
+  if (variant === "compact") {
+    if (p === "top" || p === "bottom") {
+      return "left:50%;right:auto;width:min(92vw,560px);max-width:560px;transform:translateX(-50%);border-radius:14px;";
+    }
+    return "width:auto;max-width:min(92vw,420px);border-radius:14px;";
+  }
+
+  return "transform:none;";
+}
+
+/**
  * Normalize banner config from either:
  * - Banner page shape: backgroundColor, textColor, description, showRejectButton, acceptText, etc.
  * - DB/template shape: message, acceptText, showReject, template, style
@@ -153,6 +178,7 @@ export function normalizeBannerConfig(config) {
       customizeText: DEFAULT_BANNER_CONFIG.customizeText,
       showReject: true,
       position: DEFAULT_BANNER_CONFIG.position,
+      bannerSize: DEFAULT_BANNER_CONFIG.bannerSize,
       style: {
         ...(t?.style || {}),
         backgroundColor: DEFAULT_BANNER_CONFIG.backgroundColor,
@@ -189,6 +215,7 @@ export function normalizeBannerConfig(config) {
     customizeText: config.customizeText ?? config.customizeButtonText ?? DEFAULT_BANNER_CONFIG.customizeText,
     showReject: config.showReject !== false && config.showRejectButton !== false,
     position: config.position ?? DEFAULT_BANNER_CONFIG.position,
+    bannerSize: config.bannerSize ?? DEFAULT_BANNER_CONFIG.bannerSize,
     style,
   };
 }
