@@ -16,6 +16,14 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 function BillingContent() {
   const { data: session, status } = useSession();
@@ -27,6 +35,8 @@ function BillingContent() {
   const [urlLoading, setUrlLoading] = useState({});
   const [addonActionLoading, setAddonActionLoading] = useState({});
   const [cancelLoading, setCancelLoading] = useState({});
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -178,12 +188,13 @@ function BillingContent() {
     }
   };
 
+  const openCancelDialog = (siteId, domain) => {
+    setCancelTarget({ siteId, domain });
+    setCancelDialogOpen(true);
+  };
+
   const cancelPlan = async (siteId, domain) => {
     if (!siteId) return;
-    const confirmed = window.confirm(
-      `Cancel the subscription for ${domain || "this domain"} now?\n\nThis will immediately cancel billing in Paddle so no future payment is charged.`
-    );
-    if (!confirmed) return;
 
     try {
       setCancelLoading((prev) => ({ ...prev, [siteId]: true }));
@@ -217,6 +228,8 @@ function BillingContent() {
       toast.success("Subscription cancelled", {
         description: data.message || "Billing was stopped immediately in Paddle.",
       });
+      setCancelDialogOpen(false);
+      setCancelTarget(null);
     } catch (e) {
       toast.error("Failed to cancel subscription.");
     } finally {
@@ -322,7 +335,7 @@ function BillingContent() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => cancelPlan(sub.siteId, sub.domain)}
+                            onClick={() => openCancelDialog(sub.siteId, sub.domain)}
                             disabled={cancelLoading[sub.siteId]}
                             className="rounded-lg h-9 text-[13px] font-medium text-rose-600 border-rose-200 bg-white hover:bg-rose-50"
                           >
@@ -424,6 +437,45 @@ function BillingContent() {
           })}
         </div>
       )}
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl p-6 border-rose-100">
+          <DialogHeader className="mb-2">
+            <DialogTitle className="text-xl text-rose-600">Cancel Plan</DialogTitle>
+            <DialogDescription className="text-[15px] text-slate-600 pt-2">
+              Cancel subscription for{" "}
+              <strong className="text-slate-900 font-semibold">
+                {cancelTarget?.domain || "this domain"}
+              </strong>
+              ?
+              <br />
+              <br />
+              This immediately cancels billing in Paddle, and no future payment will be charged.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 pt-3 border-t border-slate-100 mt-2">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setCancelDialogOpen(false);
+                setCancelTarget(null);
+              }}
+              className="rounded-xl"
+            >
+              Keep Plan
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => cancelPlan(cancelTarget?.siteId, cancelTarget?.domain)}
+              disabled={!cancelTarget?.siteId || cancelLoading[cancelTarget?.siteId]}
+              className="rounded-xl shadow-sm bg-rose-600 hover:bg-rose-700"
+            >
+              {cancelTarget?.siteId && cancelLoading[cancelTarget.siteId]
+                ? "Cancelling..."
+                : "Yes, Cancel Plan"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
