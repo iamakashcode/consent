@@ -1196,6 +1196,7 @@ const DEFAULT_BRANDING_TEXT = 'Powered by Cookie Access';
 
 export function generateMainScript(siteId, allowedDomain, isPreview, config, bannerStyle, position, title, message, acceptText, rejectText, showReject, verifyCallbackUrl, trackUrl, consentLogUrl, templateStyle, showBranding = true) {
   const CONSENT_KEY = `cookie_consent_${siteId}`;
+  const bannerSize = config?.bannerSize || "standard";
   
   const escapeForTemplate = (str) => {
     if (!str) return '';
@@ -1217,6 +1218,7 @@ export function generateMainScript(siteId, allowedDomain, isPreview, config, ban
   const safeReject = escapeForTemplate(rejectText);
   const safeBranding = escapeForTemplate(DEFAULT_BRANDING_TEXT);
   const safeCustomize = escapeForTemplate(config?.customizeText || "Customize");
+  const safeBannerSize = escapeForTemplate(bannerSize);
   const placementCss = bannerPlacementCss(position);
 
   return `
@@ -1500,17 +1502,32 @@ var maxVerificationAttempts=5;
   var rejectBtnStyle='background:'+(templateStyleObj.buttonColor||'#ff0202')+';color:'+(templateStyleObj.buttonTextColor||'#fff')+';border:none;padding:10px 18px;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
   var customizeBtnStyle='background:'+(templateStyleObj.backgroundColor||'#000')+';color:'+(templateStyleObj.buttonColor||'#fff')+';border:2px solid '+(templateStyleObj.buttonColor||'#fff')+';padding:10px 18px;text-decoration:none;font-weight:600;border-radius:6px;cursor:pointer;font-size:'+(templateStyleObj.fontSize||'14px')+';';
   
+  var compactMode='${safeBannerSize}'==='compact';
+  if(compactMode){
+    banner.style.justifyContent='flex-start';
+    banner.style.alignItems='stretch';
+    banner.style.gap='12px';
+  }
+
+  var bannerContentStyle=compactMode
+    ? 'width:100%;max-width:none;'
+    : 'flex:1;max-width:700px;';
+  var bannerActionsStyle=compactMode
+    ? 'display:flex;gap:8px;flex-wrap:wrap;width:100%;'
+    : 'display:flex;gap:10px;flex-wrap:wrap;';
+  var actionBtnCompactStyle=compactMode ? 'flex:1;min-width:120px;text-align:center;' : '';
+
   banner.innerHTML=
-    '<div style="flex:1;max-width:700px;">'+
+    '<div style="'+bannerContentStyle+'">'+
     '<strong style="font-size:16px;display:block;margin-bottom:6px;">${safeTitle || 'We value your privacy'}</strong>'+
     '<p style="margin:0;font-size:14px;opacity:0.9;line-height:1.5;">${safeMessage || 'This site uses tracking cookies to enhance your browsing experience and analyze site traffic.'}</p>'+
     
     ${showBranding ? `'<p style="margin:8px 0 0 0;font-size:11px;opacity:0.7;">${safeBranding}</p>'+` : ''}
     '</div>'+
-    '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
-    '<a href="#" id="consentflow-manage-prefs" style="'+customizeBtnStyle+'">${safeCustomize || 'Customize'}</a>'+
-    '<button id="consentflow-accept" style="'+acceptBtnStyle+'">${safeAccept || 'Accept All'}</button>'+
-    ${showReject ? `'<button id="consentflow-reject" style="'+rejectBtnStyle+'">${safeReject || 'Reject All'}</button>'+` : ''}
+    '<div style="'+bannerActionsStyle+'">'+
+    '<a href="#" id="consentflow-manage-prefs" style="'+customizeBtnStyle+actionBtnCompactStyle+'">${safeCustomize || 'Customize'}</a>'+
+    '<button id="consentflow-accept" style="'+acceptBtnStyle+actionBtnCompactStyle+'">${safeAccept || 'Accept All'}</button>'+
+    ${showReject ? `'<button id="consentflow-reject" style="'+rejectBtnStyle+actionBtnCompactStyle+'">${safeReject || 'Reject All'}</button>'+` : ''}
     '</div>';
   
   document.body.appendChild(banner);
