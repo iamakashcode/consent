@@ -495,7 +495,7 @@ function BannerContent() {
           </div>
         </SectionCard>
       ) : (
-        <div className="flex flex-col xl:flex-row gap-6 pb-12">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(460px,1.1fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(560px,1.25fr)] gap-6 pb-12 items-start">
           {/* Main Configuration Area */}
           <div className="flex-1 space-y-6">
 
@@ -696,8 +696,8 @@ function BannerContent() {
           </div>
 
           {/* Right Sidebar - Preview & Integration */}
-          <div className="w-full xl:w-[450px] space-y-6">
-            <SectionCard noPadding className="overflow-hidden lg:sticky lg:top-8 shadow-md">
+          <div className="w-full space-y-6 xl:sticky xl:top-8">
+            <SectionCard noPadding className="overflow-hidden shadow-md">
               <div className="bg-slate-900 border-b border-slate-800 p-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 bg-slate-800 border border-slate-700 rounded flex items-center justify-center shrink-0">
@@ -716,7 +716,7 @@ function BannerContent() {
                 </Button>
               </div>
 
-              <div className="relative bg-white aspect-4/3 flex flex-col items-center justify-center border-b border-slate-100 overflow-hidden">
+              <div className="relative bg-white h-[520px] lg:h-[620px] 2xl:h-[680px] flex flex-col items-center justify-center border-b border-slate-100 overflow-hidden">
                 {previewLoading && (
                   <div className="absolute inset-0 bg-white/70 backdrop-blur-sm z-10 flex items-center justify-center">
                     <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
