@@ -4,6 +4,12 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { Menu, X, Zap } from "lucide-react";
 
+const navLinks = [
+  { label: "Features", href: "/features" },
+  { label: "How it Works", href: "/how-it-works" },
+  { label: "Pricing", href: "/pricing" },
+];
+
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -36,18 +42,14 @@ export default function Header() {
 
           {/* Center Nav */}
           <nav className="hidden md:flex items-center gap-1">
-            {[
-              { label: "Features", href: "#features" },
-              { label: "How it Works", href: "#how-it-works" },
-              { label: "Pricing", href: "#pricing" },
-            ].map((item) => (
-              <a
+            {navLinks.map((item) => (
+              <Link
                 key={item.label}
                 href={item.href}
                 className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 font-medium rounded-lg hover:bg-slate-100/80 transition-all duration-150"
               >
                 {item.label}
-              </a>
+              </Link>
             ))}
           </nav>
 
@@ -81,19 +83,15 @@ export default function Header() {
       {mobileOpen && (
         <div className="md:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200/60">
           <div className="px-6 py-4 space-y-1">
-            {[
-              { label: "Features", href: "#features" },
-              { label: "How it Works", href: "#how-it-works" },
-              { label: "Pricing", href: "#pricing" },
-            ].map((item) => (
-              <a
+            {navLinks.map((item) => (
+              <Link
                 key={item.label}
                 href={item.href}
                 onClick={() => setMobileOpen(false)}
                 className="block px-4 py-2.5 text-sm font-medium text-slate-700 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
               >
                 {item.label}
-              </a>
+              </Link>
             ))}
             <div className="pt-3 flex flex-col gap-2">
               <Link href="/login" className="block px-4 py-2.5 text-sm font-medium text-slate-700 text-center border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">

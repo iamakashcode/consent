@@ -1,6 +1,18 @@
 import Link from "next/link";
 import { Zap } from "lucide-react";
 
+const productLinks = [
+  { label: "Features", href: "/features" },
+  { label: "How it Works", href: "/how-it-works" },
+  { label: "Pricing", href: "/pricing" },
+];
+
+const legalLinks = [
+  { label: "Privacy Policy", href: "/privacy-policy" },
+  { label: "Terms and Condition", href: "/terms-and-condition" },
+  { label: "Refund Policy", href: "/refund-policy" },
+];
+
 export default function Footer() {
   return (
     <footer className="bg-white border-t border-slate-100 pt-20 pb-10">
@@ -24,11 +36,11 @@ export default function Footer() {
           <div>
             <h4 className="font-semibold text-slate-900 mb-5">Product</h4>
             <ul className="space-y-3">
-              {["Features", "Integrations", "Pricing", "Changelog", "Docs"].map((link) => (
-                <li key={link}>
-                  <a href="#" className="text-sm text-slate-500 hover:text-indigo-600 transition-colors">
-                    {link}
-                  </a>
+              {productLinks.map((link) => (
+                <li key={link.label}>
+                  <Link href={link.href} className="text-sm text-slate-500 hover:text-indigo-600 transition-colors">
+                    {link.label}
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -50,11 +62,11 @@ export default function Footer() {
           <div>
             <h4 className="font-semibold text-slate-900 mb-5">Legal</h4>
             <ul className="space-y-3">
-              {["Privacy Policy", "Terms of Service", "Cookie Policy", "GDPR", "DPA"].map((link) => (
-                <li key={link}>
-                  <a href="#" className="text-sm text-slate-500 hover:text-indigo-600 transition-colors">
-                    {link}
-                  </a>
+              {legalLinks.map((link) => (
+                <li key={link.label}>
+                  <Link href={link.href} className="text-sm text-slate-500 hover:text-indigo-600 transition-colors">
+                    {link.label}
+                  </Link>
                 </li>
               ))}
             </ul>
