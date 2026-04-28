@@ -10,7 +10,7 @@ export default function MarketingPageLayout({
     <div className="min-h-screen bg-white selection:bg-indigo-100 selection:text-indigo-900 font-sans">
       <Header />
       <main className="pt-24 pb-16">
-        <section className="max-w-4xl mx-auto px-6 lg:px-8">
+        <section className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="mb-10">
             <h1 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">
               {title}
