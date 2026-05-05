@@ -4,7 +4,7 @@ import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 
 export default function Pricing() {
-  const [billingCycle, setBillingCycle] = useState("yearly");
+  const [billingCycle, setBillingCycle] = useState("monthly");
 
   return (
     <section id="pricing" className="py-10 md:py-16 bg-white border-t border-slate-100">

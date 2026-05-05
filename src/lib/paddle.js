@@ -53,7 +53,7 @@ export const PLAN_DETAILS = {
     price: 7,
     monthly: 7,
     yearly: 70, // 10 months price
-    pageViews: 10,
+    pageViews: 300000,
     trialDays: 14,
     description: "Perfect for getting started",
     popular: false,

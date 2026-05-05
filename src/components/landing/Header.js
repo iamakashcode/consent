@@ -33,7 +33,7 @@ export default function Header() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
-            <Image src="/logo.png" alt="ConsentFlow" width={32} height={32} />
+            <Image src="/cookie-access-logo.png" alt="ConsentFlow" width={200} height={32} />
           </Link>
 
           {/* Center Nav */}

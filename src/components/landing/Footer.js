@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Zap } from "lucide-react";
+import Image from "next/image";
 
 const productLinks = [
   { label: "Features", href: "/features" },
@@ -20,13 +21,8 @@ export default function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-8 lg:gap-12 mb-16">
           {/* Logo Column */}
           <div className="col-span-2 md:col-span-2">
-            <Link href="/" className="flex items-center gap-2.5 mb-6 group inline-flex">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-md shadow-indigo-500/30 group-hover:scale-105 transition-transform">
-                <Zap className="w-4 h-4 text-white fill-white" />
-              </div>
-              <span className="text-[17px] font-semibold text-slate-900 tracking-tight">
-                ConsentFlow
-              </span>
+            <Link href="/" className="flex items-center gap-2.5 mb-6 group">
+              <Image src="/cookie-access-logo.png" alt="ConsentFlow" width={200} height={32} />
             </Link>
             <p className="text-sm text-slate-500 leading-relaxed max-w-sm">
               The premium, zero-config cookie consent manager built to protect margins, maintain performance, and ensure total compliance globally.
