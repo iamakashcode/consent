@@ -1590,7 +1590,23 @@ function showFloatingButton(){
   floatBtn.id='consentflow-float-btn';
   floatBtn.setAttribute('aria-label','Manage cookie preferences');
   floatBtn.style.cssText='position:fixed;bottom:20px;left:20px;width:48px;height:48px;border-radius:50%;background:'+btnBg+';color:'+btnColor+';border:2px solid '+(btnColor||'rgba(255,255,255,0.5)')+';cursor:pointer;z-index:2147483646;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-size:22px;transition:transform 0.2s;';
-  floatBtn.innerHTML='🍪';
+  // Use an image icon for brand consistency; fall back safely if unavailable.
+  var floatIcon=document.createElement('img');
+  floatIcon.src='https://pub-4fb9828cb15b413685e53cdca5b3e30f.r2.dev/icon/icon.png';
+  floatIcon.alt='';
+  floatIcon.width=24;
+  floatIcon.height=24;
+  floatIcon.loading='eager';
+  floatIcon.decoding='async';
+  floatIcon.referrerPolicy='no-referrer';
+  floatIcon.draggable=false;
+  floatIcon.style.cssText='width:24px;height:24px;display:block;object-fit:contain;pointer-events:none;';
+  floatIcon.onerror=function(){
+    // Keep control usable even when the host site has no /icon.png.
+    floatBtn.textContent='🍪';
+    floatBtn.style.fontSize='22px';
+  };
+  floatBtn.appendChild(floatIcon);
   floatBtn.onmouseover=function(){ this.style.transform='scale(1.05)'; };
   floatBtn.onmouseout=function(){ this.style.transform='scale(1)'; };
   floatBtn.onclick=function(){ if(typeof showPreferencesModal==='function')showPreferencesModal(); };
