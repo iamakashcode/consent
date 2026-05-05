@@ -1600,7 +1600,7 @@ function showFloatingButton(){
   floatIcon.decoding='async';
   floatIcon.referrerPolicy='no-referrer';
   floatIcon.draggable=false;
-  floatIcon.style.cssText='width:24px;height:24px;display:block;object-fit:contain;pointer-events:none;';
+  floatIcon.style.cssText='width:48px;height:48px;display:block;object-fit:contain;pointer-events:none;';
   floatIcon.onerror=function(){
     // Keep control usable even when the host site has no /icon.png.
     floatBtn.textContent='🍪';
