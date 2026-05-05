@@ -1531,7 +1531,7 @@ var maxVerificationAttempts=5;
     '<p style="margin:0;opacity:0.9;'+compactTextScale+'">'+
     '${safeMessage || 'This site uses tracking cookies to enhance your browsing experience and analyze site traffic.'}</p>'+
     
-    ${showBranding ? `'<p style="margin:8px 0 0 0;font-size:11px;opacity:0.7;">${safeBranding}</p>'+` : ''}
+    ${showBranding ? `'<p style="margin:8px 0 0 0;font-size:15px;opacity:0.7;">${safeBranding}</p>'+` : ''}
     '</div>'+
     '<div style="'+bannerActionsStyle+'">'+
     '<a href="#" id="consentflow-manage-prefs" style="'+customizeBtnStyle+actionBtnAdaptiveStyle+'">${safeCustomize || 'Customize'}</a>'+
