@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { Menu, X, Zap } from "lucide-react";
+import Image from "next/image";
 
 const navLinks = [
   { label: "Features", href: "/features" },
@@ -32,12 +33,7 @@ export default function Header() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-md shadow-indigo-500/30 group-hover:scale-105 transition-transform">
-              <Zap className="w-4 h-4 text-white fill-white" />
-            </div>
-            <span className="text-[15px] font-semibold text-slate-900 tracking-tight">
-              ConsentFlow
-            </span>
+            <Image src="/logo.png" alt="ConsentFlow" width={32} height={32} />
           </Link>
 
           {/* Center Nav */}
