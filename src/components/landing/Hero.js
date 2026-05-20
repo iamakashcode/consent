@@ -1,170 +1,250 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, Shield } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ArrowRight, CheckCircle2, Shield, Users, Lock, Award } from "lucide-react";
 
-const DashboardPreview = () => (
-  <div className="relative">
-    {/* Glow effect */}
-    <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500/20 via-violet-500/20 to-purple-500/20 rounded-3xl blur-2xl" />
+const TRUST_WORDS = ["Trust", "Choose", "Believe In", "Rely On"];
+const COMPANIES = ["Shopify", "Vercel", "Webflow", "Framer", "Ghost", "Prismic", "Contentful", "Netlify"];
 
-    {/* Browser frame */}
-    <div className="relative rounded-2xl border border-slate-200/80 shadow-2xl shadow-indigo-500/10 bg-white overflow-hidden">
-      {/* Browser chrome */}
-      <div className="flex items-center gap-2 px-5 py-3.5 bg-slate-50 border-b border-slate-200/80">
-        <div className="flex gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
-          <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-        </div>
-        <div className="flex-1 mx-3">
-          <div className="bg-white border border-slate-200 rounded-md px-3 py-1 text-xs text-slate-400 max-w-xs truncate">
-            app.consentflow.io/dashboard
-          </div>
-        </div>
-      </div>
+function useTypewriter(words, typeSpeed = 85, deleteSpeed = 48, pauseMs = 2200) {
+  const [wordIdx, setWordIdx] = useState(0);
+  const [charIdx, setCharIdx] = useState(words[0].length);
+  const [deleting, setDeleting] = useState(false);
+  const [paused, setPaused] = useState(true);
 
-      {/* Dashboard content */}
-      <div className="p-5 bg-slate-50/50 space-y-4">
-        {/* Top metric row */}
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "Active Domains", value: "12", change: "+2", up: true },
-            { label: "Page Views", value: "248K", change: "+18%", up: true },
-            { label: "Consent Rate", value: "94%", change: "+3.2%", up: true },
-          ].map((m) => (
-            <div key={m.label} className="bg-white rounded-xl border border-slate-200/70 p-3.5 shadow-sm">
-              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">{m.label}</p>
-              <p className="text-xl font-bold text-slate-900 leading-none">{m.value}</p>
-              <span className="text-[10px] text-emerald-600 font-semibold">{m.change}</span>
-            </div>
-          ))}
-        </div>
+  useEffect(() => {
+    const word = words[wordIdx];
+    if (paused) {
+      const t = setTimeout(() => { setPaused(false); setDeleting(true); }, pauseMs);
+      return () => clearTimeout(t);
+    }
+    if (deleting) {
+      if (charIdx > 0) {
+        const t = setTimeout(() => setCharIdx(c => c - 1), deleteSpeed);
+        return () => clearTimeout(t);
+      }
+      setDeleting(false);
+      setWordIdx(i => (i + 1) % words.length);
+      return;
+    }
+    if (charIdx < word.length) {
+      const t = setTimeout(() => setCharIdx(c => c + 1), typeSpeed);
+      return () => clearTimeout(t);
+    }
+    setPaused(true);
+  }, [charIdx, deleting, paused, wordIdx, words, typeSpeed, deleteSpeed, pauseMs]);
 
-        {/* Chart */}
-        <div className="bg-white rounded-xl border border-slate-200/70 p-4 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-xs font-semibold text-slate-700">Consent Rate Over Time</p>
-            <span className="text-xs text-indigo-600 font-medium bg-indigo-50 px-2 py-0.5 rounded-md">Last 7 days</span>
-          </div>
-          <div className="flex items-end gap-1.5 h-20">
-            {[55, 72, 60, 85, 68, 92, 88].map((h, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div
-                  className="w-full rounded-t-md bg-gradient-to-t from-indigo-500 to-violet-400 opacity-90"
-                  style={{ height: `${h}%` }}
-                />
-              </div>
-            ))}
-          </div>
-          <div className="flex justify-between mt-2">
-            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-              <span key={d} className="text-[9px] text-slate-400 flex-1 text-center">{d}</span>
-            ))}
-          </div>
-        </div>
+  return words[wordIdx].slice(0, charIdx);
+}
 
-        {/* Recent activity */}
-        <div className="bg-white rounded-xl border border-slate-200/70 p-4 shadow-sm">
-          <p className="text-xs font-semibold text-slate-700 mb-3">Recent Domains</p>
-          <div className="space-y-2">
-            {[
-              { domain: "myshop.com", status: "Active", rate: "96%" },
-              { domain: "blog.io", status: "Active", rate: "91%" },
-            ].map((d) => (
-              <div key={d.domain} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  <span className="text-xs text-slate-700">{d.domain}</span>
-                </div>
-                <span className="text-xs font-semibold text-indigo-600">{d.rate}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-);
+function DashboardPreview() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 400);
+    return () => clearTimeout(t);
+  }, []);
 
-export default function Hero() {
+  const bars = [38, 55, 44, 72, 68, 88, 94];
+
   return (
-    <section className="relative pt-20 pb-20 lg:pt-36 overflow-hidden">
-      {/* Background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 pointer-events-none" />
-      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-radial from-violet-100/60 via-indigo-50/30 to-transparent rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-radial from-indigo-100/40 to-transparent rounded-full blur-3xl pointer-events-none" />
+    <div className="relative">
+      <div className="absolute -inset-8 bg-gradient-to-r from-blue-600/10 via-teal-500/10 to-blue-600/10 rounded-3xl blur-3xl pointer-events-none" />
 
-      <div className="relative max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-16 lg:gap-20 items-center">
-          {/* Left */}
-          <div>
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 mb-8">
-              <Shield className="w-3.5 h-3.5 text-indigo-600" />
-              <span className="text-xs font-semibold text-indigo-700 tracking-wide">GDPR & CCPA Compliant</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-            </div>
+      <div className="absolute -top-5 -right-3 z-20 bg-white rounded-2xl shadow-xl border border-slate-100 px-3.5 py-2.5 flex items-center gap-2.5 animate-float">
+        <div className="w-7 h-7 rounded-full bg-teal-50 flex items-center justify-center flex-shrink-0">
+          <Shield className="w-3.5 h-3.5 text-teal-600" />
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold text-slate-800 leading-tight">GDPR Verified</p>
+          <p className="text-[10px] text-teal-600">Compliant ✓</p>
+        </div>
+      </div>
 
-            {/* Headline */}
-            <h1 className="text-5xl lg:text-[3.75rem] font-bold text-slate-900 leading-[1.1] tracking-tight mb-6">
-              Cookie Consent
-              <br />
-              <span className="bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 bg-clip-text text-transparent">
-                Made Simple
+      <div className="absolute -bottom-5 -left-3 z-20 bg-white rounded-2xl shadow-xl border border-slate-100 px-3.5 py-2.5 flex items-center gap-2.5 animate-float" style={{ animationDelay: "2.5s" }}>
+        <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
+          <Users className="w-3.5 h-3.5 text-blue-700" />
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold text-slate-800 leading-tight">94.2% Consent Rate</p>
+          <p className="text-[10px] text-blue-600">↑ 3.2% this week</p>
+        </div>
+      </div>
+
+      <div className="relative rounded-2xl border border-slate-200/80 shadow-2xl shadow-blue-900/10 bg-white overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
+          <div className="flex gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+            <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+          </div>
+          <div className="flex-1 mx-3">
+            <div className="bg-white border border-slate-200 rounded-md px-3 py-1.5 text-xs text-slate-400 max-w-xs flex items-center gap-1.5">
+              <Lock className="w-3 h-3 text-teal-500 flex-shrink-0" />
+              app.cookieaccess.io/dashboard
+              <span className="ml-auto flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[9px] text-emerald-600 font-medium">LIVE</span>
               </span>
-            </h1>
-
-            {/* Sub */}
-            <p className="text-lg text-slate-500 leading-relaxed mb-10 max-w-[440px]">
-              Auto-detect trackers, block until consent, and stay compliant with GDPR, CCPA, and ePrivacy — without touching your code.
-            </p>
-
-            {/* CTAs */}
-            <div className="flex flex-wrap gap-3 mb-10">
-              <Link
-                href="/signup"
-                className="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold text-white rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30 transition-all duration-200 hover:-translate-y-0.5"
-              >
-                Start Free Trial
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-              <a
-                href="#how-it-works"
-                className="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold text-slate-700 rounded-xl border border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 shadow-sm transition-all duration-200"
-              >
-                See How It Works
-              </a>
             </div>
+          </div>
+        </div>
 
-            {/* Trust line */}
-            <div className="flex flex-wrap items-center gap-5 text-sm text-slate-500">
-              {["14-day free trial", "No credit card", "Cancel anytime"].map((t) => (
-                <div key={t} className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                  <span>{t}</span>
-                </div>
+        <div className="p-4 bg-slate-50/40 space-y-3">
+          <div className="grid grid-cols-3 gap-2.5">
+            {[
+              { label: "Domains", value: "12", sub: "+2 this mo", color: "blue" },
+              { label: "Page Views", value: "248K", sub: "+18% MoM", color: "teal" },
+              { label: "Consent Rate", value: "94%", sub: "↑ Industry #1", color: "emerald" },
+            ].map((m, i) => (
+              <div key={i} className="bg-white rounded-xl border border-slate-100 p-3 shadow-sm">
+                <p className="text-[9px] text-slate-400 font-medium uppercase tracking-wide mb-1.5 leading-none">{m.label}</p>
+                <p className="text-xl font-bold text-slate-900 leading-none mb-1">{m.value}</p>
+                <span className={`text-[9px] font-medium ${m.color === "blue" ? "text-blue-600" : m.color === "teal" ? "text-teal-600" : "text-emerald-600"}`}>{m.sub}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-100 p-3.5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-slate-700">Consent Rate</p>
+              <span className="text-[10px] text-teal-600 font-medium bg-teal-50 px-2 py-0.5 rounded-full">↑ Trending up</span>
+            </div>
+            <div className="flex items-end gap-1.5 h-16">
+              {bars.map((h, i) => (
+                <div key={i} className="flex-1 rounded-t-sm" style={{
+                  height: `${h}%`,
+                  background: i >= 5 ? "linear-gradient(to top, #1D4ED8, #0EA5E9)" : i >= 3 ? "linear-gradient(to top, #60A5FA, #93C5FD)" : "#E2E8F0",
+                  transformOrigin: "bottom",
+                  transform: mounted ? "scaleY(1)" : "scaleY(0)",
+                  transition: `transform 0.55s cubic-bezier(0.34,1.56,0.64,1) ${i * 0.07 + 0.3}s`,
+                }} />
+              ))}
+            </div>
+            <div className="flex justify-between mt-1.5">
+              {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+                <span key={i} className="text-[9px] text-slate-400 flex-1 text-center">{d}</span>
               ))}
             </div>
           </div>
 
-          {/* Right: Dashboard preview */}
-          <div className="lg:pl-8">
+          <div className="bg-white rounded-xl border border-slate-100 p-3.5 shadow-sm">
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-xs font-semibold text-slate-700">Protected Domains</p>
+              <span className="text-[10px] text-blue-600 font-medium">View all →</span>
+            </div>
+            <div className="space-y-2">
+              {[{ domain: "myshop.com", rate: "96%", trend: "↑" }, { domain: "analytics.io", rate: "91%", trend: "→" }].map((d) => (
+                <div key={d.domain} className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span className="text-[11px] text-slate-600">{d.domain}</span>
+                  </div>
+                  <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">{d.trend} {d.rate}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function Hero() {
+  const typewriterText = useTypewriter(TRUST_WORDS);
+
+  return (
+    <section className="relative pt-8 pb-20 lg:pt-12 lg:pb-28 overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-white to-white pointer-events-none" />
+      <div className="absolute top-[-80px] right-[-80px] w-[680px] h-[680px] rounded-full pointer-events-none animate-orb1" style={{ background: "radial-gradient(circle, rgba(29,78,216,0.11) 0%, transparent 70%)" }} />
+      <div className="absolute bottom-[-100px] left-[-100px] w-[580px] h-[580px] rounded-full pointer-events-none animate-orb2" style={{ background: "radial-gradient(circle, rgba(13,148,136,0.09) 0%, transparent 70%)" }} />
+      <div className="absolute top-1/2 left-1/4 w-[400px] h-[400px] rounded-full pointer-events-none animate-orb3" style={{ background: "radial-gradient(circle, rgba(99,102,241,0.06) 0%, transparent 70%)" }} />
+      <div className="absolute inset-0 pointer-events-none opacity-[0.3]" style={{ backgroundImage: "radial-gradient(circle, #94A3B8 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
+
+      <div className="relative max-w-7xl mx-auto px-6 lg:px-8">
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+
+          <div>
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-50 border border-blue-100 mb-8">
+              <Award className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+              <span className="text-xs text-blue-700 tracking-wide">
+                Trusted by <span className="font-semibold">12,000+</span> companies worldwide
+              </span>
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />
+            </div>
+
+            {/* Headline */}
+            <h1 className="text-5xl lg:text-[3.5rem] font-bold text-slate-900 leading-[1.08] tracking-tight mb-5">
+              Build products
+              <br />
+              <span className="trust-gradient">your users&nbsp;</span>
+              <span className="inline-block relative">
+                <span className="trust-gradient">{typewriterText}</span>
+                <span className="inline-block w-[3px] h-[0.85em] ml-0.5 bg-blue-600 align-middle cursor-blink" />
+              </span>
+            </h1>
+
+            {/* Subheadline */}
+            <p className="text-lg text-slate-500 leading-relaxed mb-10 max-w-[460px]">
+              Turn cookie compliance into a competitive edge. Auto-detect trackers, collect genuine
+              consent, and show your users you take privacy seriously — in minutes, not months.
+            </p>
+
+            {/* CTAs */}
+            <div className="flex flex-wrap gap-3 mb-10">
+              <Link href="/signup" className="btn-glow inline-flex items-center gap-2.5 px-7 py-3.5 text-sm font-semibold text-white rounded-xl bg-blue-700 hover:bg-blue-800 transition-all duration-200 hover:-translate-y-0.5 group">
+                Start building trust
+                <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-1" />
+              </Link>
+              <a href="#live-demo" className="inline-flex items-center gap-2 px-7 py-3.5 text-sm font-medium text-slate-600 rounded-xl border border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 shadow-sm transition-all duration-200">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+                Watch live demo
+              </a>
+            </div>
+
+            {/* Trust signals */}
+            <div className="flex flex-wrap items-center gap-5 text-sm text-slate-400 mb-8">
+              {["14-day free trial", "No credit card required", "Cancel anytime"].map((t) => (
+                <div key={t} className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-teal-500 flex-shrink-0" />
+                  <span>{t}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Compliance chips */}
+            <div className="flex flex-wrap gap-2">
+              {["GDPR", "CCPA", "ePrivacy", "LGPD"].map((reg) => (
+                <span key={reg} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg hover:bg-blue-100 transition-colors cursor-default">
+                  <Shield className="w-3 h-3" />
+                  {reg} ready
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="lg:pl-4">
             <DashboardPreview />
           </div>
         </div>
 
-        {/* Trusted by bar */}
-        <div className="mt-10 pt-10 border-t border-slate-100">
-          <p className="text-center text-xs font-semibold text-slate-400 uppercase tracking-widest mb-8">
-            Trusted by teams at
+        {/* Marquee */}
+        <div className="mt-16 pt-10 border-t border-slate-100 overflow-hidden">
+          <p className="text-center text-[11px] text-slate-400 tracking-widest uppercase mb-7">
+            Trusted by compliance teams at
           </p>
-          <div className="flex flex-wrap justify-center items-center gap-x-12 gap-y-4">
-            {["Shopify", "Vercel", "Webflow", "Framer", "Ghost"].map((b) => (
-              <span key={b} className="text-slate-300 font-semibold text-lg tracking-tight hover:text-slate-400 transition-colors cursor-default">
-                {b}
-              </span>
-            ))}
+          <div className="relative overflow-hidden" aria-hidden="true">
+            <div className="absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
+            <div className="absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
+            <div className="animate-marquee">
+              {[...COMPANIES, ...COMPANIES].map((name, i) => (
+                <span key={i} className="px-8 text-slate-300 font-semibold text-base tracking-tight hover:text-slate-500 transition-colors cursor-default select-none">
+                  {name}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </div>

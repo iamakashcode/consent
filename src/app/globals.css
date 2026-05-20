@@ -291,6 +291,181 @@
   animation: pulse-slow 3s ease-in-out infinite;
 }
 
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 5s ease-in-out infinite;
+}
+
+@keyframes floatDelayed {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+.animate-float-delayed {
+  animation: floatDelayed 5s ease-in-out infinite;
+  animation-delay: 2.5s;
+}
+
+@keyframes slideUpReveal {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-up {
+  animation: slideUpReveal 0.6s ease forwards;
+}
+
+/* Scroll-triggered reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-left {
+  opacity: 0;
+  transform: translateX(-24px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+
+.reveal-left.visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.reveal-right {
+  opacity: 0;
+  transform: translateX(24px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+
+.reveal-right.visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Trust gradient text */
+.trust-gradient {
+  background: linear-gradient(135deg, #1D4ED8 0%, #0D9488 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Shimmer effect for loading/skeleton */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+/* ─── Hero animated orb backgrounds ─── */
+@keyframes heroOrb1 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  25% { transform: translate(40px, -60px) scale(1.08); }
+  50% { transform: translate(-25px, -20px) scale(0.96); }
+  75% { transform: translate(15px, 35px) scale(1.04); }
+}
+@keyframes heroOrb2 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(-55px, 25px) scale(1.06); }
+  66% { transform: translate(30px, -40px) scale(0.94); }
+}
+@keyframes heroOrb3 {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.12); }
+}
+
+.animate-orb1 { animation: heroOrb1 14s ease-in-out infinite; }
+.animate-orb2 { animation: heroOrb2 18s ease-in-out infinite; }
+.animate-orb3 { animation: heroOrb3 10s ease-in-out infinite; }
+
+/* ─── CTA button glow pulse ─── */
+@keyframes ctaGlow {
+  0%, 100% { box-shadow: 0 8px 24px rgba(29, 78, 216, 0.35); }
+  50% { box-shadow: 0 8px 40px rgba(29, 78, 216, 0.65), 0 0 0 6px rgba(29, 78, 216, 0.1); }
+}
+.btn-glow { animation: ctaGlow 2.5s ease-in-out infinite; }
+
+/* ─── Typewriter cursor blink ─── */
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.cursor-blink { animation: cursorBlink 0.75s step-end infinite; }
+
+/* ─── Marquee scroll ─── */
+@keyframes marqueeScroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marqueeScroll 22s linear infinite;
+  display: flex;
+  width: max-content;
+}
+.animate-marquee:hover { animation-play-state: paused; }
+
+/* ─── Chart bars grow from bottom ─── */
+@keyframes barScaleUp {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+/* ─── Slide-in from bottom for audit log / demo results ─── */
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-in-up { animation: slideInUp 0.45s ease forwards; }
+
+/* ─── Number tick animation ─── */
+@keyframes numberPop {
+  0% { transform: translateY(6px); opacity: 0; }
+  60% { transform: translateY(-2px); }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.animate-number-pop { animation: numberPop 0.4s ease forwards; }
+
+/* ─── Card tilt — preserve-3d wrapper ─── */
+.tilt-card {
+  transition: transform 0.12s ease, box-shadow 0.2s ease;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* ─── Gradient border on featured card ─── */
+.border-gradient-blue-teal {
+  position: relative;
+  background: white;
+}
+.border-gradient-blue-teal::before {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  background: linear-gradient(135deg, #1D4ED8, #0D9488);
+  border-radius: inherit;
+  z-index: -1;
+}
+
+/* ─── Shimmer on button ─── */
+@keyframes btnShimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.btn-shimmer {
+  background-size: 200% auto;
+  animation: btnShimmer 2.5s linear infinite;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
