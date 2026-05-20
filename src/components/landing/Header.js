@@ -2,20 +2,28 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Menu, X, ChevronDown, Shield, Zap, BarChart3, Lock, FileCheck, Globe } from "lucide-react";
+import { Menu, X, ChevronDown, Shield, Zap, BarChart3, Lock, FileCheck, Users, Handshake, Briefcase, Mail } from "lucide-react";
 import Image from "next/image";
 
 const NAV = [
   {
     label: "Product",
     children: [
-      { label: "Features", href: "/#features", icon: Zap, desc: "Everything you get out of the box" },
+      { label: "Features", href: "/features", icon: Zap, desc: "Everything you get out of the box" },
+      { label: "How it works", href: "/how-it-works", icon: FileCheck, desc: "Three steps to compliance" },
       { label: "Analytics", href: "/#analytics", icon: BarChart3, desc: "Real-time consent dashboards" },
-      { label: "How it works", href: "/#how-it-works", icon: FileCheck, desc: "Three steps to compliance" },
     ],
   },
-  { label: "Compliance", href: "/#compliance" },
-  { label: "Pricing", href: "/#pricing" },
+  { label: "Pricing", href: "/pricing" },
+  {
+    label: "Company",
+    children: [
+      { label: "About us", href: "/about-us", icon: Users, desc: "Our mission and team" },
+      { label: "Partners", href: "/partners", icon: Handshake, desc: "Reseller and integration partnerships" },
+      { label: "Careers", href: "/career", icon: Briefcase, desc: "Join our team" },
+      { label: "Contact", href: "/contact-us", icon: Mail, desc: "Get in touch with us" },
+    ],
+  },
 ];
 
 export default function Header() {

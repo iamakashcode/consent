@@ -4,11 +4,11 @@ import { Shield, CheckCircle2, Lock, Globe, Twitter, Linkedin, Github, ArrowUpRi
 import NewsletterForm from "@/components/landing/NewsletterForm";
 
 const productLinks = [
-  { label: "Features", href: "/#features" },
-  { label: "How it works", href: "/#how-it-works" },
+  { label: "Features", href: "/features" },
+  { label: "How it works", href: "/how-it-works" },
   { label: "Compliance coverage", href: "/#compliance" },
   { label: "Analytics dashboard", href: "/#analytics" },
-  { label: "Pricing", href: "/#pricing" },
+  { label: "Pricing", href: "/pricing" },
 ];
 
 const resourceLinks = [
@@ -19,10 +19,10 @@ const resourceLinks = [
 ];
 
 const companyLinks = [
-  { label: "About us", href: "#" },
-  { label: "Blog", href: "#" },
-  { label: "Careers", href: "#" },
-  { label: "Contact", href: "#" },
+  { label: "About us", href: "/about-us" },
+  { label: "Partners", href: "/partners" },
+  { label: "Careers", href: "/career" },
+  { label: "Contact", href: "/contact-us" },
 ];
 
 const legalLinks = [
