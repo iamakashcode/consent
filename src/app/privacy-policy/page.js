@@ -1,9 +1,9 @@
-import MarketingPageLayout from "@/components/landing/MarketingPageLayout";
+﻿import MarketingPageLayout from "@/components/landing/MarketingPageLayout";
 
 export const metadata = {
-  title: "Privacy Policy | ConsentFlow",
+  title: "Privacy Policy",
   description:
-    "Learn how ConsentFlow collects, uses, and protects your personal information.",
+    "Learn how Cookie Access collects, uses, and protects your personal information.",
 };
 
 export default function PrivacyPolicyPage() {
@@ -27,7 +27,7 @@ export default function PrivacyPolicyPage() {
       <h2>3. Data Sharing</h2>
       <p>
         We do not sell personal information. We may share data with trusted
-        service providers only as needed to operate ConsentFlow.
+        service providers only as needed to operate Cookie Access.
       </p>
 
       <h2>4. Data Retention</h2>
@@ -45,7 +45,7 @@ export default function PrivacyPolicyPage() {
       <h2>6. Contact</h2>
       <p>
         For privacy-related requests, please contact our support team through
-        the official ConsentFlow support channels.
+        the official Cookie Access support channels.
       </p>
     </MarketingPageLayout>
   );

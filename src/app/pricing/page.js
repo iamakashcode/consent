@@ -1,9 +1,10 @@
 "use client";
 
-import Header from "@/components/landing/Header";
-import Footer from "@/components/landing/Footer";
+import Nav from "@/components/home/Nav";
+import Footer from "@/components/home/Footer";
+import ScrollProgress from "@/components/landing/ScrollProgress";
 import Link from "next/link";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   CheckCircle2, X, Shield, Lock, Zap, Globe, ArrowRight,
   ChevronDown, Star, Users, Headphones, FileCheck,
@@ -137,7 +138,7 @@ const faqs = [
 ];
 
 function CellValue({ v }) {
-  if (v === true) return <CheckCircle2 className="w-4 h-4 text-teal-500 mx-auto" />;
+  if (v === true) return <CheckCircle2 className="w-4 h-4 text-brand-500 mx-auto" />;
   if (v === false) return <X className="w-4 h-4 text-slate-300 mx-auto" />;
   return <span className="text-xs font-semibold text-slate-600">{v}</span>;
 }
@@ -148,55 +149,54 @@ export default function PricingPage() {
 
   return (
     <div className="min-h-screen bg-white font-sans">
-      <Header />
+      <ScrollProgress />
+      <Nav />
 
       <main>
         {/* ─── Hero ─── */}
-        <section className="relative pt-24 pb-24 overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950">
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="animate-orb1 absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full bg-blue-600/20 blur-[90px]" />
-            <div className="animate-orb2 absolute top-10 right-[-10%] w-[400px] h-[400px] rounded-full bg-indigo-600/20 blur-[80px]" />
-          </div>
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:60px_60px] pointer-events-none" />
+        <section className="noise relative pt-36 pb-44 overflow-hidden bg-aurora">
+          <div className="absolute inset-0 bg-grid grid-fade-mask pointer-events-none" />
+          <div className="absolute top-[-120px] right-[-120px] w-[560px] h-[560px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(183,83,239,0.14) 0%, transparent 70%)" }} />
+          <div className="absolute bottom-[-140px] left-[-140px] w-[480px] h-[480px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(18,11,125,0.1) 0%, transparent 70%)" }} />
 
           <div className="relative max-w-3xl mx-auto px-6 lg:px-8 text-center">
-            <div className="inline-flex items-center gap-2 text-xs font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-full mb-8">
-              <Shield className="w-3.5 h-3.5" />
+            <div className="glass inline-flex items-center gap-2 text-xs font-semibold text-navy-800 px-4 py-2 rounded-full mb-7">
+              <Shield className="w-3.5 h-3.5 text-brand-600" />
               Transparent pricing — no hidden fees, ever
             </div>
-            <h1 className="text-5xl md:text-6xl font-bold text-white tracking-tight mb-5 leading-[1.1]">
+            <h1 className="font-display font-bold text-navy-950 text-[clamp(2.8rem,6vw,4.5rem)] leading-[1.02] mb-5">
               Simple pricing,{" "}
-              <span className="bg-gradient-to-r from-teal-300 to-blue-300 bg-clip-text text-transparent">
-                serious compliance
-              </span>
+              <span className="trust-gradient">serious compliance.</span>
             </h1>
-            <p className="text-lg text-blue-200/80 leading-relaxed mb-10 max-w-xl mx-auto">
-              Every plan ships with a 14-day free trial. We earn your business by being good at our job — not by making
-              it hard to leave.
+            <p className="text-lg text-slate-500 leading-relaxed mb-10 max-w-xl mx-auto">
+              Every plan ships with a 14-day free trial. We earn your business by being good at our
+              job — not by making it hard to leave.
             </p>
 
             {/* Billing toggle */}
-            <div className="inline-flex items-center p-1.5 bg-white/5 border border-white/10 rounded-xl">
+            <div className="glass inline-flex items-center p-1.5 rounded-2xl">
               <button
                 onClick={() => setBilling("monthly")}
-                className={`px-5 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                className={`px-5 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 ${
                   billing === "monthly"
-                    ? "bg-white text-slate-900 shadow-sm font-semibold"
-                    : "text-blue-300 hover:text-white"
+                    ? "bg-brand-gradient text-white shadow-md shadow-brand-500/25"
+                    : "text-slate-500 hover:text-navy-900"
                 }`}
               >
                 Monthly
               </button>
               <button
                 onClick={() => setBilling("yearly")}
-                className={`px-5 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2 ${
+                className={`px-5 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center gap-2 ${
                   billing === "yearly"
-                    ? "bg-white text-slate-900 shadow-sm font-semibold"
-                    : "text-blue-300 hover:text-white"
+                    ? "bg-brand-gradient text-white shadow-md shadow-brand-500/25"
+                    : "text-slate-500 hover:text-navy-900"
                 }`}
               >
                 Annual
-                <span className="bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide">
+                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide ${
+                  billing === "yearly" ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700"
+                }`}>
                   SAVE 20%
                 </span>
               </button>
@@ -204,53 +204,49 @@ export default function PricingPage() {
           </div>
         </section>
 
-        {/* ─── Pricing Cards (float over the dark→white boundary) ─── */}
-        <section className="relative bg-gradient-to-b from-slate-950 to-white pb-8">
+        {/* ─── Pricing cards (float over the hero boundary) ─── */}
+        <section className="relative pb-8 -mt-28">
           <div className="max-w-6xl mx-auto px-6 lg:px-8">
-            <div className="grid md:grid-cols-3 gap-5 pt-0 items-end relative z-10">
+            <div className="grid md:grid-cols-3 gap-6 items-end relative z-10">
               {plans.map((plan) => (
                 <div
                   key={plan.name}
                   className={`relative rounded-3xl p-8 transition-all duration-300 ${
                     plan.highlight
-                      ? "bg-gradient-to-b from-blue-500 to-blue-700 shadow-2xl shadow-blue-900/60 md:-translate-y-8 border border-blue-400/40"
-                      : "bg-slate-800/60 backdrop-blur-sm border border-white/10 hover:bg-slate-700/60"
+                      ? "border-animated md:-translate-y-6"
+                      : "bg-white border border-brand-100 glow-card glow-card-hover hover:border-brand-300"
                   }`}
                 >
                   {plan.badge && (
                     <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                      <span className="inline-flex items-center gap-1.5 bg-amber-400 text-amber-900 text-[11px] font-bold px-4 py-1.5 rounded-full shadow-lg">
-                        <Star className="w-3 h-3 fill-amber-900" />
+                      <span className="inline-flex items-center gap-1.5 bg-brand-gradient text-white text-[11px] font-bold px-4 py-1.5 rounded-full shadow-lg shadow-brand-500/30">
+                        <Star className="w-3 h-3 fill-white" />
                         {plan.badge}
                       </span>
                     </div>
                   )}
 
                   <div className="mb-6">
-                    <h3 className="text-xl font-bold text-white mb-1">{plan.name}</h3>
-                    <p className={`text-sm ${plan.highlight ? "text-blue-200" : "text-slate-400"}`}>
-                      {plan.tagline}
-                    </p>
+                    <h3 className="font-display text-xl font-bold text-navy-950 mb-1">{plan.name}</h3>
+                    <p className="text-sm text-slate-400">{plan.tagline}</p>
                   </div>
 
                   <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-5xl font-extrabold text-white tracking-tight">
+                    <span className={`font-display text-5xl font-bold tracking-tight ${plan.highlight ? "trust-gradient" : "text-navy-950"}`}>
                       €{billing === "monthly" ? plan.monthlyPrice : plan.yearlyPrice}
                     </span>
-                    <span className={`text-sm ml-1 ${plan.highlight ? "text-blue-200" : "text-slate-400"}`}>
-                      /{billing === "monthly" ? "mo" : "yr"}
-                    </span>
+                    <span className="text-sm ml-1 text-slate-400">/{billing === "monthly" ? "mo" : "yr"}</span>
                   </div>
-                  <p className={`text-xs mb-6 h-4 ${billing === "yearly" ? (plan.highlight ? "text-blue-200" : "text-emerald-400") : ""}`}>
+                  <p className="text-xs mb-6 h-4 text-emerald-600 font-medium">
                     {billing === "yearly" ? "Billed annually — 2 months free" : ""}
                   </p>
 
                   <Link
                     href="/signup"
-                    className={`block w-full py-3.5 text-center text-sm font-bold rounded-xl transition-all duration-200 mb-8 ${
+                    className={`block w-full py-3.5 text-center text-sm font-bold rounded-2xl transition-all duration-200 mb-8 ${
                       plan.highlight
-                        ? "bg-white text-blue-700 hover:bg-blue-50 shadow-lg"
-                        : "bg-white/10 hover:bg-white/20 text-white border border-white/20"
+                        ? "btn-brand shine"
+                        : "bg-brand-50 hover:bg-brand-100 text-brand-800 border border-brand-200/60"
                     }`}
                   >
                     {plan.cta}
@@ -259,14 +255,8 @@ export default function PricingPage() {
                   <ul className="space-y-3">
                     {plan.features.map((feat) => (
                       <li key={feat} className="flex items-start gap-2.5 text-sm">
-                        <CheckCircle2
-                          className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
-                            plan.highlight ? "text-teal-300" : "text-teal-500/70"
-                          }`}
-                        />
-                        <span className={plan.highlight ? "text-blue-100" : "text-slate-300"}>
-                          {feat}
-                        </span>
+                        <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-brand-500" />
+                        <span className="text-slate-500">{feat}</span>
                       </li>
                     ))}
                   </ul>
@@ -275,21 +265,21 @@ export default function PricingPage() {
             </div>
 
             {/* Enterprise strip */}
-            <div className="mt-5 bg-slate-800/40 backdrop-blur-sm border border-white/10 rounded-3xl p-7 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="mt-6 glass rounded-3xl p-7 flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="flex items-center gap-5">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center flex-shrink-0 shadow-lg">
-                  <Building2 className="w-6 h-6 text-white" />
+                <div className="icon-tile w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0">
+                  <Building2 className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white mb-1">Enterprise</h3>
-                  <p className="text-sm text-slate-400">
+                  <h3 className="font-display text-lg font-bold text-navy-950 mb-1">Enterprise</h3>
+                  <p className="text-sm text-slate-500">
                     Custom domains · SSO · SLA guarantees · Dedicated support · Custom DPA for your legal team
                   </p>
                 </div>
               </div>
               <Link
                 href="/contact-us"
-                className="flex-shrink-0 inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold text-white border border-white/20 rounded-xl hover:bg-white/10 transition-colors whitespace-nowrap"
+                className="btn-brand shine flex-shrink-0 inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold rounded-xl whitespace-nowrap"
               >
                 Talk to sales
                 <ArrowRight className="w-4 h-4" />
@@ -299,7 +289,7 @@ export default function PricingPage() {
         </section>
 
         {/* ─── Trust signals ─── */}
-        <section className="py-10 border-b border-slate-100 bg-white">
+        <section className="py-10 border-b border-brand-100/60 bg-white">
           <div className="max-w-4xl mx-auto px-6 lg:px-8">
             <div className="flex flex-wrap justify-center gap-x-10 gap-y-4">
               {[
@@ -308,8 +298,8 @@ export default function PricingPage() {
                 { icon: CheckCircle2, text: "Cancel anytime, no questions asked" },
                 { icon: FileCheck, text: "SOC 2 Type II certified" },
               ].map(({ icon: Icon, text }) => (
-                <div key={text} className="flex items-center gap-2 text-sm text-slate-400">
-                  <Icon className="w-4 h-4 text-teal-500 flex-shrink-0" />
+                <div key={text} className="flex items-center gap-2 text-sm text-slate-500">
+                  <Icon className="w-4 h-4 text-brand-500 flex-shrink-0" />
                   {text}
                 </div>
               ))}
@@ -321,25 +311,25 @@ export default function PricingPage() {
         <section className="py-24 bg-white">
           <div className="max-w-5xl mx-auto px-6 lg:px-8">
             <div className="text-center mb-14">
-              <span className="inline-block text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full mb-5">
+              <p className="font-display text-sm font-semibold tracking-[0.25em] uppercase text-brand-600 mb-4">
                 Full comparison
-              </span>
-              <h2 className="text-4xl font-bold text-slate-900 tracking-tight mb-4">
-                Compare every feature
+              </p>
+              <h2 className="font-display text-4xl md:text-5xl font-bold text-navy-950 tracking-tight mb-4">
+                Compare <span className="trust-gradient">every feature.</span>
               </h2>
-              <p className="text-slate-500 text-lg">No fine print. See exactly what's included.</p>
+              <p className="text-slate-500 text-lg">No fine print. See exactly what&apos;s included.</p>
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-slate-100 shadow-sm">
+            <div className="overflow-x-auto rounded-3xl border border-brand-100 glow-card">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
+                  <tr className="bg-brand-50/60 border-b border-brand-100">
                     <th className="text-left py-5 px-6 text-slate-500 font-medium w-[42%]">Feature</th>
                     {["Basic", "Starter", "Pro"].map((p, i) => (
                       <th key={p} className="py-5 px-4 text-center">
                         <span
-                          className={`inline-block text-sm font-bold px-3 py-1.5 rounded-lg ${
-                            i === 1 ? "bg-blue-600 text-white shadow-md shadow-blue-600/30" : "text-slate-700"
+                          className={`font-display inline-block text-sm font-bold px-3.5 py-1.5 rounded-lg ${
+                            i === 1 ? "bg-brand-gradient text-white shadow-md shadow-brand-500/30" : "text-navy-900"
                           }`}
                         >
                           {p}
@@ -350,11 +340,11 @@ export default function PricingPage() {
                 </thead>
                 <tbody>
                   {tableFeatures.map(({ category, rows }) => (
-                    <>
-                      <tr key={category} className="bg-slate-50/80">
+                    <Fragment key={category}>
+                      <tr className="bg-brand-50/40">
                         <td
                           colSpan={4}
-                          className="py-3 px-6 text-[11px] font-bold text-slate-400 uppercase tracking-widest"
+                          className="py-3 px-6 text-[11px] font-bold text-brand-600 uppercase tracking-widest"
                         >
                           {category}
                         </td>
@@ -362,13 +352,13 @@ export default function PricingPage() {
                       {rows.map(({ label, basic, starter, pro }) => (
                         <tr
                           key={label}
-                          className="border-t border-slate-50 hover:bg-blue-50/20 transition-colors"
+                          className="border-t border-brand-50 hover:bg-brand-50/30 transition-colors"
                         >
                           <td className="py-4 px-6 text-slate-600 font-medium">{label}</td>
                           <td className="py-4 px-4 text-center">
                             <CellValue v={basic} />
                           </td>
-                          <td className="py-4 px-4 text-center bg-blue-50/30">
+                          <td className="py-4 px-4 text-center bg-brand-50/40">
                             <CellValue v={starter} />
                           </td>
                           <td className="py-4 px-4 text-center">
@@ -376,7 +366,7 @@ export default function PricingPage() {
                           </td>
                         </tr>
                       ))}
-                    </>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -385,36 +375,34 @@ export default function PricingPage() {
         </section>
 
         {/* ─── FAQ ─── */}
-        <section className="py-24 bg-gradient-to-br from-slate-50 to-blue-50/30">
+        <section className="py-24 bg-gradient-to-b from-brand-50/40 to-white">
           <div className="max-w-3xl mx-auto px-6 lg:px-8">
             <div className="text-center mb-14">
-              <span className="inline-block text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full mb-5">
-                FAQ
-              </span>
-              <h2 className="text-4xl font-bold text-slate-900 tracking-tight mb-4">Pricing questions</h2>
+              <p className="font-display text-sm font-semibold tracking-[0.25em] uppercase text-brand-600 mb-4">FAQ</p>
+              <h2 className="font-display text-4xl md:text-5xl font-bold text-navy-950 tracking-tight mb-4">
+                Pricing <span className="trust-gradient">questions.</span>
+              </h2>
               <p className="text-slate-500 text-lg">Everything you need to know before signing up.</p>
             </div>
 
             <div className="space-y-3">
               {faqs.map(({ q, a }, i) => (
-                <div
-                  key={i}
-                  className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
-                >
+                <div key={i} className="glass rounded-2xl overflow-hidden">
                   <button
                     onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                    className="w-full flex items-center justify-between gap-4 px-6 py-5 text-left hover:bg-slate-50/80 transition-colors"
+                    className="w-full flex items-center justify-between gap-4 px-6 py-5 text-left"
                   >
-                    <span className="font-semibold text-slate-800 text-sm leading-snug">{q}</span>
+                    <span className="font-display font-bold text-navy-950 text-[15px] leading-snug">{q}</span>
                     <ChevronDown
                       className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform duration-200 ${
-                        openFaq === i ? "rotate-180 text-blue-500" : ""
+                        openFaq === i ? "rotate-180 text-brand-600" : ""
                       }`}
                     />
                   </button>
                   {openFaq === i && (
-                    <div className="px-6 pb-5 border-t border-slate-50">
-                      <p className="pt-4 text-sm text-slate-500 leading-relaxed">{a}</p>
+                    <div className="px-6 pb-5">
+                      <div className="h-px bg-gradient-to-r from-brand-200/60 to-transparent mb-4" />
+                      <p className="text-sm text-slate-500 leading-relaxed">{a}</p>
                     </div>
                   )}
                 </div>
@@ -424,37 +412,35 @@ export default function PricingPage() {
         </section>
 
         {/* ─── Enterprise CTA ─── */}
-        <section className="relative py-28 overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950">
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="animate-orb1 absolute top-[-30%] right-[-10%] w-[500px] h-[500px] rounded-full bg-blue-600/25 blur-[100px]" />
-            <div className="animate-orb2 absolute bottom-[-20%] left-[-5%] w-[450px] h-[450px] rounded-full bg-violet-600/20 blur-[90px]" />
-          </div>
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:60px_60px] pointer-events-none" />
+        <section className="relative py-28 overflow-hidden bg-gradient-to-br from-navy-950 via-navy-800 to-brand-900">
+          <div className="absolute inset-0 bg-grid-dark opacity-40 pointer-events-none" />
+          <div className="absolute top-[-30%] right-[-10%] w-[500px] h-[500px] rounded-full bg-brand-500/20 blur-[110px] pointer-events-none" />
+          <div className="absolute bottom-[-20%] left-[-5%] w-[450px] h-[450px] rounded-full bg-navy-400/20 blur-[100px] pointer-events-none" />
 
           <div className="relative max-w-5xl mx-auto px-6 lg:px-8">
             <div className="grid md:grid-cols-2 gap-14 items-center">
               <div>
-                <span className="inline-block text-xs font-semibold text-violet-300 bg-violet-500/10 border border-violet-500/20 px-3 py-1.5 rounded-full mb-6">
+                <p className="font-display text-sm font-semibold tracking-[0.25em] uppercase text-brand-300 mb-5">
                   Enterprise
-                </span>
-                <h2 className="text-4xl font-bold text-white mb-5 leading-tight">
+                </p>
+                <h2 className="font-display text-4xl font-bold text-white mb-5 leading-tight">
                   Need a custom plan for your organisation?
                 </h2>
-                <p className="text-blue-200/80 text-base leading-relaxed mb-8">
+                <p className="text-navy-100/60 text-base leading-relaxed mb-8">
                   We work with agencies, SaaS companies, and large enterprises to build pricing that fits. Custom
                   domains, SSO, dedicated SLAs, and a legal team-ready DPA included.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Link
                     href="/contact-us"
-                    className="inline-flex items-center justify-center gap-2 px-7 py-3.5 text-sm font-bold text-blue-950 bg-white rounded-xl hover:bg-blue-50 shadow-xl transition-all duration-200 hover:-translate-y-px"
+                    className="shine inline-flex items-center justify-center gap-2 px-7 py-3.5 text-sm font-bold text-navy-900 bg-white rounded-xl hover:bg-brand-50 shadow-xl transition-all duration-200 hover:-translate-y-px"
                   >
                     Talk to sales
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                   <Link
                     href="/partners"
-                    className="inline-flex items-center justify-center gap-2 px-7 py-3.5 text-sm font-medium text-blue-200 border border-blue-500/30 rounded-xl hover:bg-blue-500/10 transition-all duration-200"
+                    className="glass-dark inline-flex items-center justify-center gap-2 px-7 py-3.5 text-sm font-medium text-white rounded-xl hover:bg-brand-500/20 transition-all duration-200"
                   >
                     Agency & partner plans
                   </Link>
@@ -473,10 +459,10 @@ export default function PricingPage() {
                   { icon: Zap, label: "Priority feature requests" },
                 ].map(({ icon: Icon, label }) => (
                   <div key={label} className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                      <Icon className="w-4 h-4 text-blue-300" />
+                    <div className="glass-dark w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Icon className="w-4 h-4 text-brand-300" />
                     </div>
-                    <span className="text-sm font-medium text-blue-100/80">{label}</span>
+                    <span className="text-sm font-medium text-navy-100/70">{label}</span>
                   </div>
                 ))}
               </div>

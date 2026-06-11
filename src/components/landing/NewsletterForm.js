@@ -30,12 +30,12 @@ export default function NewsletterForm() {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@company.com"
           required
-          className="w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all placeholder:text-slate-400"
+          className="w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-brand-200/70 rounded-xl focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 transition-all placeholder:text-slate-400"
         />
       </div>
       <button
         type="submit"
-        className="px-5 py-2.5 text-sm font-semibold text-white bg-blue-700 hover:bg-blue-800 rounded-xl transition-colors whitespace-nowrap"
+        className="btn-brand px-5 py-2.5 text-sm font-semibold rounded-xl whitespace-nowrap"
       >
         Subscribe
       </button>

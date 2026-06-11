@@ -1,9 +1,9 @@
-import MarketingPageLayout from "@/components/landing/MarketingPageLayout";
+﻿import MarketingPageLayout from "@/components/landing/MarketingPageLayout";
 
 export const metadata = {
-  title: "Refund Policy | ConsentFlow",
+  title: "Refund Policy",
   description:
-    "Review ConsentFlow refund eligibility, timelines, and how to request a refund.",
+    "Review Cookie Access refund eligibility, timelines, and how to request a refund.",
 };
 
 export default function RefundPolicyPage() {

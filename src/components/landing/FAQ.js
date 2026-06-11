@@ -5,8 +5,8 @@ import { Plus, Minus, HelpCircle } from "lucide-react";
 
 const faqs = [
   {
-    q: "Is CookieAccess actually GDPR compliant?",
-    a: "Yes — and we're specific about what that means. CookieAccess satisfies GDPR Articles 4(11), 6, and 7, which define valid consent as freely given, specific, informed, and unambiguous. Our audit log captures timestamp, IP hash, page URL, and consent categories for every interaction. This is the evidence record that supervisory authorities require under Article 7(1) when they investigate.",
+    q: "Is Cookie Access actually GDPR compliant?",
+    a: "Yes — and we're specific about what that means. Cookie Access satisfies GDPR Articles 4(11), 6, and 7, which define valid consent as freely given, specific, informed, and unambiguous. Our audit log captures timestamp, IP hash, page URL, and consent categories for every interaction. This is the evidence record that supervisory authorities require under Article 7(1) when they investigate.",
   },
   {
     q: "How does the auto-detection actually work?",
@@ -18,7 +18,7 @@ const faqs = [
   },
   {
     q: "What actually happens when a user rejects cookies?",
-    a: "Rejection is immediate and complete. CookieAccess prevents all non-essential scripts from loading or executing — this happens in the browser before any data is transmitted. Any existing cookies from prior sessions that fall into non-essential categories are flagged for deletion. The rejection is logged in your audit trail with the same detail as an acceptance, so you have a complete record either way.",
+    a: "Rejection is immediate and complete. Cookie Access prevents all non-essential scripts from loading or executing — this happens in the browser before any data is transmitted. Any existing cookies from prior sessions that fall into non-essential categories are flagged for deletion. The rejection is logged in your audit trail with the same detail as an acceptance, so you have a complete record either way.",
   },
   {
     q: "Where is consent data stored, and how is it secured?",
@@ -30,10 +30,10 @@ const faqs = [
   },
   {
     q: "Can I fully customise the consent banner?",
-    a: "Yes, on Starter and Pro. The banner editor lets you customise colours, fonts, button labels, descriptive copy, positioning (bottom bar, corner widget, centred modal), and language — with 30+ localisations available. Pro also includes a white-label option to remove the CookieAccess branding entirely, so the experience is seamless for your users.",
+    a: "Yes, on Starter and Pro. The banner editor lets you customise colours, fonts, button labels, descriptive copy, positioning (bottom bar, corner widget, centred modal), and language — with 30+ localisations available. Pro also includes a white-label option to remove the Cookie Access branding entirely, so the experience is seamless for your users.",
   },
   {
-    q: "Which privacy regulations does CookieAccess cover?",
+    q: "Which privacy regulations does Cookie Access cover?",
     a: "Currently: GDPR (EU), CCPA/CPRA (California), ePrivacy Directive (EU), LGPD (Brazil), PDPA (Thailand & Singapore), PIPEDA (Canada), APPI (Japan), and NDPR (Nigeria). Our legal team monitors regulatory changes worldwide and pushes template updates to all active accounts automatically — you never need to check whether your configuration is still current.",
   },
 ];
@@ -42,15 +42,16 @@ export default function FAQ() {
   const [open, setOpen] = useState(null);
 
   return (
-    <section className="py-16 md:py-24 bg-slate-50">
-      <div className="max-w-3xl mx-auto px-6 lg:px-8">
+    <section className="relative py-16 md:py-24 overflow-hidden bg-gradient-to-b from-brand-50/40 to-white">
+      <div className="absolute top-20 right-0 w-[350px] h-[350px] bg-brand-200/25 blur-[110px] rounded-full pointer-events-none" />
+      <div className="relative max-w-3xl mx-auto px-6 lg:px-8">
         <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-50 border border-blue-100 mb-6">
-            <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
-            <span className="text-xs text-blue-700 tracking-wide">Common questions</span>
+          <div className="glass inline-flex items-center gap-2 px-4 py-2 rounded-full mb-6">
+            <HelpCircle className="w-3.5 h-3.5 text-brand-600" />
+            <span className="text-xs text-navy-800 tracking-wide">Common questions</span>
           </div>
-          <h2 className="text-3xl lg:text-4xl font-bold text-slate-900 mb-4 leading-snug">
-            The questions we get asked every day
+          <h2 className="text-3xl lg:text-4xl font-bold text-navy-950 mb-4 leading-snug">
+            The questions we get asked <span className="trust-gradient">every day</span>
           </h2>
           <p className="text-slate-500 text-lg leading-relaxed">
             Straight answers — no sales language, no hedging. If something isn&apos;t clear after
@@ -60,16 +61,16 @@ export default function FAQ() {
 
         <div className="space-y-3">
           {faqs.map((faq, i) => (
-            <div key={i} className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden ${open === i ? "border-blue-200 shadow-md shadow-blue-500/5" : "border-slate-200 hover:border-slate-300"}`}>
+            <div key={i} className={`glass rounded-2xl transition-all duration-200 overflow-hidden ${open === i ? "border-brand-300 shadow-lg shadow-brand-500/10" : "hover:border-brand-200"}`}>
               <button onClick={() => setOpen(open === i ? null : i)} className="w-full flex items-center justify-between px-6 py-5 text-left">
-                <span className="text-sm font-medium text-slate-800 pr-4 leading-snug">{faq.q}</span>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-colors duration-200 ${open === i ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                <span className="text-sm font-medium text-navy-950 pr-4 leading-snug">{faq.q}</span>
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-200 ${open === i ? "bg-brand-gradient text-white shadow-md shadow-brand-500/25" : "bg-brand-50 text-brand-600"}`}>
                   {open === i ? <Minus className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
                 </div>
               </button>
               {open === i && (
                 <div className="px-6 pb-5">
-                  <div className="h-px bg-slate-100 mb-4" />
+                  <div className="h-px bg-gradient-to-r from-brand-200/60 to-transparent mb-4" />
                   <p className="text-sm text-slate-500 leading-relaxed">{faq.a}</p>
                 </div>
               )}
@@ -80,7 +81,7 @@ export default function FAQ() {
         <div className="mt-10 text-center">
           <p className="text-sm text-slate-400">
             Still have questions?{" "}
-            <a href="mailto:support@cookieaccess.io" className="text-blue-600 font-medium hover:text-blue-800 transition-colors">
+            <a href="mailto:support@cookieaccess.io" className="text-brand-600 font-medium hover:text-brand-800 transition-colors">
               Email our compliance team →
             </a>
           </p>

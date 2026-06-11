@@ -49,13 +49,14 @@ const socials = [
 
 export default function Footer() {
   return (
-    <footer className="bg-white border-t border-slate-100">
+    <footer className="bg-white border-t border-brand-100/60">
       {/* Newsletter + social strip */}
-      <div className="bg-slate-50 border-b border-slate-100">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-10">
+      <div className="relative overflow-hidden bg-gradient-to-r from-brand-50/70 via-white to-navy-50/50 border-b border-brand-100/60">
+        <div className="absolute top-0 right-1/4 w-64 h-32 bg-brand-200/30 blur-3xl rounded-full pointer-events-none" />
+        <div className="relative max-w-7xl mx-auto px-6 lg:px-8 py-10">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="max-w-sm">
-              <h3 className="text-base font-semibold text-slate-900 mb-1">Stay ahead of compliance changes</h3>
+              <h3 className="text-base font-semibold text-navy-950 mb-1">Stay ahead of compliance changes</h3>
               <p className="text-sm text-slate-400 leading-relaxed">
                 Regulation updates, product news, and practical privacy guides — once a month, no fluff.
               </p>
@@ -71,7 +72,7 @@ export default function Footer() {
           {/* Brand column */}
           <div className="col-span-2">
             <Link href="/" className="inline-block mb-5">
-              <Image src="/cookie-access-logo.png" alt="CookieAccess" width={160} height={28} />
+              <Image src="/cookie-access-logo.png" alt="Cookie Access" width={160} height={28} />
             </Link>
             <p className="text-sm text-slate-400 leading-relaxed max-w-xs mb-5">
               The consent management platform built for companies that take privacy seriously.
@@ -83,7 +84,7 @@ export default function Footer() {
               {["GDPR", "CCPA", "SOC 2", "ePrivacy"].map((badge) => (
                 <span
                   key={badge}
-                  className="inline-flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50 border border-blue-100 px-2 py-1 rounded-md font-medium"
+                  className="inline-flex items-center gap-1 text-[10px] text-brand-700 bg-brand-50 border border-brand-200/60 px-2 py-1 rounded-md font-medium"
                 >
                   <Shield className="w-2.5 h-2.5" />
                   {badge}
@@ -98,7 +99,7 @@ export default function Footer() {
                   key={label}
                   href={href}
                   aria-label={label}
-                  className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-all duration-150"
+                  className="w-8 h-8 rounded-lg border border-brand-200/60 flex items-center justify-center text-slate-400 hover:text-brand-600 hover:border-brand-400 hover:bg-brand-50 transition-all duration-150"
                 >
                   <Icon className="w-3.5 h-3.5" />
                 </a>
@@ -108,11 +109,11 @@ export default function Footer() {
 
           {/* Product */}
           <div>
-            <h4 className="font-semibold text-slate-800 mb-5 text-sm">Product</h4>
+            <h4 className="font-semibold text-navy-950 mb-5 text-sm">Product</h4>
             <ul className="space-y-3">
               {productLinks.map(({ label, href }) => (
                 <li key={label}>
-                  <Link href={href} className="text-sm text-slate-400 hover:text-blue-600 transition-colors">
+                  <Link href={href} className="text-sm text-slate-400 hover:text-brand-600 transition-colors">
                     {label}
                   </Link>
                 </li>
@@ -122,7 +123,7 @@ export default function Footer() {
 
           {/* Resources */}
           <div>
-            <h4 className="font-semibold text-slate-800 mb-5 text-sm">Resources</h4>
+            <h4 className="font-semibold text-navy-950 mb-5 text-sm">Resources</h4>
             <ul className="space-y-3">
               {resourceLinks.map(({ label, href, external }) => (
                 <li key={label}>
@@ -130,7 +131,7 @@ export default function Footer() {
                     href={href}
                     target={external ? "_blank" : undefined}
                     rel={external ? "noopener noreferrer" : undefined}
-                    className="text-sm text-slate-400 hover:text-blue-600 transition-colors inline-flex items-center gap-1"
+                    className="text-sm text-slate-400 hover:text-brand-600 transition-colors inline-flex items-center gap-1"
                   >
                     {label}
                     {external && <ArrowUpRight className="w-3 h-3 opacity-60" />}
@@ -142,11 +143,11 @@ export default function Footer() {
 
           {/* Company */}
           <div>
-            <h4 className="font-semibold text-slate-800 mb-5 text-sm">Company</h4>
+            <h4 className="font-semibold text-navy-950 mb-5 text-sm">Company</h4>
             <ul className="space-y-3">
               {companyLinks.map(({ label, href }) => (
                 <li key={label}>
-                  <a href={href} className="text-sm text-slate-400 hover:text-blue-600 transition-colors">
+                  <a href={href} className="text-sm text-slate-400 hover:text-brand-600 transition-colors">
                     {label}
                   </a>
                 </li>
@@ -156,11 +157,11 @@ export default function Footer() {
 
           {/* Legal */}
           <div>
-            <h4 className="font-semibold text-slate-800 mb-5 text-sm">Legal</h4>
+            <h4 className="font-semibold text-navy-950 mb-5 text-sm">Legal</h4>
             <ul className="space-y-3">
               {legalLinks.map(({ label, href }) => (
                 <li key={label}>
-                  <Link href={href} className="text-sm text-slate-400 hover:text-blue-600 transition-colors">
+                  <Link href={href} className="text-sm text-slate-400 hover:text-brand-600 transition-colors">
                     {label}
                   </Link>
                 </li>
@@ -170,11 +171,11 @@ export default function Footer() {
         </div>
 
         {/* Trust cert strip */}
-        <div className="py-6 border-t border-slate-100 border-b border-slate-100 mb-6">
+        <div className="py-6 border-t border-b border-brand-100/60 mb-6">
           <div className="flex flex-wrap justify-center gap-x-8 gap-y-3">
             {certs.map(({ icon: Icon, label }) => (
               <div key={label} className="flex items-center gap-1.5 text-xs text-slate-400">
-                <Icon className="w-3.5 h-3.5 text-teal-500 flex-shrink-0" />
+                <Icon className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" />
                 {label}
               </div>
             ))}
@@ -184,7 +185,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-xs text-slate-400">
-            © {new Date().getFullYear()} CookieAccess. All rights reserved.
+            © {new Date().getFullYear()} Cookie Access. All rights reserved.
           </p>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -194,10 +195,10 @@ export default function Footer() {
               </span>
               <span className="text-xs text-emerald-600 font-medium">All systems operational</span>
             </div>
-            <span className="text-slate-200">|</span>
+            <span className="text-brand-100">|</span>
             <a
               href="mailto:support@cookieaccess.io"
-              className="text-xs text-slate-400 hover:text-blue-600 transition-colors"
+              className="text-xs text-slate-400 hover:text-brand-600 transition-colors"
             >
               support@cookieaccess.io
             </a>

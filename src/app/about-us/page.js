@@ -1,16 +1,16 @@
-import Header from "@/components/landing/Header";
-import Footer from "@/components/landing/Footer";
-import AboutCounters from "@/components/landing/AboutCounters";
+import Nav from "@/components/home/Nav";
+import Footer from "@/components/home/Footer";
+import ScrollProgress from "@/components/landing/ScrollProgress";
 import Link from "next/link";
 import {
-  Shield, Globe, ArrowRight, CheckCircle2, Zap, Lock,
+  Shield, Globe, ArrowRight, CheckCircle2, Zap,
   Users, Star, Heart,
 } from "lucide-react";
 
 export const metadata = {
-  title: "About Us | CookieAccess",
+  title: "About Us",
   description:
-    "Learn about CookieAccess — our mission to make cookie consent simple, honest, and compliant for businesses worldwide.",
+    "Learn about Cookie Access — our mission to make cookie consent simple, honest, and compliant for businesses worldwide.",
 };
 
 const values = [
@@ -18,29 +18,21 @@ const values = [
     icon: Shield,
     title: "Privacy by design",
     desc: "We build every feature with privacy as the foundation, not an afterthought.",
-    gradient: "from-blue-500 to-indigo-600",
-    hover: "from-blue-50 to-indigo-50",
   },
   {
     icon: Globe,
     title: "Global by default",
     desc: "Built for 130+ countries and every major privacy regulation — from day one.",
-    gradient: "from-teal-500 to-cyan-600",
-    hover: "from-teal-50 to-cyan-50",
   },
   {
     icon: Zap,
     title: "Radical simplicity",
     desc: "Complex compliance reduced to a three-step setup. No lawyers required.",
-    gradient: "from-amber-500 to-orange-600",
-    hover: "from-amber-50 to-orange-50",
   },
   {
     icon: Heart,
     title: "User-first consent",
     desc: "No dark patterns. We help you earn trust, not manipulate it.",
-    gradient: "from-rose-500 to-pink-600",
-    hover: "from-rose-50 to-pink-50",
   },
 ];
 
@@ -50,28 +42,28 @@ const team = [
     role: "CEO & Co-founder",
     bio: "10 years building SaaS in fintech and regtech. Passionate about privacy law and developer experience.",
     initial: "A",
-    color: "from-blue-400 to-indigo-600",
+    color: "from-brand-500 to-brand-700",
   },
   {
     name: "Priya Sharma",
     role: "CTO & Co-founder",
     bio: "Former principal engineer at a global CDN. Expert in distributed systems and edge computing.",
     initial: "P",
-    color: "from-purple-400 to-pink-600",
+    color: "from-navy-600 to-navy-800",
   },
   {
     name: "James Wilson",
     role: "Head of Compliance",
     bio: "CIPP/E certified privacy attorney with 8 years of experience in GDPR and data protection law.",
     initial: "J",
-    color: "from-teal-400 to-cyan-600",
+    color: "from-brand-600 to-navy-700",
   },
   {
     name: "Sofia Mendes",
     role: "Head of Product",
     bio: "Previously led product at a YC-backed startup. Turned compliance tools into products people love.",
     initial: "S",
-    color: "from-orange-400 to-rose-500",
+    color: "from-navy-500 to-brand-600",
   },
 ];
 
@@ -79,7 +71,7 @@ const milestones = [
   {
     year: "2022",
     title: "Founded",
-    desc: "CookieAccess started in a Mumbai co-working space with a simple idea: compliance shouldn't be painful.",
+    desc: "Cookie Access started in a Mumbai co-working space with a simple idea: compliance shouldn't be painful.",
   },
   {
     year: "2023",
@@ -105,83 +97,82 @@ const press = [
   { badge: "TechCrunch", detail: "Startup to Watch" },
 ];
 
+const stats = [
+  ["12,000+", "Active businesses"],
+  ["2.4B+", "Consents processed"],
+  ["130+", "Countries covered"],
+  ["99.9%", "Uptime SLA"],
+];
+
 export default function AboutUsPage() {
   return (
     <div className="min-h-screen bg-white font-sans">
-      <Header />
+      <ScrollProgress />
+      <Nav />
 
       <main>
         {/* ─── Hero ─── */}
-        <section className="relative pt-24 pb-16 overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950">
-          {/* Animated orbs */}
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="animate-orb1 absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-blue-600/20 blur-[100px]" />
-            <div className="animate-orb2 absolute top-[10%] right-[-15%] w-[500px] h-[500px] rounded-full bg-indigo-600/20 blur-[90px]" />
-            <div className="animate-orb3 absolute bottom-[0%] left-[30%] w-[400px] h-[400px] rounded-full bg-violet-600/15 blur-[80px]" />
-          </div>
-          {/* Subtle grid */}
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:60px_60px] pointer-events-none" />
+        <section className="noise relative pt-36 pb-20 overflow-hidden bg-aurora">
+          <div className="absolute inset-0 bg-grid grid-fade-mask pointer-events-none" />
+          <div className="absolute top-[-120px] right-[-120px] w-[560px] h-[560px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(183,83,239,0.14) 0%, transparent 70%)" }} />
+          <div className="absolute bottom-[-140px] left-[-140px] w-[480px] h-[480px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(18,11,125,0.1) 0%, transparent 70%)" }} />
 
-          <div className="relative max-w-7xl mx-auto px-6 lg:px-8">
-            <div className="max-w-4xl mx-auto text-center pb-16">
-              <div className="inline-flex items-center gap-2 text-xs font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-full mb-8">
+          <div className="relative max-w-6xl mx-auto px-6 lg:px-8">
+            <div className="max-w-3xl mx-auto text-center pb-14">
+              <div className="glass inline-flex items-center gap-2 text-xs font-semibold text-navy-800 px-4 py-2 rounded-full mb-8">
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-400" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-500 opacity-60" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-500" />
                 </span>
                 Building the privacy layer of the web since 2022
               </div>
 
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white tracking-tight mb-6 leading-[1.1]">
+              <h1 className="font-display font-bold text-navy-950 text-[clamp(2.8rem,6vw,4.5rem)] leading-[1.02] mb-6">
                 We make the web{" "}
-                <span className="bg-gradient-to-r from-teal-300 via-blue-300 to-indigo-300 bg-clip-text text-transparent">
-                  honest about privacy
-                </span>
+                <span className="trust-gradient">honest about privacy.</span>
               </h1>
 
-              <p className="text-lg md:text-xl text-blue-200/80 leading-relaxed max-w-2xl mx-auto mb-12">
-                CookieAccess was built by engineers frustrated by the cookie consent industry — bloated scripts, dark
+              <p className="text-lg md:text-xl text-slate-500 leading-relaxed max-w-2xl mx-auto mb-10">
+                Cookie Access was built by engineers frustrated by the cookie consent industry — bloated scripts, dark
                 patterns, and compliance theatre. We built the tool we wished existed.
               </p>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <Link
-                  href="/signup"
-                  className="inline-flex items-center gap-2 px-7 py-3.5 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-500 shadow-lg shadow-blue-900/50 transition-all duration-200 hover:-translate-y-px"
-                >
+                <Link href="/signup" className="btn-brand shine inline-flex items-center gap-2 px-7 py-3.5 text-sm font-semibold rounded-xl">
                   Start free trial
                   <ArrowRight className="w-4 h-4" />
                 </Link>
-                <Link
-                  href="/career"
-                  className="inline-flex items-center gap-2 px-7 py-3.5 text-sm font-medium text-blue-200 border border-blue-500/30 rounded-xl hover:bg-blue-500/10 transition-all duration-200"
-                >
+                <Link href="/career" className="glass inline-flex items-center gap-2 px-7 py-3.5 text-sm font-medium text-navy-800 rounded-xl hover:bg-white/90 hover:text-brand-700 transition-all duration-200">
                   <Users className="w-4 h-4" />
                   Join our team
                 </Link>
               </div>
             </div>
 
-            {/* Animated stat counters — float over the boundary */}
-            <AboutCounters />
+            {/* Stats band */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-px rounded-3xl overflow-hidden border border-brand-200/50 bg-brand-200/40 max-w-4xl mx-auto">
+              {stats.map(([v, l]) => (
+                <div key={l} className="bg-white/80 backdrop-blur px-6 py-6 text-center">
+                  <p className="font-display text-3xl font-bold trust-gradient mb-1">{v}</p>
+                  <p className="text-xs text-slate-400 uppercase tracking-wider">{l}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
-        {/* Spacer to account for the overlapping cards */}
-        <div className="h-12 bg-white" />
-
         {/* ─── Story + Timeline ─── */}
         <section className="py-24 bg-white">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="max-w-6xl mx-auto px-6 lg:px-8">
             <div className="grid lg:grid-cols-2 gap-20 items-start">
               {/* Sticky text */}
               <div className="lg:sticky lg:top-28">
-                <span className="inline-block text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full mb-5">
+                <p className="font-display text-sm font-semibold tracking-[0.25em] uppercase text-brand-600 mb-4">
                   Our story
-                </span>
-                <h2 className="text-4xl font-bold text-slate-900 tracking-tight mb-6 leading-tight">
+                </p>
+                <h2 className="font-display text-4xl md:text-5xl font-bold text-navy-950 tracking-tight mb-6 leading-[1.05]">
                   We built what we{" "}
-                  <span className="text-blue-700">wished existed</span>
+                  <span className="trust-gradient">wished existed.</span>
                 </h2>
                 <p className="text-slate-500 leading-relaxed mb-4 text-base">
                   The web has a consent problem. Billions of cookie banners fire every day — most designed to confuse, not
@@ -189,7 +180,7 @@ export default function AboutUsPage() {
                   choice.
                 </p>
                 <p className="text-slate-500 leading-relaxed mb-8 text-base">
-                  We started CookieAccess to fix this. A platform so simple a developer deploys it in an afternoon, so
+                  We started Cookie Access to fix this. A platform so simple a developer deploys it in an afternoon, so
                   thorough a GDPR auditor is satisfied, and so honest that users actually trust it.
                 </p>
                 <div className="flex flex-col gap-3">
@@ -200,8 +191,8 @@ export default function AboutUsPage() {
                     "Zero dark patterns — ever, guaranteed",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-3">
-                      <div className="w-5 h-5 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                      <div className="icon-tile-soft w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
                       </div>
                       <span className="text-sm text-slate-700 font-medium">{item}</span>
                     </div>
@@ -211,19 +202,19 @@ export default function AboutUsPage() {
 
               {/* Timeline */}
               <div className="relative">
-                <div className="absolute left-5 top-2 bottom-2 w-px bg-gradient-to-b from-blue-300 via-indigo-200 to-transparent" />
+                <div className="absolute left-5 top-2 bottom-2 w-px bg-gradient-to-b from-brand-400 via-brand-200 to-transparent" />
                 <div className="space-y-6">
                   {milestones.map(({ year, title, desc }) => (
                     <div key={year} className="relative pl-14 group">
-                      <div className="absolute left-0 w-10 h-10 rounded-full bg-white border-2 border-blue-200 group-hover:border-blue-500 flex items-center justify-center shadow-sm transition-colors duration-200">
-                        <span className="text-xs font-bold text-blue-600">{year.slice(2)}</span>
+                      <div className="absolute left-0 w-10 h-10 rounded-full bg-white border-2 border-brand-200 group-hover:border-brand-500 flex items-center justify-center shadow-sm transition-colors duration-200">
+                        <span className="text-xs font-bold text-brand-600">{year.slice(2)}</span>
                       </div>
-                      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 group-hover:shadow-md group-hover:border-blue-100 transition-all duration-200">
+                      <div className="glass rounded-2xl p-5 glow-card-hover transition-all duration-200">
                         <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
+                          <span className="text-xs font-semibold text-brand-700 bg-brand-50 border border-brand-200/60 px-2 py-0.5 rounded-md">
                             {year}
                           </span>
-                          <span className="text-sm font-bold text-slate-800">{title}</span>
+                          <span className="font-display text-sm font-bold text-navy-950">{title}</span>
                         </div>
                         <p className="text-sm text-slate-500 leading-relaxed">{desc}</p>
                       </div>
@@ -236,14 +227,14 @@ export default function AboutUsPage() {
         </section>
 
         {/* ─── Values ─── */}
-        <section className="py-24 bg-gradient-to-br from-slate-50 to-blue-50/40">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
+        <section className="py-24 bg-gradient-to-b from-brand-50/40 to-white">
+          <div className="max-w-6xl mx-auto px-6 lg:px-8">
             <div className="text-center mb-16">
-              <span className="inline-block text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full mb-5">
+              <p className="font-display text-sm font-semibold tracking-[0.25em] uppercase text-brand-600 mb-4">
                 Our values
-              </span>
-              <h2 className="text-4xl font-bold text-slate-900 tracking-tight mb-4">
-                Four principles. Zero compromise.
+              </p>
+              <h2 className="font-display text-4xl md:text-5xl font-bold text-navy-950 tracking-tight mb-4">
+                Four principles. <span className="trust-gradient">Zero compromise.</span>
               </h2>
               <p className="text-slate-500 max-w-xl mx-auto text-lg">
                 Every feature, every line of code, every product decision runs through these filters first.
@@ -251,24 +242,16 @@ export default function AboutUsPage() {
             </div>
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              {values.map(({ icon: Icon, title, desc, gradient, hover }) => (
+              {values.map(({ icon: Icon, title, desc }) => (
                 <div
                   key={title}
-                  className="group bg-white rounded-3xl border border-slate-100 shadow-sm p-7 hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 relative overflow-hidden cursor-default"
+                  className="group glass rounded-3xl p-7 glow-card-hover hover:-translate-y-1.5 transition-all duration-300 cursor-default"
                 >
-                  {/* Hover background fill */}
-                  <div
-                    className={`absolute inset-0 bg-gradient-to-br ${hover} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}
-                  />
-                  <div className="relative">
-                    <div
-                      className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 transition-transform duration-300`}
-                    >
-                      <Icon className="w-6 h-6 text-white" />
-                    </div>
-                    <h3 className="font-bold text-slate-800 text-base mb-2">{title}</h3>
-                    <p className="text-sm text-slate-500 leading-relaxed">{desc}</p>
+                  <div className="icon-tile w-12 h-12 rounded-2xl flex items-center justify-center mb-5 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300">
+                    <Icon className="w-6 h-6" strokeWidth={1.5} />
                   </div>
+                  <h3 className="font-display font-bold text-navy-950 text-base mb-2">{title}</h3>
+                  <p className="text-sm text-slate-500 leading-relaxed">{desc}</p>
                 </div>
               ))}
             </div>
@@ -277,13 +260,13 @@ export default function AboutUsPage() {
 
         {/* ─── Team ─── */}
         <section className="py-24 bg-white">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="max-w-6xl mx-auto px-6 lg:px-8">
             <div className="text-center mb-16">
-              <span className="inline-block text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full mb-5">
+              <p className="font-display text-sm font-semibold tracking-[0.25em] uppercase text-brand-600 mb-4">
                 The team
-              </span>
-              <h2 className="text-4xl font-bold text-slate-900 tracking-tight mb-4">
-                People who care deeply about privacy
+              </p>
+              <h2 className="font-display text-4xl md:text-5xl font-bold text-navy-950 tracking-tight mb-4">
+                People who care deeply <span className="trust-gradient">about privacy.</span>
               </h2>
               <p className="text-slate-500 max-w-xl mx-auto text-lg">
                 Engineers, lawyers, and designers with one shared obsession: making consent honest.
@@ -294,15 +277,15 @@ export default function AboutUsPage() {
               {team.map(({ name, role, bio, initial, color }) => (
                 <div
                   key={name}
-                  className="group bg-white rounded-3xl border border-slate-100 shadow-sm p-7 hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 text-center"
+                  className="group glass rounded-3xl p-7 glow-card-hover hover:-translate-y-1.5 transition-all duration-300 text-center"
                 >
                   <div
-                    className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${color} flex items-center justify-center mx-auto mb-5 shadow-lg group-hover:scale-105 transition-transform duration-300`}
+                    className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${color} flex items-center justify-center mx-auto mb-5 shadow-lg shadow-brand-500/20 group-hover:scale-105 transition-transform duration-300`}
                   >
-                    <span className="text-2xl font-bold text-white">{initial}</span>
+                    <span className="font-display text-2xl font-bold text-white">{initial}</span>
                   </div>
-                  <h3 className="font-bold text-slate-800 text-base">{name}</h3>
-                  <p className="text-xs font-semibold text-blue-600 mt-1 mb-3">{role}</p>
+                  <h3 className="font-display font-bold text-navy-950 text-base">{name}</h3>
+                  <p className="text-xs font-semibold text-brand-600 mt-1 mb-3">{role}</p>
                   <p className="text-xs text-slate-400 leading-relaxed">{bio}</p>
                 </div>
               ))}
@@ -311,10 +294,10 @@ export default function AboutUsPage() {
             <div className="text-center mt-12">
               <Link
                 href="/career"
-                className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100 transition-colors"
+                className="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold text-brand-700 bg-brand-50 border border-brand-200/60 rounded-xl hover:bg-brand-100 transition-colors"
               >
                 <Users className="w-4 h-4" />
-                We're hiring — see open roles
+                We&apos;re hiring — see open roles
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
@@ -322,8 +305,8 @@ export default function AboutUsPage() {
         </section>
 
         {/* ─── Press / Recognition ─── */}
-        <section className="py-20 bg-slate-50 border-t border-slate-100">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
+        <section className="py-20 bg-gradient-to-b from-brand-50/40 to-white border-t border-brand-100/60">
+          <div className="max-w-6xl mx-auto px-6 lg:px-8">
             <p className="text-center text-xs font-semibold text-slate-400 uppercase tracking-widest mb-10">
               Recognised by
             </p>
@@ -331,9 +314,9 @@ export default function AboutUsPage() {
               {press.map(({ badge, detail }) => (
                 <div
                   key={badge}
-                  className="bg-white rounded-2xl border border-slate-100 p-6 text-center shadow-sm hover:shadow-md hover:border-blue-100 transition-all duration-200"
+                  className="glass rounded-2xl p-6 text-center glow-card-hover transition-all duration-200"
                 >
-                  <p className="font-bold text-slate-800 mb-1.5">{badge}</p>
+                  <p className="font-display font-bold text-navy-950 mb-1.5">{badge}</p>
                   <p className="text-xs text-slate-400">{detail}</p>
                 </div>
               ))}
@@ -342,37 +325,36 @@ export default function AboutUsPage() {
         </section>
 
         {/* ─── CTA ─── */}
-        <section className="relative py-28 overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950">
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="animate-orb1 absolute top-[-30%] right-[-10%] w-[500px] h-[500px] rounded-full bg-blue-600/25 blur-[100px]" />
-            <div className="animate-orb2 absolute bottom-[-20%] left-[-5%] w-[400px] h-[400px] rounded-full bg-indigo-600/20 blur-[80px]" />
-          </div>
+        <section className="relative py-28 overflow-hidden bg-gradient-to-br from-navy-950 via-navy-800 to-brand-900">
+          <div className="absolute inset-0 bg-grid-dark opacity-40 pointer-events-none" />
+          <div className="absolute top-[-30%] right-[-10%] w-[500px] h-[500px] rounded-full bg-brand-500/20 blur-[110px] pointer-events-none" />
+          <div className="absolute bottom-[-20%] left-[-5%] w-[400px] h-[400px] rounded-full bg-navy-400/20 blur-[90px] pointer-events-none" />
           <div className="relative max-w-3xl mx-auto px-6 lg:px-8 text-center">
             <div className="flex justify-center mb-6 gap-1">
               {[...Array(5)].map((_, i) => (
                 <Star key={i} className="w-5 h-5 fill-amber-400 text-amber-400" />
               ))}
             </div>
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-5 leading-tight">
+            <h2 className="font-display text-4xl md:text-5xl font-bold text-white mb-5 leading-tight">
               Join 12,000+ companies that{" "}
-              <span className="bg-gradient-to-r from-teal-300 to-blue-300 bg-clip-text text-transparent">
-                trust CookieAccess
+              <span className="bg-gradient-to-r from-brand-300 to-brand-400 bg-clip-text text-transparent">
+                trust Cookie Access.
               </span>
             </h2>
-            <p className="text-blue-200/80 mb-10 text-lg leading-relaxed">
+            <p className="text-navy-100/60 mb-10 text-lg leading-relaxed">
               Deploy in 5 minutes. No card required. Cancel anytime.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 href="/signup"
-                className="inline-flex items-center gap-2 px-8 py-4 text-sm font-bold text-blue-950 bg-white rounded-xl hover:bg-blue-50 shadow-xl transition-all duration-200 hover:-translate-y-px"
+                className="shine inline-flex items-center gap-2 px-8 py-4 text-sm font-bold text-navy-900 bg-white rounded-xl hover:bg-brand-50 shadow-xl transition-all duration-200 hover:-translate-y-px"
               >
                 Start free trial
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
                 href="/contact-us"
-                className="inline-flex items-center gap-2 px-8 py-4 text-sm font-medium text-blue-200 border border-blue-500/30 rounded-xl hover:bg-blue-500/10 transition-all duration-200"
+                className="glass-dark inline-flex items-center gap-2 px-8 py-4 text-sm font-medium text-white rounded-xl hover:bg-brand-500/20 transition-all duration-200"
               >
                 Talk to sales
               </Link>

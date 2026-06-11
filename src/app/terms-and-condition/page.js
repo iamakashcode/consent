@@ -1,20 +1,20 @@
-import MarketingPageLayout from "@/components/landing/MarketingPageLayout";
+﻿import MarketingPageLayout from "@/components/landing/MarketingPageLayout";
 
 export const metadata = {
-  title: "Terms and Condition | ConsentFlow",
+  title: "Terms and Condition",
   description:
-    "Read the terms and condition governing your use of ConsentFlow services.",
+    "Read the terms and condition governing your use of Cookie Access services.",
 };
 
 export default function TermsAndConditionPage() {
   return (
     <MarketingPageLayout
       title="Terms and Condition"
-      subtitle="Please review these terms carefully before using ConsentFlow."
+      subtitle="Please review these terms carefully before using Cookie Access."
     >
       <h2>1. Acceptance of Terms</h2>
       <p>
-        By accessing or using ConsentFlow, you agree to be bound by these Terms
+        By accessing or using Cookie Access, you agree to be bound by these Terms
         and Condition and all applicable laws and regulations.
       </p>
 
@@ -38,7 +38,7 @@ export default function TermsAndConditionPage() {
 
       <h2>5. Limitation of Liability</h2>
       <p>
-        ConsentFlow is provided on an &quot;as is&quot; basis. To the fullest extent
+        Cookie Access is provided on an &quot;as is&quot; basis. To the fullest extent
         permitted by law, we are not liable for indirect or consequential
         damages arising from use of the service.
       </p>

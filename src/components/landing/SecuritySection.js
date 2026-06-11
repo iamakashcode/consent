@@ -29,15 +29,16 @@ const pillars = [
 
 export default function SecuritySection() {
   return (
-    <section className="py-16 md:py-24 bg-white">
-      <div className="max-w-7xl mx-auto px-6 lg:px-8">
+    <section className="relative py-16 md:py-24 bg-white overflow-hidden">
+      <div className="absolute top-1/3 left-[-150px] w-[400px] h-[400px] bg-brand-100/40 blur-[120px] rounded-full pointer-events-none" />
+      <div className="relative max-w-7xl mx-auto px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-14 lg:gap-20 items-center">
           <div>
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-50 border border-blue-100 mb-6">
-              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-              <span className="text-xs text-blue-700 tracking-wide">Enterprise security</span>
+            <div className="glass inline-flex items-center gap-2 px-4 py-2 rounded-full mb-6">
+              <ShieldCheck className="w-3.5 h-3.5 text-brand-600" />
+              <span className="text-xs text-navy-800 tracking-wide">Enterprise security</span>
             </div>
-            <h2 className="text-3xl lg:text-4xl font-bold text-slate-900 mb-5 leading-snug">
+            <h2 className="text-3xl lg:text-4xl font-bold text-navy-950 mb-5 leading-snug">
               Your data. Your users.{" "}
               <span className="trust-gradient">Protected.</span>
             </h2>
@@ -46,13 +47,14 @@ export default function SecuritySection() {
               we store is protected with the same rigour we&apos;d want protecting our own.
             </p>
 
-            <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800">
-              <p className="text-sm font-medium text-white mb-2">Our core commitment:</p>
-              <p className="text-slate-400 text-sm leading-relaxed italic">
+            <div className="relative rounded-2xl p-5 overflow-hidden bg-gradient-to-br from-navy-950 to-navy-800 border border-brand-500/20">
+              <div className="absolute top-0 right-0 w-40 h-40 bg-brand-500/15 blur-3xl rounded-full pointer-events-none" />
+              <p className="relative text-sm font-medium text-white mb-2">Our core commitment:</p>
+              <p className="relative text-navy-100/60 text-sm leading-relaxed italic">
                 &ldquo;We will never sell, share, or monetise your users&apos; personal data or consent
                 records. We earn revenue from subscriptions — not from your users&apos; information.&rdquo;
               </p>
-              <p className="text-slate-600 text-xs font-medium mt-3">— CookieAccess Privacy Charter</p>
+              <p className="relative text-brand-300/70 text-xs font-medium mt-3">— Cookie Access Privacy Charter</p>
             </div>
           </div>
 
@@ -60,16 +62,16 @@ export default function SecuritySection() {
             {pillars.map((p, i) => {
               const Icon = p.icon;
               return (
-                <div key={i} className="group bg-slate-50 rounded-2xl border border-slate-100 p-6 hover:border-blue-200 hover:bg-white hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-300">
+                <div key={i} className="group glass rounded-2xl p-6 glow-card-hover hover:-translate-y-1 transition-all duration-300">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-700 group-hover:border-blue-700 transition-colors duration-300">
-                      <Icon className="w-4 h-4 text-blue-700 group-hover:text-white transition-colors duration-300" strokeWidth={1.5} />
+                    <div className="icon-tile-soft w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                      <Icon className="w-4 h-4" strokeWidth={1.5} />
                     </div>
-                    <span className="text-[10px] text-teal-700 bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-full tracking-wide">
+                    <span className="text-[10px] text-brand-700 bg-brand-50 border border-brand-200/70 px-2 py-0.5 rounded-full tracking-wide">
                       {p.badge}
                     </span>
                   </div>
-                  <h3 className="text-sm font-semibold text-slate-900 mb-2">{p.title}</h3>
+                  <h3 className="text-sm font-semibold text-navy-950 mb-2">{p.title}</h3>
                   <p className="text-xs text-slate-500 leading-relaxed">{p.desc}</p>
                 </div>
               );
@@ -77,7 +79,7 @@ export default function SecuritySection() {
           </div>
         </div>
 
-        <div className="mt-14 pt-10 border-t border-slate-100">
+        <div className="mt-14 pt-10 border-t border-brand-100/70">
           <div className="flex flex-wrap justify-center gap-6">
             {[
               "HTTPS enforced everywhere",
@@ -87,7 +89,7 @@ export default function SecuritySection() {
               "DPA available for enterprise",
             ].map((item) => (
               <div key={item} className="flex items-center gap-2 text-sm text-slate-500">
-                <CheckCircle2 className="w-4 h-4 text-teal-500 flex-shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-brand-500 flex-shrink-0" />
                 {item}
               </div>
             ))}

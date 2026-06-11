@@ -1,30 +1,18 @@
-import Header from "@/components/landing/Header";
-import Footer from "@/components/landing/Footer";
+import PageShell from "@/components/home/PageShell";
 
 export default function MarketingPageLayout({
   title,
   subtitle,
+  kicker,
   children,
 }) {
   return (
-    <div className="min-h-screen bg-white selection:bg-indigo-100 selection:text-indigo-900 font-sans">
-      <Header />
-      <main className="pt-24 pb-16">
-        <section className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="mb-10">
-            <h1 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">
-              {title}
-            </h1>
-            {subtitle ? (
-              <p className="mt-4 text-base md:text-lg text-slate-600 leading-relaxed">
-                {subtitle}
-              </p>
-            ) : null}
-          </div>
-          <div className="prose prose-slate max-w-none">{children}</div>
-        </section>
-      </main>
-      <Footer />
-    </div>
+    <PageShell kicker={kicker} title={title} subtitle={subtitle}>
+      <section className="max-w-6xl mx-auto px-6 lg:px-8 py-14">
+        <div className="prose prose-slate max-w-none prose-headings:font-display prose-headings:text-navy-950 prose-a:text-brand-600">
+          {children}
+        </div>
+      </section>
+    </PageShell>
   );
 }
